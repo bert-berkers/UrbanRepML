@@ -1,0 +1,36 @@
+experiment:
+  name: ""
+  description: ""
+  date: ""
+  researcher: ""
+  
+data:
+  study_area: ""
+  embeddings_source: ""
+  h3_resolution: 10
+  threshold: null
+  
+model:
+  architecture: ""
+  parameters:
+    hidden_dim: 128
+    num_layers: 3
+    learning_rate: 0.001
+    
+training:
+  epochs: 100
+  batch_size: 32
+  validation_split: 0.2
+  
+analysis:
+  clustering:
+    method: "kmeans"
+    n_clusters: [5, 8, 10]
+  visualization:
+    - cluster_maps
+    - embedding_space
+    
+output:
+  save_intermediate: true
+  formats: ["parquet"]
+  plots_dpi: 300

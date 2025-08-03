@@ -1,0 +1,86 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Cache and temporary files
+cache/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# Large data files and results
+data/preprocessed*/
+data/embeddings/aerial_alphaearth/embeddings_AlphaEarth/processed/
+data/skeleton/density/*.shp
+data/skeleton/density/*.dbf
+data/skeleton/density/*.shx
+data/skeleton/density/*.prj
+data/skeleton/density/*.cpg
+data/skeleton/density/*.sbn
+data/skeleton/density/*.sbx
+data/skeleton/density/*.ods
+data/skeleton/density/*.xlsx
+results/
+*.parquet
+*.pkl
+*.pt
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+
+# Keep essential data structure but exclude large files
+data/embeddings/aerial_alphaearth/embeddings_AlphaEarth/*.parquet
+data/embeddings/*.parquet
+
+# Logs and experiment tracking
+wandb/
+*.log
+logs/
+
+# IDE files (keep .idea for PyCharm users but exclude some)
+.vscode/
+*.swp
+*.swo
+
+# Model checkpoints and large files
+checkpoints/
+models/
+*.h5
+*.joblib
+*.model
+
+# Personal/local settings
+.claude/settings.local.json
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Environment variables
+.env
+.env.local
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+~*
