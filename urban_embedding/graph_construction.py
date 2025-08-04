@@ -34,13 +34,21 @@ class EdgeFeatures:
 class CacheManager:
     """Manages caching for network graphs and accessibility graphs."""
 
-    def __init__(self, cache_dir: Path):
+    def __init__(self, cache_dir: Path, data_dir: Optional[Path] = None):
         self.cache_dir = cache_dir
-        self.network_cache_dir = cache_dir / 'networks'
+        # Use data/networks for organized storage, cache/networks as fallback
+        if data_dir:
+            self.network_cache_dir = data_dir / 'networks' / 'osm'
+            self.accessibility_cache_dir = data_dir / 'networks' / 'accessibility'
+        else:
+            self.network_cache_dir = cache_dir / 'networks' / 'osm'
+            self.accessibility_cache_dir = cache_dir / 'networks' / 'accessibility'
+        
         self.graph_cache_dir = cache_dir / 'graphs'
 
         # Create cache directories
         self.network_cache_dir.mkdir(parents=True, exist_ok=True)
+        self.accessibility_cache_dir.mkdir(parents=True, exist_ok=True)
         self.graph_cache_dir.mkdir(parents=True, exist_ok=True)
 
     def get_network_cache_path(self, city_name: str, mode: str) -> Path:
@@ -138,6 +146,38 @@ class CacheManager:
 
         logger.info(f"Cached graphs to {graphs_dir}")
 
+    def load_accessibility_graph(self, city_name: str, resolution: int, mode: str) -> Optional[EdgeFeatures]:
+        """Load accessibility graph from data/networks/accessibility structure."""
+        graph_path = self.accessibility_cache_dir / f"{city_name}_{mode}_res{resolution}.pkl"
+        
+        if graph_path.exists():
+            logger.info(f"Loading accessibility graph from {graph_path}")
+            try:
+                import pickle
+                with open(graph_path, 'rb') as f:
+                    graph_data = pickle.load(f)
+                
+                # Convert to EdgeFeatures format
+                if hasattr(graph_data, 'edge_index') and hasattr(graph_data, 'edge_attr'):
+                    return EdgeFeatures(
+                        index=torch.tensor(graph_data.edge_index, dtype=torch.long),
+                        accessibility=torch.tensor(graph_data.edge_attr, dtype=torch.float32)
+                    )
+                elif isinstance(graph_data, dict):
+                    return EdgeFeatures(
+                        index=torch.tensor(graph_data['edge_index'], dtype=torch.long),
+                        accessibility=torch.tensor(graph_data['edge_attr'], dtype=torch.float32)
+                    )
+                else:
+                    logger.warning(f"Unknown graph format in {graph_path}")
+                    return None
+                    
+            except Exception as e:
+                logger.error(f"Error loading accessibility graph from {graph_path}: {str(e)}")
+                return None
+        
+        return None
+
     def _validate_graph_params(self, metadata: dict, current_params: dict) -> bool:
         """Validate that cached graph parameters match current parameters."""
         for key in ['speeds', 'max_travel_time', 'search_radius', 'beta']:
@@ -154,6 +194,7 @@ class SpatialGraphConstructor:
             device: str = "cuda",
             modes: Dict[int, str] = None,
             cache_dir: Optional[Path] = None,
+            data_dir: Optional[Path] = None,
             speeds: Dict[str, float] = None,
             max_travel_time: Dict[str, int] = None,
             search_radius: Dict[str, float] = None,
@@ -172,7 +213,7 @@ class SpatialGraphConstructor:
         }
 
         # Initialize cache manager if cache_dir provided
-        self.cache_manager = CacheManager(cache_dir) if cache_dir else None
+        self.cache_manager = CacheManager(cache_dir, data_dir) if cache_dir else None
 
         self._validate_parameters()
 

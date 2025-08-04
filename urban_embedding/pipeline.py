@@ -32,7 +32,7 @@ from .feature_processing import UrbanFeatureProcessor
 from .graph_construction import SpatialGraphConstructor, EdgeFeatures
 from .model import UrbanUNet, UrbanModelTrainer
 from .analytics import UrbanEmbeddingAnalyzer
-from .threshold_prep import ThresholdPreprocessor
+# from .threshold_prep import ThresholdPreprocessor  # Using custom FSI filtering
 
 class UrbanEmbeddingPipeline:
     def __init__(self, config: Dict[str, Any]):
@@ -102,6 +102,7 @@ class UrbanEmbeddingPipeline:
             device=self.device,
             modes=self.config['modes'],
             cache_dir=self.cache_dir,
+            data_dir=self.project_dir / 'data',
             **graph_params
         )
 
@@ -118,10 +119,19 @@ class UrbanEmbeddingPipeline:
 
     def _create_threshold_variant(self) -> None:
         """Create threshold-filtered variant of city if needed."""
-        if 'threshold' in self.config:
-            threshold = self.config['threshold']
-            base_city = self.config['city_name'].split('_threshold')[0]  # Get base name
-            variant_name = f"{base_city}_threshold{threshold}"
+        if 'threshold' in self.config or 'fsi_threshold' in self.config:
+            # Handle both percentage thresholds and FSI thresholds
+            if 'fsi_threshold' in self.config:
+                threshold = self.config['fsi_threshold']
+                base_city = self.config['city_name'].split('_fsi')[0]  # Get base name
+                # Convert decimal to string for filename (0.1 -> 01)
+                threshold_str = str(threshold).replace('.', '')
+                variant_name = f"{base_city}_fsi{threshold_str}"
+            else:
+                threshold = self.config['threshold']
+                base_city = self.config['city_name'].split('_threshold')[0]  # Get base name
+                variant_name = f"{base_city}_threshold{threshold}"
+            
             variant_dir = self.data_dir / variant_name
 
             # Check if all required files exist
@@ -138,20 +148,14 @@ class UrbanEmbeddingPipeline:
             files_exist = all(file.exists() for file in required_files)
 
             if not files_exist:
-                logger.info(f"Creating threshold variant ({threshold}%) of {base_city}")
-
-                building_data_path = Path("D:/Projects/Urban Rep Learning Multi-Level/Rudifun2024/PV28__00_Basis_Bouwblok.shp")
-
-                preprocessor = ThresholdPreprocessor(
-                    project_dir=Path(self.config['project_dir']),
-                    source_city=base_city,
-                    threshold=threshold,
-                    building_data_path=building_data_path
-                )
-
-                # Create filtered regions
-                preprocessor.process()
-                logger.info(f"Created new threshold variant: {variant_name}")
+                if 'fsi_threshold' in self.config:
+                    logger.warning(f"FSI threshold variant (FSI >= {threshold}) does not exist at {variant_dir}")
+                    logger.warning("Please run create_fsi01_variant.py to create the variant first")
+                    raise FileNotFoundError(f"FSI variant directory not found: {variant_dir}")
+                else:
+                    logger.warning(f"Threshold variant ({threshold}%) does not exist at {variant_dir}")
+                    logger.warning("Threshold preprocessing not implemented for percentage thresholds")
+                    raise FileNotFoundError(f"Threshold variant directory not found: {variant_dir}")
             else:
                 logger.info(f"Using existing threshold variant: {variant_name}")
 
@@ -223,10 +227,10 @@ class UrbanEmbeddingPipeline:
 
         features = {}
         sources = {
-            'gtfs': 'embeddings_GTFS_10',
-            'roadnetwork': 'embeddings_roadnetwork_10',
-            'aerial': 'embeddings_aerial_10_finetune',
-            'poi': 'embeddings_POI_hex2vec_10'
+            'gtfs': 'gtfs/embeddings_GTFS_10',
+            'roadnetwork': 'road_network/embeddings_roadnetwork_10', 
+            'aerial_alphaearth': 'aerial_alphaearth/embeddings_AlphaEarth/processed/embeddings_aerial_10_alphaearth',
+            'poi': 'poi_hex2vec/embeddings_POI_hex2vec_10'
         }
 
         for modality, filename in sources.items():
@@ -461,7 +465,7 @@ class UrbanEmbeddingPipeline:
                     "variance_threshold": 0.95,
                     "max_components": 32,
                     "min_components": {
-                        "aerial": 16,
+                        "aerial_alphaearth": 16,
                         "gtfs": 16,
                         "roadnetwork": 16,
                         "poi": 16
@@ -521,6 +525,83 @@ class UrbanEmbeddingPipeline:
             "wandb_project": "urban-embedding",
             "debug": True
         })
+
+        return config_dict
+
+    @staticmethod
+    def create_south_holland_fsi01_config() -> dict:
+        """
+        Create configuration for South Holland with FSI threshold 0.1 and AlphaEarth embeddings.
+        """
+        config_dict = {
+            "city_name": "south_holland",
+            "project_dir": r"C:\Users\Bert Berkers\PycharmProjects\UrbanRepML",
+            "fsi_threshold": 0.1,
+            "feature_processing": {
+                "pca": {
+                    "variance_threshold": 0.95,
+                    "max_components": 32,
+                    "min_components": {
+                        "aerial_alphaearth": 16,
+                        "gtfs": 16,
+                        "roadnetwork": 16,
+                        "poi": 16
+                    },
+                    "eps": 1e-8
+                }
+            },
+            "graph": {
+                "speeds": {
+                    'walk': 1.4,
+                    'bike': 4.17,
+                    'drive': 11.11
+                },
+                "max_travel_time": {
+                    'walk': 300,
+                    'bike': 450,
+                    'drive': 600
+                },
+                "search_radius": {
+                    'walk': 75,
+                    'bike': 150,
+                    'drive': 300
+                },
+                "beta": {
+                    'walk': 0.0020,
+                    'bike': 0.0012,
+                    'drive': 0.0008
+                }
+            },
+            "model": {
+                "hidden_dim": 128,
+                "output_dim": 32,
+                "num_convs": 6
+            },
+            "training": {
+                "learning_rate": 1e-5,
+                "num_epochs": 10000,
+                "warmup_epochs": 1000,
+                "patience": 100,
+                "gradient_clip": 1.0,
+                "loss_weights": {
+                    "reconstruction": 1,
+                    "consistency": 3
+                }
+            },
+            "visualization": {
+                "n_clusters": {8: 8, 9: 8, 10: 8},
+                "cmap": "Accent",
+                "dpi": 600,
+                "figsize": (12, 12)
+            },
+            "modes": {
+                8: 'drive',
+                9: 'bike',
+                10: 'walk'
+            },
+            "wandb_project": "urban-embedding-south-holland-fsi01",
+            "debug": True
+        }
 
         return config_dict
 
