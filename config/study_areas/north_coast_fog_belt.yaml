@@ -1,0 +1,118 @@
+# North Coast Fog Belt Study Area
+# Redwood ecosystems and climate adaptation analysis
+
+name: north_coast_fog_belt  
+description: >
+  Northern California coastal fog belt including redwood forests and
+  coastal agricultural areas. Focus on climate adaptation, fog-dependent
+  ecosystems, and sustainable coastal land management practices.
+
+# Geographic Bounds Configuration
+geographic_bounds:
+  bounds_type: counties
+  definition:
+    - Humboldt
+    - Del Norte  
+    - Mendocino  # Northern portion
+  buffer_km: 2.0  # Buffer for coastal climate effects
+  crs: EPSG:4326
+
+# Bioregional Context
+bioregional_context:
+  bioregion_type: conservation
+  primary_ecosystem: conifer_forest
+  management_focus:
+    - biodiversity
+    - carbon
+    - climate_adaptation
+    - timber
+  climate_zone: temperate_oceanic
+  conservation_priority: high
+  
+  # Mixed forest-agriculture
+  primary_crops:
+    - timber
+    - cannabis  # Legal agricultural crop in this region
+    - berries
+    - dairy
+  farming_type: mixed
+  water_source: rainfed  # High precipitation, fog-dependent
+  
+  # Forest characteristics
+  forest_type: old_growth  # Significant old-growth redwood preservation
+  timber_management: conservation  # Heavy emphasis on conservation
+
+# Resolution Rules (ecosystem conservation and climate adaptation-based)
+resolution_rules:
+  - name: old_growth_redwood_groves
+    condition: "FSI_24 < 0.005 and building_volume < 20"
+    resolution: 10
+    priority: 100
+    description: "Old-growth redwood groves requiring highest protection detail"
+    
+  - name: coastal_agricultural_interface
+    condition: "FSI_24 >= 0.05 and FSI_24 < 0.2"
+    resolution: 10
+    priority: 95
+    description: "Agriculture-forest interface zones in coastal climate"
+    
+  - name: stream_corridors_salmon_habitat
+    condition: "FSI_24 < 0.02 and building_volume < 100"
+    resolution: 10
+    priority: 90
+    description: "Stream corridors critical for salmon habitat"
+    
+  - name: sustainable_timber_areas
+    condition: "FSI_24 >= 0.01 and FSI_24 < 0.05 and building_volume >= 50"
+    resolution: 9
+    priority: 85
+    description: "Sustainable timber management areas"
+    
+  - name: coastal_prairie_grassland
+    condition: "FSI_24 >= 0.005 and FSI_24 < 0.05 and building_volume < 50"
+    resolution: 9
+    priority: 80
+    description: "Coastal prairie and grassland ecosystems"
+    
+  - name: fog_dependent_ecosystems
+    condition: "FSI_24 < 0.01"
+    resolution: 9
+    priority: 88
+    description: "Fog-dependent ecosystems for climate monitoring"
+
+# Default resolution
+default_resolution: 9  # Higher default due to high conservation value
+
+# Density Filtering Configuration
+density_filtering:
+  enable: true
+  method: fsi_threshold
+  min_fsi_threshold: 0.0001  # Very low threshold for pristine ecosystems
+  exclude_water_bodies: false  # Include coastal wetlands and estuaries
+  focus_on_conservation_zones: true
+
+# Bioregional Filtering Configuration
+bioregional_filtering:
+  enable_ecosystem_rules: true
+  prioritize_conservation_zones: true
+  include_riparian_buffers: true
+  riparian_buffer_meters: 300  # Wide buffers for salmon protection
+  
+  # Coast-specific filtering  
+  old_growth_protection_priority: highest
+  fog_ecosystem_monitoring: true
+  climate_adaptation_focus: true
+  carbon_sequestration_priority: highest
+  
+  # Coastal zone considerations
+  sea_level_rise_vulnerability: true
+  coastal_erosion_monitoring: true
+
+# Computational Constraints
+max_memory_gb: 20.0  # Higher memory for detailed conservation analysis
+max_hexagons_per_chunk: 30000  # Smaller chunks due to high resolution requirements
+enable_chunking: true
+
+# Quality Thresholds
+min_coverage_threshold: 0.95  # Highest coverage for conservation areas
+min_density_threshold: 0.0001 # Include virtually all areas for ecosystem completeness

@@ -1,0 +1,64 @@
+# Example Study Area: Northern California Dense Counties
+# Focuses on selected high-population counties within our dataset bounds
+
+name: northern_ca_dense_counties
+description: >
+  Selected Northern California counties with significant urban development.
+  Includes Butte (Chico), Nevada (Grass Valley/Nevada City), and Shasta (Redding)
+  counties for focused analysis of mid-size urban centers in Northern California.
+
+# Geographic Bounds Configuration  
+geographic_bounds:
+  bounds_type: counties
+  definition:
+    - Butte      # Chico area
+    - Nevada     # Grass Valley/Nevada City
+    - Shasta     # Redding area
+  buffer_km: 0.0  # No additional buffer needed for county boundaries
+  crs: EPSG:4326
+
+# Resolution Rules (evaluated in priority order)
+resolution_rules:
+  - name: urban_cores
+    condition: "FSI_24 >= 0.3"
+    resolution: 10
+    priority: 100
+    description: "Urban core areas (Chico, Redding, Grass Valley downtown)"
+    
+  - name: suburban_development
+    condition: "FSI_24 >= 0.1 and FSI_24 < 0.3"
+    resolution: 9
+    priority: 90
+    description: "Suburban residential and commercial areas"
+    
+  - name: small_towns
+    condition: "FSI_24 >= 0.05 and FSI_24 < 0.1"
+    resolution: 9
+    priority: 80
+    description: "Small towns and rural communities"
+    
+  - name: rural_developed
+    condition: "FSI_24 >= 0.01 and FSI_24 < 0.05"
+    resolution: 8
+    priority: 70
+    description: "Rural areas with scattered development"
+
+# Default resolution for areas not matching any rules
+default_resolution: 8
+
+# Density Filtering Configuration
+density_filtering:
+  enable: true
+  method: fsi_threshold
+  min_fsi_threshold: 0.005  # Include even sparse rural development
+  exclude_wilderness: true
+  exclude_water_bodies: true
+
+# Computational Constraints
+max_memory_gb: 12.0
+max_hexagons_per_chunk: 75000
+enable_chunking: true
+
+# Quality Thresholds
+min_coverage_threshold: 0.8
+min_density_threshold: 0.005  # Lower threshold for rural areas

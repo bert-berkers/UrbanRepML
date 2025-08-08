@@ -1,0 +1,105 @@
+# Willamette Valley Agricultural Study Area
+# Focus on regenerative agriculture and specialty crop analysis
+
+name: willamette_valley_agriculture
+description: >
+  Willamette Valley agricultural corridor in Oregon focusing on sustainable farming practices.
+  Includes specialized crop areas (hazelnuts, grass seed, wine grapes), mixed farming systems,
+  and riparian corridors important for agricultural water management and biodiversity.
+
+# Geographic Bounds Configuration
+geographic_bounds:
+  bounds_type: bbox
+  definition:
+    north: 45.5   # North of Salem
+    south: 44.0   # South of Eugene  
+    west: -123.4  # Coast Range foothills
+    east: -122.4  # Cascade foothills
+  buffer_km: 1.0
+  crs: EPSG:4326
+
+# Bioregional Context
+bioregional_context:
+  bioregion_type: agriculture
+  primary_ecosystem: agricultural
+  management_focus: 
+    - crops
+    - water
+    - biodiversity
+    - carbon
+  climate_zone: mediterranean
+  conservation_priority: standard
+  
+  # Agricultural characteristics
+  primary_crops:
+    - hazelnuts
+    - grass_seed  
+    - wine_grapes
+    - berries
+    - vegetables
+  farming_type: mixed
+  water_source: mixed  # Both rainfed and irrigated
+  
+  # Supporting ecosystems
+  forest_type: mixed  # Oak woodlands and riparian forests
+  timber_management: conservation
+
+# Resolution Rules (ecosystem and agricultural complexity-based)
+resolution_rules:
+  - name: specialty_crop_intensive
+    condition: "FSI_24 >= 0.2 and building_volume > 1000"
+    resolution: 10
+    priority: 100
+    description: "Intensive specialty crop areas with processing/storage infrastructure"
+    
+  - name: mixed_farming_systems
+    condition: "FSI_24 >= 0.1 and FSI_24 < 0.2"
+    resolution: 9
+    priority: 90
+    description: "Mixed farming systems with moderate development"
+    
+  - name: riparian_corridors
+    condition: "building_volume < 500 and FSI_24 >= 0.01 and FSI_24 < 0.1"
+    resolution: 10
+    priority: 95
+    description: "Riparian corridors and stream buffers (high ecological detail)"
+    
+  - name: extensive_agriculture
+    condition: "FSI_24 >= 0.01 and FSI_24 < 0.1"
+    resolution: 8
+    priority: 80
+    description: "Extensive agricultural areas (grass seed, grain)"
+    
+  - name: forest_agriculture_interface
+    condition: "FSI_24 >= 0.005 and building_volume < 200"
+    resolution: 9
+    priority: 85
+    description: "Forest-agriculture transition zones"
+
+# Default resolution for areas not matching rules
+default_resolution: 8
+
+# Density Filtering Configuration
+density_filtering:
+  enable: true
+  method: fsi_threshold
+  min_fsi_threshold: 0.005  # Include agricultural areas with minimal development
+  exclude_water_bodies: false  # Include water features for irrigation analysis
+  exclude_steep_slopes: false
+
+# Bioregional Filtering Configuration
+bioregional_filtering:
+  enable_ecosystem_rules: true
+  prioritize_agricultural_zones: true
+  include_riparian_buffers: true
+  riparian_buffer_meters: 100
+  forest_edge_buffer_meters: 50
+
+# Computational Constraints  
+max_memory_gb: 14.0
+max_hexagons_per_chunk: 60000  # Moderate chunks for detailed agricultural analysis
+enable_chunking: true
+
+# Quality Thresholds
+min_coverage_threshold: 0.85  # High coverage for agricultural monitoring
+min_density_threshold: 0.005  # Include even sparse agricultural development

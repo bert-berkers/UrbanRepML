@@ -1,0 +1,74 @@
+# Example Study Area: Dense Portland-Salem Corridor
+# Focuses on high-density urban areas with adaptive resolution in Oregon
+
+name: dense_portland_salem
+description: >
+  High-density urban corridor between Portland and Salem in Oregon's Willamette Valley.
+  Uses building density to determine appropriate H3 resolution depth.
+  
+  Higher density areas (FSI > 0.5) get processed at resolution 10 for fine detail.
+  Medium density areas (FSI 0.1-0.5) use resolution 9 for balanced detail.
+  Lower density areas use resolution 8 for computational efficiency.
+
+# Geographic Bounds Configuration
+geographic_bounds:
+  bounds_type: bbox
+  definition:
+    north: 45.7  # North of Portland metro
+    south: 44.8  # South of Salem
+    west: -123.2  # Western hills
+    east: -122.3  # Eastern suburbs
+  buffer_km: 2.0  # Additional 2km buffer
+  crs: EPSG:4326
+
+# Resolution Rules (evaluated in priority order)
+resolution_rules:
+  - name: ultra_dense_core
+    condition: "FSI_24 >= 0.8"
+    resolution: 10
+    priority: 100
+    description: "Ultra-dense urban core areas get highest resolution"
+    
+  - name: high_density_urban
+    condition: "FSI_24 >= 0.5 and FSI_24 < 0.8"
+    resolution: 9
+    priority: 90
+    description: "High-density urban areas get high resolution"
+    
+  - name: medium_density_suburban
+    condition: "FSI_24 >= 0.1 and FSI_24 < 0.5"
+    resolution: 9
+    priority: 80
+    description: "Medium-density suburban areas"
+    
+  - name: commercial_industrial
+    condition: "building_volume > 10000 and FSI_24 >= 0.05"
+    resolution: 9
+    priority: 70
+    description: "Commercial/industrial areas with significant building volume"
+    
+  - name: low_density_residential
+    condition: "FSI_24 >= 0.02 and FSI_24 < 0.1"
+    resolution: 8
+    priority: 60
+    description: "Low-density residential areas"
+
+# Default resolution for areas not matching any rules
+default_resolution: 8
+
+# Density Filtering Configuration
+density_filtering:
+  enable: true
+  method: fsi_threshold
+  min_fsi_threshold: 0.01  # Exclude very sparse areas
+  exclude_water_bodies: true
+  exclude_uninhabitable: true
+
+# Computational Constraints
+max_memory_gb: 16.0
+max_hexagons_per_chunk: 50000  # Smaller chunks for dense urban processing
+enable_chunking: true
+
+# Quality Thresholds
+min_coverage_threshold: 0.85  # Require 85% data coverage
+min_density_threshold: 0.01   # Minimum FSI to include hexagon

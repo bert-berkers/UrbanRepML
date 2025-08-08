@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 from .feature_processing import UrbanFeatureProcessor
 from .graph_construction import SpatialGraphConstructor, EdgeFeatures
+from .hexagonal_graph_constructor import HexagonalLatticeConstructor
 from .model import UrbanUNet, UrbanModelTrainer
 from .analytics import UrbanEmbeddingAnalyzer
 # from .threshold_prep import ThresholdPreprocessor  # Using custom FSI filtering
@@ -90,21 +91,41 @@ class UrbanEmbeddingPipeline:
             preprocessed_dir=self.data_dir
         )
 
-        # Initialize graph constructor with proper accessibility parameters
-        graph_params = self.config['graph']
-        logger.info("Graph construction parameters:")
-        logger.info(f"Speed settings: {graph_params['speeds']}")
-        logger.info(f"Travel time limits: {graph_params['max_travel_time']}")
-        logger.info(f"Search radii: {graph_params['search_radius']}")
-        logger.info(f"Decay parameters: {graph_params['beta']}")
+        # Initialize graph constructor based on graph type
+        graph_type = self.config.get('graph_type', 'accessibility')
+        logger.info(f"Graph type: {graph_type}")
+        
+        if graph_type == 'hexagonal' or graph_type == 'hexagonal_lattice':
+            # Initialize hexagonal lattice constructor
+            hexagonal_params = self.config.get('hexagonal', {})
+            logger.info("Hexagonal lattice parameters:")
+            logger.info(f"Neighbor rings: {hexagonal_params.get('neighbor_rings', 1)}")
+            logger.info(f"Edge weight: {hexagonal_params.get('edge_weight', 1.0)}")
+            logger.info(f"Include self loops: {hexagonal_params.get('include_self_loops', False)}")
+            
+            self.graph_constructor = HexagonalLatticeConstructor(
+                device=self.device,
+                modes=self.config['modes'],
+                cache_dir=self.cache_dir,
+                data_dir=self.project_dir / 'data',
+                **hexagonal_params
+            )
+        else:
+            # Default to accessibility-based graphs
+            graph_params = self.config['graph']
+            logger.info("Graph construction parameters:")
+            logger.info(f"Speed settings: {graph_params['speeds']}")
+            logger.info(f"Travel time limits: {graph_params['max_travel_time']}")
+            logger.info(f"Search radii: {graph_params['search_radius']}")
+            logger.info(f"Decay parameters: {graph_params['beta']}")
 
-        self.graph_constructor = SpatialGraphConstructor(
-            device=self.device,
-            modes=self.config['modes'],
-            cache_dir=self.cache_dir,
-            data_dir=self.project_dir / 'data',
-            **graph_params
-        )
+            self.graph_constructor = SpatialGraphConstructor(
+                device=self.device,
+                modes=self.config['modes'],
+                cache_dir=self.cache_dir,
+                data_dir=self.project_dir / 'data',
+                **graph_params
+            )
 
         # Initialize analyzer
         self.analyzer = UrbanEmbeddingAnalyzer(
@@ -124,8 +145,11 @@ class UrbanEmbeddingPipeline:
             if 'fsi_threshold' in self.config:
                 threshold = self.config['fsi_threshold']
                 base_city = self.config['city_name'].split('_fsi')[0]  # Get base name
-                # Convert decimal to string for filename (0.1 -> 01)
-                threshold_str = str(threshold).replace('.', '')
+                # Convert decimal to percentage string for filename (0.99 -> 99, 0.1 -> 10)
+                if threshold < 1.0:
+                    threshold_str = str(int(threshold * 100))
+                else:
+                    threshold_str = str(int(threshold))
                 variant_name = f"{base_city}_fsi{threshold_str}"
             else:
                 threshold = self.config['threshold']
@@ -148,14 +172,34 @@ class UrbanEmbeddingPipeline:
             files_exist = all(file.exists() for file in required_files)
 
             if not files_exist:
-                if 'fsi_threshold' in self.config:
-                    logger.warning(f"FSI threshold variant (FSI >= {threshold}) does not exist at {variant_dir}")
-                    logger.warning("Please run create_fsi01_variant.py to create the variant first")
-                    raise FileNotFoundError(f"FSI variant directory not found: {variant_dir}")
+                # Check if data exists in experiments directory (new modular approach)
+                exp_data_dir = self.project_dir / 'experiments' / variant_name / 'data'
+                exp_required_files = [
+                    exp_data_dir / 'area_study_gdf.parquet',
+                    exp_data_dir / 'regions_8_gdf.parquet',
+                    exp_data_dir / 'regions_9_gdf.parquet',
+                    exp_data_dir / 'regions_10_gdf.parquet',
+                    exp_data_dir / 'building_density_res8_preprocessed.parquet',
+                    exp_data_dir / 'building_density_res9_preprocessed.parquet',
+                    exp_data_dir / 'building_density_res10_preprocessed.parquet'
+                ]
+                
+                exp_files_exist = all(file.exists() for file in exp_required_files)
+                
+                if exp_files_exist:
+                    logger.info(f"Found experiment data at {exp_data_dir}, using as variant")
+                    # Update city name to use the variant
+                    self.config['city_name'] = variant_name
+                    return
                 else:
-                    logger.warning(f"Threshold variant ({threshold}%) does not exist at {variant_dir}")
-                    logger.warning("Threshold preprocessing not implemented for percentage thresholds")
-                    raise FileNotFoundError(f"Threshold variant directory not found: {variant_dir}")
+                    if 'fsi_threshold' in self.config:
+                        logger.warning(f"FSI threshold variant (FSI >= {threshold}) does not exist at {variant_dir} or {exp_data_dir}")
+                        logger.warning("Please run the modular preprocessing scripts to create the variant")
+                        raise FileNotFoundError(f"FSI variant directory not found: {variant_dir}")
+                    else:
+                        logger.warning(f"Threshold variant ({threshold}%) does not exist at {variant_dir} or {exp_data_dir}")
+                        logger.warning("Threshold preprocessing not implemented for percentage thresholds")
+                        raise FileNotFoundError(f"Threshold variant directory not found: {variant_dir}")
             else:
                 logger.info(f"Using existing threshold variant: {variant_name}")
 
@@ -166,8 +210,17 @@ class UrbanEmbeddingPipeline:
         """Load geographic data with proper density information."""
         logger.info("Loading geographic data...")
 
-        # Load study area
-        area_gdf = gpd.read_parquet(self.data_dir / self.config['city_name'] / 'area_study_gdf.parquet')
+        # Load study area - check both standard and experiment locations
+        area_file = self.data_dir / self.config['city_name'] / 'area_study_gdf.parquet'
+        if not area_file.exists():
+            # Try experiments directory
+            exp_area_file = self.project_dir / 'experiments' / self.config['city_name'] / 'data' / 'area_study_gdf.parquet'
+            if exp_area_file.exists():
+                area_file = exp_area_file
+            else:
+                raise FileNotFoundError(f"Study area file not found at {area_file} or {exp_area_file}")
+        
+        area_gdf = gpd.read_parquet(area_file)
         logger.info(f"Study area CRS: {area_gdf.crs}")
 
         hex_indices_by_res = {}
@@ -176,6 +229,17 @@ class UrbanEmbeddingPipeline:
         for resolution in self.config['modes'].keys():
             regions_file = self.data_dir / self.config['city_name'] / f'regions_{resolution}_gdf.parquet'
             density_file = self.data_dir / self.config['city_name'] / f'building_density_res{resolution}_preprocessed.parquet'
+            
+            # Check if files exist, if not try experiments directory
+            if not regions_file.exists():
+                exp_regions_file = self.project_dir / 'experiments' / self.config['city_name'] / 'data' / f'regions_{resolution}_gdf.parquet'
+                if exp_regions_file.exists():
+                    regions_file = exp_regions_file
+                    
+            if not density_file.exists():
+                exp_density_file = self.project_dir / 'experiments' / self.config['city_name'] / 'data' / f'building_density_res{resolution}_preprocessed.parquet'
+                if exp_density_file.exists():
+                    density_file = exp_density_file
 
             regions_gdf = gpd.read_parquet(regions_file)
             logger.info(f"Resolution {resolution} regions shape: {regions_gdf.shape}")
@@ -237,6 +301,18 @@ class UrbanEmbeddingPipeline:
             path = self.embeddings_dir / f'{filename}.parquet'
             if path.exists():
                 df = pd.read_parquet(path)
+                
+                # Handle different index formats
+                if 'h3_index' in df.columns and df.index.name != 'h3_index':
+                    # Set h3_index as index if it's a column
+                    df = df.set_index('h3_index')
+                
+                # For AlphaEarth, drop non-embedding columns
+                if modality == 'aerial_alphaearth' and 'geometry' in df.columns:
+                    # Keep only embedding columns (embed_0, embed_1, etc.)
+                    embedding_cols = [col for col in df.columns if col.startswith('embed_')]
+                    df = df[embedding_cols]
+                
                 df = df.reindex(hex_indices, fill_value=0)
                 features[modality] = df
 
@@ -343,74 +419,74 @@ class UrbanEmbeddingPipeline:
             logger.info("Starting training...")
             embeddings_by_res = None
 
-            with wandb.init(project=self.config['wandb_project'], config=self.config) as run:
-                train_params = {
-                    'features_dict': features,
-                    'edge_indices': edge_indices,
-                    'edge_weights': edge_weights,
-                    'mappings': mappings,
-                    'num_epochs': self.config['training']['num_epochs'],
-                    'learning_rate': self.config['training']['learning_rate'],
-                    'warmup_epochs': self.config['training']['warmup_epochs'],
-                    'patience': self.config['training']['patience'],
-                    'gradient_clip': self.config['training']['gradient_clip']
-                }
+            # Skip WandB initialization for faster testing
+            train_params = {
+                'features_dict': features,
+                'edge_indices': edge_indices,
+                'edge_weights': edge_weights,
+                'mappings': mappings,
+                'num_epochs': self.config['training']['num_epochs'],
+                'learning_rate': self.config['training']['learning_rate'],
+                'warmup_epochs': self.config['training']['warmup_epochs'],
+                'patience': self.config['training']['patience'],
+                'gradient_clip': self.config['training']['gradient_clip']
+            }
 
-                try:
-                    embeddings, _ = self.model_trainer.train(**train_params)
-                    if embeddings is None:
-                        raise ValueError("Training failed to produce embeddings")
+            try:
+                embeddings, _ = self.model_trainer.train(**train_params)
+                if embeddings is None:
+                    raise ValueError("Training failed to produce embeddings")
 
-                    # Process results
-                    embeddings_by_res = {}
-                    embeddings_tensors = {}  # Store tensor versions for saving
+                # Process results
+                embeddings_by_res = {}
+                embeddings_tensors = {}  # Store tensor versions for saving
 
-                    for res, emb in embeddings.items():
-                        # Store tensor version for saving
-                        embeddings_tensors[res] = emb
+                for res, emb in embeddings.items():
+                    # Store tensor version for saving
+                    embeddings_tensors[res] = emb
 
-                        # Convert to numpy and create DataFrame
-                        emb = emb.detach().cpu().numpy()
-                        emb_df = pd.DataFrame(
-                            emb,
-                            index=hex_indices_by_res[res],
-                            columns=[f'emb_{i}' for i in range(emb.shape[1])]
+                    # Convert to numpy and create DataFrame
+                    emb = emb.detach().cpu().numpy()
+                    emb_df = pd.DataFrame(
+                        emb,
+                        index=hex_indices_by_res[res],
+                        columns=[f'emb_{i}' for i in range(emb.shape[1])]
+                    )
+                    embeddings_by_res[res] = emb_df
+
+                    # Log embedding statistics
+                    logger.info(f"\nEmbedding statistics for resolution {res}:")
+                    logger.info(f"Shape: {emb.shape}")
+                    logger.info(f"Range: [{emb.min():.3f}, {emb.max():.3f}]")
+                    logger.info(f"Mean: {emb.mean():.3f}")
+                    logger.info(f"Std: {emb.std():.3f}")
+
+                # Save and visualize results only if we have embeddings
+                if embeddings_by_res:
+                    try:
+                        logger.info("Saving embeddings...")
+                        saved_paths = self.analyzer.save_embeddings(
+                            embeddings_tensors,  # Use tensor versions for saving
+                            hex_indices_by_res,
+                            self.config['modes']
                         )
-                        embeddings_by_res[res] = emb_df
 
-                        # Log embedding statistics
-                        logger.info(f"\nEmbedding statistics for resolution {res}:")
-                        logger.info(f"Shape: {emb.shape}")
-                        logger.info(f"Range: [{emb.min():.3f}, {emb.max():.3f}]")
-                        logger.info(f"Mean: {emb.mean():.3f}")
-                        logger.info(f"Std: {emb.std():.3f}")
+                        logger.info("Creating cluster visualizations...")
+                        self.analyzer.plot_clusters(
+                            area_gdf,
+                            regions_by_res,
+                            embeddings_by_res,  # Use DataFrame versions for plotting
+                            n_clusters=self.config['visualization']['n_clusters']
+                        )
+                    except Exception as viz_error:
+                        logger.error(f"Visualization/saving failed: {str(viz_error)}")
+                        logger.error("Visualization error details:", exc_info=True)
+                        # Continue since we still want to return the embeddings
 
-                    # Save and visualize results only if we have embeddings
-                    if embeddings_by_res:
-                        try:
-                            logger.info("Saving embeddings...")
-                            saved_paths = self.analyzer.save_embeddings(
-                                embeddings_tensors,  # Use tensor versions for saving
-                                hex_indices_by_res,
-                                self.config['modes']
-                            )
-
-                            logger.info("Creating cluster visualizations...")
-                            self.analyzer.plot_clusters(
-                                area_gdf,
-                                regions_by_res,
-                                embeddings_by_res,  # Use DataFrame versions for plotting
-                                n_clusters=self.config['visualization']['n_clusters']
-                            )
-                        except Exception as viz_error:
-                            logger.error(f"Visualization/saving failed: {str(viz_error)}")
-                            logger.error("Visualization error details:", exc_info=True)
-                            # Continue since we still want to return the embeddings
-
-                except Exception as e:
-                    logger.error(f"Training failed with error: {str(e)}")
-                    logger.error("Training error details:", exc_info=True)
-                    return None
+            except Exception as e:
+                logger.error(f"Training failed with error: {str(e)}")
+                logger.error("Training error details:", exc_info=True)
+                return None
 
             return embeddings_by_res
 
@@ -600,6 +676,75 @@ class UrbanEmbeddingPipeline:
                 10: 'walk'
             },
             "wandb_project": "urban-embedding-south-holland-fsi01",
+            "debug": True
+        }
+
+        return config_dict
+
+    @staticmethod
+    def create_hexagonal_lattice_config(
+            city_name: str = "south_holland",
+            neighbor_rings: int = 1,
+            edge_weight: float = 1.0
+    ) -> dict:
+        """
+        Create configuration for hexagonal lattice experiments.
+        
+        Args:
+            city_name: Base city name (e.g. "south_holland")  
+            neighbor_rings: Number of hexagonal neighbor rings to connect
+            edge_weight: Uniform edge weight for all connections
+        """
+        config_dict = {
+            "city_name": city_name,
+            "project_dir": r"C:\Users\Bert Berkers\PycharmProjects\UrbanRepML",
+            "graph_type": "hexagonal_lattice",
+            "feature_processing": {
+                "pca": {
+                    "variance_threshold": 0.95,
+                    "max_components": 32,
+                    "min_components": {
+                        "aerial_alphaearth": 16,
+                        "gtfs": 16,
+                        "roadnetwork": 16,
+                        "poi": 16
+                    },
+                    "eps": 1e-8
+                }
+            },
+            "hexagonal": {
+                "neighbor_rings": neighbor_rings,
+                "edge_weight": edge_weight,
+                "include_self_loops": False
+            },
+            "model": {
+                "hidden_dim": 128,
+                "output_dim": 32,
+                "num_convs": 6
+            },
+            "training": {
+                "learning_rate": 1e-4,
+                "num_epochs": 1000,
+                "warmup_epochs": 100,
+                "patience": 100,
+                "gradient_clip": 1.0,
+                "loss_weights": {
+                    "reconstruction": 1,
+                    "consistency": 3
+                }
+            },
+            "visualization": {
+                "n_clusters": {8: 8, 9: 8, 10: 8},
+                "cmap": "Accent", 
+                "dpi": 600,
+                "figsize": (12, 12)
+            },
+            "modes": {
+                8: 'drive',
+                9: 'bike', 
+                10: 'walk'
+            },
+            "wandb_project": "urban-embedding-hexagonal",
             "debug": True
         }
 

@@ -397,13 +397,14 @@ class UrbanModelTrainer:
                 # Log gradient norms for monitoring
                 grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.model.parameters() if p.grad is not None) ** 0.5
 
-                wandb.log({
-                    'epoch': epoch,
-                    'learning_rate': scheduler.get_last_lr()[0],
-                    **{k: v.item() for k, v in losses.items()},
-                    'grad_norm': grad_norm,
-                    'patience_counter': patience_counter
-                })
+                # Skip WandB logging for faster testing
+                # wandb.log({
+                #     'epoch': epoch,
+                #     'learning_rate': scheduler.get_last_lr()[0],
+                #     **{k: v.item() for k, v in losses.items()},
+                #     'grad_norm': grad_norm,
+                #     'patience_counter': patience_counter
+                # })
 
                 if total_loss.item() < best_loss:
                     best_loss = total_loss.item()

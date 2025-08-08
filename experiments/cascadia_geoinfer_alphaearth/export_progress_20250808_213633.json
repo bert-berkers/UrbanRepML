@@ -1,0 +1,1490 @@
+{
+  "total_tasks": 231,
+  "by_state": {
+    "READY": 188,
+    "RUNNING": 3,
+    "FAILED": 25,
+    "COMPLETED": 15
+  },
+  "by_year": {
+    "2017": {
+      "total": 70,
+      "completed": 0,
+      "failed": 0,
+      "running": 0,
+      "pending": 70,
+      "tiles": [
+        {
+          "tile_id": "2017_0069",
+          "state": "READY",
+          "task_id": "TKIIBYGWNZTMF375MEYWT5AC"
+        },
+        {
+          "tile_id": "2017_0068",
+          "state": "READY",
+          "task_id": "DDREZCRAPJ2LOW3J6FPNXHS7"
+        },
+        {
+          "tile_id": "2017_0067",
+          "state": "READY",
+          "task_id": "VWBYT6YTGH6LEUVXOAO5X423"
+        },
+        {
+          "tile_id": "2017_0066",
+          "state": "READY",
+          "task_id": "IXUTVY77UQLWNM2JHMM5JLIR"
+        },
+        {
+          "tile_id": "2017_0065",
+          "state": "READY",
+          "task_id": "IDMJBUVJSQOFDP77S62CF6CS"
+        },
+        {
+          "tile_id": "2017_0064",
+          "state": "READY",
+          "task_id": "6A5QJWMGVHESWXSRVAVLTL4A"
+        },
+        {
+          "tile_id": "2017_0063",
+          "state": "READY",
+          "task_id": "7OTMB3OV7NASGUYGJ73BPYX2"
+        },
+        {
+          "tile_id": "2017_0062",
+          "state": "READY",
+          "task_id": "SKWZG43FLGIGIJXOHK7VU66U"
+        },
+        {
+          "tile_id": "2017_0061",
+          "state": "READY",
+          "task_id": "7IIP3ROEOW35ZGHDZP22MQJQ"
+        },
+        {
+          "tile_id": "2017_0060",
+          "state": "READY",
+          "task_id": "R2XKQ4LLRV5H55I5T5LQAAGP"
+        },
+        {
+          "tile_id": "2017_0059",
+          "state": "READY",
+          "task_id": "J7D4LGZ7HGSHZCIB7UTUT2YR"
+        },
+        {
+          "tile_id": "2017_0058",
+          "state": "READY",
+          "task_id": "ADZQ3KAVF32Q4MN7GBVNMFPS"
+        },
+        {
+          "tile_id": "2017_0057",
+          "state": "READY",
+          "task_id": "TGIVROK6ZHPD4YRF556IH25B"
+        },
+        {
+          "tile_id": "2017_0056",
+          "state": "READY",
+          "task_id": "W4VTBMCBWV4PWRVLCJQ7OB6C"
+        },
+        {
+          "tile_id": "2017_0055",
+          "state": "READY",
+          "task_id": "QG3PZQDGGPP4DS4BMZQISMDL"
+        },
+        {
+          "tile_id": "2017_0054",
+          "state": "READY",
+          "task_id": "KINE2FQRY75SFVCNPWETU26Y"
+        },
+        {
+          "tile_id": "2017_0053",
+          "state": "READY",
+          "task_id": "QNGPVOILRDVYEPQQQ32RBODM"
+        },
+        {
+          "tile_id": "2017_0052",
+          "state": "READY",
+          "task_id": "YVGW3CGEU3NIVCEBJXGJ46UY"
+        },
+        {
+          "tile_id": "2017_0051",
+          "state": "READY",
+          "task_id": "XHBNA3L5Q2KXXY6RMVZCGQNB"
+        },
+        {
+          "tile_id": "2017_0050",
+          "state": "READY",
+          "task_id": "SGNGFXKS56UW73RYJXG6ICZV"
+        },
+        {
+          "tile_id": "2017_0049",
+          "state": "READY",
+          "task_id": "3HZQEVG2WUOG27GOUCJCL6VW"
+        },
+        {
+          "tile_id": "2017_0048",
+          "state": "READY",
+          "task_id": "X7YDZTVQZ4DSHNWC6FSHVPSM"
+        },
+        {
+          "tile_id": "2017_0047",
+          "state": "READY",
+          "task_id": "KGOJWQU22AHWXDVGRNISIBQF"
+        },
+        {
+          "tile_id": "2017_0046",
+          "state": "READY",
+          "task_id": "SEJFNTG3FGDBCZ5T5DP6WMDN"
+        },
+        {
+          "tile_id": "2017_0045",
+          "state": "READY",
+          "task_id": "CG2TOE4HTNQQNUSWGZDU2GBQ"
+        },
+        {
+          "tile_id": "2017_0044",
+          "state": "READY",
+          "task_id": "CWCUF7QFZGZOZJZF4OBE4OWB"
+        },
+        {
+          "tile_id": "2017_0043",
+          "state": "READY",
+          "task_id": "CXDX5OMFF3COQ52RAP2WCY2E"
+        },
+        {
+          "tile_id": "2017_0042",
+          "state": "READY",
+          "task_id": "7ZNPJG5RYCZDBI4FODTZS7Q4"
+        },
+        {
+          "tile_id": "2017_0041",
+          "state": "READY",
+          "task_id": "LJ3IF5LRSMRDGHFVTAHWUS2T"
+        },
+        {
+          "tile_id": "2017_0040",
+          "state": "READY",
+          "task_id": "UMAY5UVV4N2NXZ5S4YUEALCG"
+        },
+        {
+          "tile_id": "2017_0039",
+          "state": "READY",
+          "task_id": "JUA4YNXDBOOT72JVJ4MIXYOY"
+        },
+        {
+          "tile_id": "2017_0038",
+          "state": "READY",
+          "task_id": "QTRQGISTFJ5PPC5UEXKXUSJI"
+        },
+        {
+          "tile_id": "2017_0037",
+          "state": "READY",
+          "task_id": "LOK3REFE2FMV7RWH6B6ZR4YE"
+        },
+        {
+          "tile_id": "2017_0036",
+          "state": "READY",
+          "task_id": "6GJ6K2LTSQE3MBE5WBWWBOJI"
+        },
+        {
+          "tile_id": "2017_0035",
+          "state": "READY",
+          "task_id": "VM72V4GHOYHTOSD27ATSFEFD"
+        },
+        {
+          "tile_id": "2017_0034",
+          "state": "READY",
+          "task_id": "RJDLAY3KNAKZJKDXN7356S35"
+        },
+        {
+          "tile_id": "2017_0033",
+          "state": "READY",
+          "task_id": "BTYNWUVPSNKLOBVUSTNOOOEO"
+        },
+        {
+          "tile_id": "2017_0032",
+          "state": "READY",
+          "task_id": "TOVMSSYMPBTL7PM6MW6E6LWM"
+        },
+        {
+          "tile_id": "2017_0031",
+          "state": "READY",
+          "task_id": "2UW43LRHDCZIGWU2KJM4QT7Q"
+        },
+        {
+          "tile_id": "2017_0030",
+          "state": "READY",
+          "task_id": "HZNR3SUPRIS2CTPMFMBDZBCK"
+        },
+        {
+          "tile_id": "2017_0029",
+          "state": "READY",
+          "task_id": "5CDRYVXMDC3JDHDVSCGQ5WAU"
+        },
+        {
+          "tile_id": "2017_0028",
+          "state": "READY",
+          "task_id": "UR2VJWXLT6YNWV6ULXSQ3ONZ"
+        },
+        {
+          "tile_id": "2017_0027",
+          "state": "READY",
+          "task_id": "WSYOYPWQICCF6MB52BM4WSKD"
+        },
+        {
+          "tile_id": "2017_0026",
+          "state": "READY",
+          "task_id": "SPPZ55YOVVOAMITADKQFCBDI"
+        },
+        {
+          "tile_id": "2017_0025",
+          "state": "READY",
+          "task_id": "ULZO2L7EKF34WCV2PFAV4B2E"
+        },
+        {
+          "tile_id": "2017_0024",
+          "state": "READY",
+          "task_id": "BQ2LJWBUKCCTS756DM7SLIMY"
+        },
+        {
+          "tile_id": "2017_0023",
+          "state": "READY",
+          "task_id": "Q4TUQRL2DYZNVRWIDJXOFHZ7"
+        },
+        {
+          "tile_id": "2017_0022",
+          "state": "READY",
+          "task_id": "SY7FI4VHEPUXUWVLYGXW2S7Q"
+        },
+        {
+          "tile_id": "2017_0021",
+          "state": "READY",
+          "task_id": "YGJJSZORWEYAXD75OOSM6Q6Z"
+        },
+        {
+          "tile_id": "2017_0020",
+          "state": "READY",
+          "task_id": "L6D6I5F72IETEZSWBB6SUVCT"
+        },
+        {
+          "tile_id": "2017_0019",
+          "state": "READY",
+          "task_id": "HCKBQQTSOCHGMI5T3G5BW4UD"
+        },
+        {
+          "tile_id": "2017_0018",
+          "state": "READY",
+          "task_id": "NYSTSOHFANVQHVICVI3HT2IA"
+        },
+        {
+          "tile_id": "2017_0017",
+          "state": "READY",
+          "task_id": "DGTOKHDFICBNH3WFLDFEF2L4"
+        },
+        {
+          "tile_id": "2017_0016",
+          "state": "READY",
+          "task_id": "4JP7GI52YN4HSCEO5MJA44R2"
+        },
+        {
+          "tile_id": "2017_0015",
+          "state": "READY",
+          "task_id": "GU4XTSNWIPQE2GMKMM32UHZH"
+        },
+        {
+          "tile_id": "2017_0014",
+          "state": "READY",
+          "task_id": "TOXQQIMGESCEGVXBRHQRH3ZA"
+        },
+        {
+          "tile_id": "2017_0013",
+          "state": "READY",
+          "task_id": "HBVBTNKXICJOAVYGOOE4M3M5"
+        },
+        {
+          "tile_id": "2017_0012",
+          "state": "READY",
+          "task_id": "CUMLM2DO3C3XKB2YCTEKIC2V"
+        },
+        {
+          "tile_id": "2017_0011",
+          "state": "READY",
+          "task_id": "OP35O65SKRXMT2FWTDA74W7N"
+        },
+        {
+          "tile_id": "2017_0010",
+          "state": "READY",
+          "task_id": "S2VECYAPOIDLQRKRM5S2236E"
+        },
+        {
+          "tile_id": "2017_0009",
+          "state": "READY",
+          "task_id": "URSAY7PF3DIIKZ2JI6NUQMQJ"
+        },
+        {
+          "tile_id": "2017_0008",
+          "state": "READY",
+          "task_id": "YC5562KXTHSRNFXQPNPTE3B2"
+        },
+        {
+          "tile_id": "2017_0007",
+          "state": "READY",
+          "task_id": "3ALSCAOLTNP4FHCHDURBRONC"
+        },
+        {
+          "tile_id": "2017_0006",
+          "state": "READY",
+          "task_id": "LE7DV75NBGNGPNNWC4OVMLPK"
+        },
+        {
+          "tile_id": "2017_0005",
+          "state": "READY",
+          "task_id": "JHFKOE77AM3URD5A2VR6NVOR"
+        },
+        {
+          "tile_id": "2017_0004",
+          "state": "READY",
+          "task_id": "KLKNCQCVRXEGNXIXAIXKFEAC"
+        },
+        {
+          "tile_id": "2017_0003",
+          "state": "READY",
+          "task_id": "PGF22FENH5AV6EFTZL3MAGLN"
+        },
+        {
+          "tile_id": "2017_0002",
+          "state": "READY",
+          "task_id": "2A5AP5SG2DJIPXT6GMQJU375"
+        },
+        {
+          "tile_id": "2017_0001",
+          "state": "READY",
+          "task_id": "2EYXSUI6VBZGUGZRNP7DGXO2"
+        },
+        {
+          "tile_id": "2017_0000",
+          "state": "READY",
+          "task_id": "DRFXBMNLZTP5ODYZ5HIEGCWZ"
+        }
+      ]
+    },
+    "2018": {
+      "total": 77,
+      "completed": 0,
+      "failed": 0,
+      "running": 0,
+      "pending": 77,
+      "tiles": [
+        {
+          "tile_id": "2018_0076",
+          "state": "READY",
+          "task_id": "WCIZE7ZAZH6ZHYYXXDOQQOAM"
+        },
+        {
+          "tile_id": "2018_0075",
+          "state": "READY",
+          "task_id": "MKUPG3TULYSYSQ5CSRCTS25X"
+        },
+        {
+          "tile_id": "2018_0074",
+          "state": "READY",
+          "task_id": "22MIG5E2RVYT4ID2MF6WZGYJ"
+        },
+        {
+          "tile_id": "2018_0073",
+          "state": "READY",
+          "task_id": "IQJTIXUSLATK2YJ4NISNY6KB"
+        },
+        {
+          "tile_id": "2018_0072",
+          "state": "READY",
+          "task_id": "OUKIUPSWVRHPEEFIP4FUDEJO"
+        },
+        {
+          "tile_id": "2018_0071",
+          "state": "READY",
+          "task_id": "6TPNUQ2EDIYBVHWVEUGO3ZIW"
+        },
+        {
+          "tile_id": "2018_0070",
+          "state": "READY",
+          "task_id": "LNZGBUNOXM5FEIIDKF7N6X4K"
+        },
+        {
+          "tile_id": "2018_0069",
+          "state": "READY",
+          "task_id": "GWZREDAX5IBAQ4AATRP4EFKE"
+        },
+        {
+          "tile_id": "2018_0068",
+          "state": "READY",
+          "task_id": "WSNMLFJZZ4KKLLA4T73KE7FM"
+        },
+        {
+          "tile_id": "2018_0067",
+          "state": "READY",
+          "task_id": "PGOGDSQYKL77DVCG6FPK2FW6"
+        },
+        {
+          "tile_id": "2018_0066",
+          "state": "READY",
+          "task_id": "BYPZTC62H5H4XQ7VJV4YEIR2"
+        },
+        {
+          "tile_id": "2018_0065",
+          "state": "READY",
+          "task_id": "KVCIEK2CMBOMHIVXATZDMSNK"
+        },
+        {
+          "tile_id": "2018_0064",
+          "state": "READY",
+          "task_id": "CNX6AIU7IAPHR6RCKPITXEBK"
+        },
+        {
+          "tile_id": "2018_0063",
+          "state": "READY",
+          "task_id": "XEJXGS62WFUJKSZD77C4OYMR"
+        },
+        {
+          "tile_id": "2018_0062",
+          "state": "READY",
+          "task_id": "TE3BB5AGTXAXWNA2Y6TFTJTR"
+        },
+        {
+          "tile_id": "2018_0061",
+          "state": "READY",
+          "task_id": "MBLMW6GTZKSW3IWIGBJQDDXG"
+        },
+        {
+          "tile_id": "2018_0060",
+          "state": "READY",
+          "task_id": "2QMZ2XAMU6GA3R6F6AVWQI3H"
+        },
+        {
+          "tile_id": "2018_0059",
+          "state": "READY",
+          "task_id": "KBXD66QVKTTEED4FMP3LLV7M"
+        },
+        {
+          "tile_id": "2018_0058",
+          "state": "READY",
+          "task_id": "YCS3FNTVQLPJNN3MXU7GTYB3"
+        },
+        {
+          "tile_id": "2018_0057",
+          "state": "READY",
+          "task_id": "QP5BQDC72XFGXXTSYX3BIYF2"
+        },
+        {
+          "tile_id": "2018_0056",
+          "state": "READY",
+          "task_id": "NQ3KVKZIA3VNG6XATE23G4ZX"
+        },
+        {
+          "tile_id": "2018_0055",
+          "state": "READY",
+          "task_id": "IGJ2B3366CM6JLUPNOKI34XR"
+        },
+        {
+          "tile_id": "2018_0054",
+          "state": "READY",
+          "task_id": "7CT6LD3OZL24YODPE6PWQEKA"
+        },
+        {
+          "tile_id": "2018_0053",
+          "state": "READY",
+          "task_id": "IPVC5BW2AAUTM3HCHU6T3TQZ"
+        },
+        {
+          "tile_id": "2018_0052",
+          "state": "READY",
+          "task_id": "7OKXHQNZQYLN2HDXPF4RAHOD"
+        },
+        {
+          "tile_id": "2018_0051",
+          "state": "READY",
+          "task_id": "MSTPZYE3ZPSCTQNJQDO32VK2"
+        },
+        {
+          "tile_id": "2018_0050",
+          "state": "READY",
+          "task_id": "HAZXCLU3LMOXZMGFR5B6W4DD"
+        },
+        {
+          "tile_id": "2018_0049",
+          "state": "READY",
+          "task_id": "TR5J5IBCMPHNSJATKOK44GVO"
+        },
+        {
+          "tile_id": "2018_0048",
+          "state": "READY",
+          "task_id": "BGLJMELC5WNGXOJPQYLKXWDS"
+        },
+        {
+          "tile_id": "2018_0047",
+          "state": "READY",
+          "task_id": "N6PP3FDOLXCB34AUENFURQWH"
+        },
+        {
+          "tile_id": "2018_0046",
+          "state": "READY",
+          "task_id": "S4I2T73BRNTFVLGT3MYT6BZJ"
+        },
+        {
+          "tile_id": "2018_0045",
+          "state": "READY",
+          "task_id": "UFVHWPFM3E7SBWZK4KEQQ5YC"
+        },
+        {
+          "tile_id": "2018_0044",
+          "state": "READY",
+          "task_id": "AHPD4SV54AD3623FCFOVSZPV"
+        },
+        {
+          "tile_id": "2018_0043",
+          "state": "READY",
+          "task_id": "G6VXC3L56QH6FGEQESZEKWLL"
+        },
+        {
+          "tile_id": "2018_0042",
+          "state": "READY",
+          "task_id": "BU3S7QQSJLDFMLPHABSXSBBP"
+        },
+        {
+          "tile_id": "2018_0041",
+          "state": "READY",
+          "task_id": "74PAGOTDOXML5BXMQVZL2BYT"
+        },
+        {
+          "tile_id": "2018_0040",
+          "state": "READY",
+          "task_id": "NLLBRAMIKHGLUKKVFF36ZGPO"
+        },
+        {
+          "tile_id": "2018_0039",
+          "state": "READY",
+          "task_id": "7SCVNTDSG6OGIDSLOPCB5D7P"
+        },
+        {
+          "tile_id": "2018_0038",
+          "state": "READY",
+          "task_id": "TUPXE4SC6ZK36CS5T7GGLTSI"
+        },
+        {
+          "tile_id": "2018_0037",
+          "state": "READY",
+          "task_id": "ZTTAZCQVCH4CSOMXW72UTCAP"
+        },
+        {
+          "tile_id": "2018_0036",
+          "state": "READY",
+          "task_id": "O4PAYHHPZMR4HZSOJZETYIYG"
+        },
+        {
+          "tile_id": "2018_0035",
+          "state": "READY",
+          "task_id": "F6O5YJ6WZYT2JMU3KPGRIEX4"
+        },
+        {
+          "tile_id": "2018_0034",
+          "state": "READY",
+          "task_id": "PBSWVCNARDRYVWBN5F5LIK6F"
+        },
+        {
+          "tile_id": "2018_0033",
+          "state": "READY",
+          "task_id": "HYDSDPCJBQEGPDP7GM3E7XGI"
+        },
+        {
+          "tile_id": "2018_0032",
+          "state": "READY",
+          "task_id": "X44AS47X56DH2ZPNWN2D6QBQ"
+        },
+        {
+          "tile_id": "2018_0031",
+          "state": "READY",
+          "task_id": "X4JZ2ZB574CZDVJCOX2SHKPR"
+        },
+        {
+          "tile_id": "2018_0030",
+          "state": "READY",
+          "task_id": "NT4VNTHSVWXSPOA74NZUYEV2"
+        },
+        {
+          "tile_id": "2018_0029",
+          "state": "READY",
+          "task_id": "KQB6JPPIJ6S7NDPZO2LA3FYX"
+        },
+        {
+          "tile_id": "2018_0028",
+          "state": "READY",
+          "task_id": "PTQWGRMUTFAMOM5PLV4PDGCF"
+        },
+        {
+          "tile_id": "2018_0027",
+          "state": "READY",
+          "task_id": "PR3A3YWUTK5VZRSJCQL4JOC3"
+        },
+        {
+          "tile_id": "2018_0026",
+          "state": "READY",
+          "task_id": "JFN3M46AMPD7QYYYE7ZLKLZZ"
+        },
+        {
+          "tile_id": "2018_0025",
+          "state": "READY",
+          "task_id": "FG2EUDF6YBCKDY4NJQDYVFUF"
+        },
+        {
+          "tile_id": "2018_0024",
+          "state": "READY",
+          "task_id": "V2BSPEGHSYSILS2TI6PSINM5"
+        },
+        {
+          "tile_id": "2018_0023",
+          "state": "READY",
+          "task_id": "5XDZSTCRKNI4CZCQHV6K5JPI"
+        },
+        {
+          "tile_id": "2018_0022",
+          "state": "READY",
+          "task_id": "4OSBTQJGQQ4LXIGHBXQLORFQ"
+        },
+        {
+          "tile_id": "2018_0021",
+          "state": "READY",
+          "task_id": "UOS3RTUMJP5BYRBJI4MZZXKV"
+        },
+        {
+          "tile_id": "2018_0020",
+          "state": "READY",
+          "task_id": "E4KSOAB5GRTEN4GHMWLFKQF2"
+        },
+        {
+          "tile_id": "2018_0019",
+          "state": "READY",
+          "task_id": "NSOPH43BFTJIMG2PQ7USH3OP"
+        },
+        {
+          "tile_id": "2018_0018",
+          "state": "READY",
+          "task_id": "33GPTEY225IZXA3MORGET2O5"
+        },
+        {
+          "tile_id": "2018_0017",
+          "state": "READY",
+          "task_id": "4RLQFSY6HA2BUGGRDB4AOC7V"
+        },
+        {
+          "tile_id": "2018_0016",
+          "state": "READY",
+          "task_id": "EIKXZMLISNSUIWZZO4XYSIJX"
+        },
+        {
+          "tile_id": "2018_0015",
+          "state": "READY",
+          "task_id": "WPVGPBRCEMMODN2ST3UNWQLV"
+        },
+        {
+          "tile_id": "2018_0014",
+          "state": "READY",
+          "task_id": "OMWIBAHUKEXWMBDNE5OPIXZM"
+        },
+        {
+          "tile_id": "2018_0013",
+          "state": "READY",
+          "task_id": "P7GJIIYVX4FIYBYTDSOHYCJS"
+        },
+        {
+          "tile_id": "2018_0012",
+          "state": "READY",
+          "task_id": "M7IN5YIKKODTIAEGC2GNHOQI"
+        },
+        {
+          "tile_id": "2018_0011",
+          "state": "READY",
+          "task_id": "XASDWE7YSMHT7R2L4E2BLMSI"
+        },
+        {
+          "tile_id": "2018_0010",
+          "state": "READY",
+          "task_id": "OYFDGJ4ZATMRPQBTW7ZRZAY3"
+        },
+        {
+          "tile_id": "2018_0009",
+          "state": "READY",
+          "task_id": "KSUA2RYHKKHJ5L5L74BTKKKV"
+        },
+        {
+          "tile_id": "2018_0008",
+          "state": "READY",
+          "task_id": "UQMXTR7HWYNKM2SYQLEUHKLC"
+        },
+        {
+          "tile_id": "2018_0007",
+          "state": "READY",
+          "task_id": "ULTOGKHKXPKK2RBSV26WJA47"
+        },
+        {
+          "tile_id": "2018_0006",
+          "state": "READY",
+          "task_id": "JD5BEEQGE46GSZ3B563T7HUJ"
+        },
+        {
+          "tile_id": "2018_0005",
+          "state": "READY",
+          "task_id": "KTIMORVE5CJRE6I7BHYQQR64"
+        },
+        {
+          "tile_id": "2018_0004",
+          "state": "READY",
+          "task_id": "MCN7G2I2E5SZY62NKN2KNT3X"
+        },
+        {
+          "tile_id": "2018_0003",
+          "state": "READY",
+          "task_id": "MDMGWAZFZFJI4LSJVHJ2N6KF"
+        },
+        {
+          "tile_id": "2018_0002",
+          "state": "READY",
+          "task_id": "EJD5JAAB7F7RDJCSZ2LFYZB2"
+        },
+        {
+          "tile_id": "2018_0001",
+          "state": "READY",
+          "task_id": "4QJYZBY33ZGJ6VPWBVPVFKCV"
+        },
+        {
+          "tile_id": "2018_0000",
+          "state": "READY",
+          "task_id": "DVT7BAQZY4FL7XYODG22JG6W"
+        }
+      ]
+    },
+    "2019": {
+      "total": 0,
+      "completed": 0,
+      "failed": 0,
+      "running": 0,
+      "pending": 0,
+      "tiles": []
+    },
+    "2020": {
+      "total": 5,
+      "completed": 3,
+      "failed": 2,
+      "running": 0,
+      "pending": 0,
+      "tiles": [
+        {
+          "tile_id": "Netherlands_Embedding_2020_Mosaic",
+          "state": "COMPLETED",
+          "task_id": "O4RTOI6XZWVSBHODQ25JWFWS"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2020_10m_grid_clipped",
+          "state": "COMPLETED",
+          "task_id": "KHR4RBGVJRXFOT3P4EABYDVG"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2020_10m_grid",
+          "state": "COMPLETED",
+          "task_id": "NZ4GM7KL5IHU3GMNEVK2FGJV"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2020_10m_grid",
+          "state": "FAILED",
+          "task_id": "ZEYRURYJRT2CIQMW6RHT3UDA"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2020_H3_Res_9",
+          "state": "FAILED",
+          "task_id": "L3NDB66KSLEJDFSEL3NAAZTD"
+        }
+      ]
+    },
+    "2021": {
+      "total": 5,
+      "completed": 3,
+      "failed": 2,
+      "running": 0,
+      "pending": 0,
+      "tiles": [
+        {
+          "tile_id": "Netherlands_Embedding_2021_Mosaic",
+          "state": "COMPLETED",
+          "task_id": "XVWNCDAHY4GBCZFQCKAXX7PG"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2021_10m_grid_clipped",
+          "state": "COMPLETED",
+          "task_id": "IO5PIORPCJTPQ2VKYGCLK52O"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2021_10m_grid",
+          "state": "COMPLETED",
+          "task_id": "SSNMSQVGVROS56F222B3KTTV"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2021_10m_grid",
+          "state": "FAILED",
+          "task_id": "CBOLV7M25IAHSCI4OXONSCBF"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2021_H3_Res_9",
+          "state": "FAILED",
+          "task_id": "W4LKNNAD5FABLRZD4B2U2NUM"
+        }
+      ]
+    },
+    "2022": {
+      "total": 5,
+      "completed": 3,
+      "failed": 2,
+      "running": 0,
+      "pending": 0,
+      "tiles": [
+        {
+          "tile_id": "Netherlands_Embedding_2022_Mosaic",
+          "state": "COMPLETED",
+          "task_id": "TTEMQXJTRGNJ2FFFPQQJ5GAC"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2022_10m_grid_clipped",
+          "state": "COMPLETED",
+          "task_id": "6C7NBCGLIA3LFB76QM4C3SNE"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2022_10m_grid",
+          "state": "COMPLETED",
+          "task_id": "Y77NUBOFLHDRM7K3I356FSPF"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2022_10m_grid",
+          "state": "FAILED",
+          "task_id": "DXXA3CY2E2MO3SXFVPPHA4N3"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2022_H3_Res_9",
+          "state": "FAILED",
+          "task_id": "L5XQCI7LT4DLBOASXYFFR25B"
+        }
+      ]
+    },
+    "2023": {
+      "total": 69,
+      "completed": 6,
+      "failed": 19,
+      "running": 3,
+      "pending": 41,
+      "tiles": [
+        {
+          "tile_id": "2023_0064",
+          "state": "READY",
+          "task_id": "N2RKL6L2XYZRIJDXOZFTWR54"
+        },
+        {
+          "tile_id": "2023_0063",
+          "state": "READY",
+          "task_id": "6WS626C3JN7S4JU2U7YF6UXG"
+        },
+        {
+          "tile_id": "2023_0062",
+          "state": "READY",
+          "task_id": "77OUS7FCV65OTDMFGAFYHNVF"
+        },
+        {
+          "tile_id": "2023_0061",
+          "state": "READY",
+          "task_id": "HJY6QSDND6KYI7A7Y4WQ6EBL"
+        },
+        {
+          "tile_id": "2023_0060",
+          "state": "READY",
+          "task_id": "3AONNNGG56SB3BZLB7MGF6K4"
+        },
+        {
+          "tile_id": "2023_0059",
+          "state": "READY",
+          "task_id": "CBXTSBRPJHK4JV4KYMNK2LZZ"
+        },
+        {
+          "tile_id": "2023_0058",
+          "state": "READY",
+          "task_id": "IMMF6C7HINA3LNTUD3UDPA3S"
+        },
+        {
+          "tile_id": "2023_0057",
+          "state": "READY",
+          "task_id": "6QGY76X5ZMOPE3YEGBWHLFWS"
+        },
+        {
+          "tile_id": "2023_0056",
+          "state": "READY",
+          "task_id": "VQBVZKRB55JSHTACWQJIQRYQ"
+        },
+        {
+          "tile_id": "2023_0055",
+          "state": "READY",
+          "task_id": "ED5TDKGPN6CS46P4KH23R4PE"
+        },
+        {
+          "tile_id": "2023_0054",
+          "state": "READY",
+          "task_id": "VFMFZSNQAMA4ZL6F6N3ORL3C"
+        },
+        {
+          "tile_id": "2023_0053",
+          "state": "READY",
+          "task_id": "L2QGBZU6JDSSID5HZKMZDMO3"
+        },
+        {
+          "tile_id": "2023_0052",
+          "state": "READY",
+          "task_id": "BDVAWEZ43S5JC7GXJ3RM5NXF"
+        },
+        {
+          "tile_id": "2023_0051",
+          "state": "READY",
+          "task_id": "U5NGQRL2NECVO7VA2ZJVKUVI"
+        },
+        {
+          "tile_id": "2023_0050",
+          "state": "READY",
+          "task_id": "AM4TROFJ5HIWNCCQWTAIUBNU"
+        },
+        {
+          "tile_id": "2023_0049",
+          "state": "READY",
+          "task_id": "B2ETS7OXPFTCFN55RXD4CJ3T"
+        },
+        {
+          "tile_id": "2023_0048",
+          "state": "READY",
+          "task_id": "KDU3JMQ5FBDGZAOUFY63FFY6"
+        },
+        {
+          "tile_id": "2023_0047",
+          "state": "READY",
+          "task_id": "RVNBVDPJERR6CNORZQZPGVH4"
+        },
+        {
+          "tile_id": "2023_0046",
+          "state": "READY",
+          "task_id": "RMEFZ47PVZ4KYCGYF4JYXCJR"
+        },
+        {
+          "tile_id": "2023_0045",
+          "state": "READY",
+          "task_id": "6SR4VJV7YQBKABOEDNJOVND5"
+        },
+        {
+          "tile_id": "2023_0044",
+          "state": "READY",
+          "task_id": "DSPVMJ7U6L6ISKL3HLMDGB5L"
+        },
+        {
+          "tile_id": "2023_0043",
+          "state": "READY",
+          "task_id": "RHMS774GFXITEYWC5WOB6V23"
+        },
+        {
+          "tile_id": "2023_0042",
+          "state": "READY",
+          "task_id": "7FJRX43FAOBSGQZYWJUCMTWD"
+        },
+        {
+          "tile_id": "2023_0041",
+          "state": "READY",
+          "task_id": "JF5CJPKYBMGNBUDVJYELHYUE"
+        },
+        {
+          "tile_id": "2023_0040",
+          "state": "READY",
+          "task_id": "AWGLBK6J7DA4QW35YLKM7NJG"
+        },
+        {
+          "tile_id": "2023_0039",
+          "state": "READY",
+          "task_id": "Q2OQ2XM2N3X5I4NBBWMMREE7"
+        },
+        {
+          "tile_id": "2023_0038",
+          "state": "READY",
+          "task_id": "XQ5TJSVH6UI2RAN7VGIMN7PW"
+        },
+        {
+          "tile_id": "2023_0037",
+          "state": "READY",
+          "task_id": "R2MCYP4WBBCSXQLEDSSKE2ZB"
+        },
+        {
+          "tile_id": "2023_0036",
+          "state": "READY",
+          "task_id": "ZT2OAWG7CDFBXNIACEOGGPZQ"
+        },
+        {
+          "tile_id": "2023_0035",
+          "state": "READY",
+          "task_id": "LGU26ZWCPZE62GD7JKRXEXVE"
+        },
+        {
+          "tile_id": "2023_0034",
+          "state": "READY",
+          "task_id": "IUPY2UEZW43DFO2FMGUYAIIY"
+        },
+        {
+          "tile_id": "2023_0033",
+          "state": "READY",
+          "task_id": "ZZQOJYJB4LAU2N5IKJTEIKEV"
+        },
+        {
+          "tile_id": "2023_0032",
+          "state": "READY",
+          "task_id": "2NBJ3TBD57VJZPIVXJD6UZNT"
+        },
+        {
+          "tile_id": "2023_0031",
+          "state": "READY",
+          "task_id": "62SYAOFMH3QXBLJSPYB3WAIM"
+        },
+        {
+          "tile_id": "2023_0030",
+          "state": "READY",
+          "task_id": "QN5NHQT5I7AKI2FSP2K6PRLK"
+        },
+        {
+          "tile_id": "2023_0029",
+          "state": "READY",
+          "task_id": "Y3LFRPYKA6WXSEJ3TSG5MX4M"
+        },
+        {
+          "tile_id": "2023_0028",
+          "state": "READY",
+          "task_id": "7V6EOT7TYZQATTPZGBNAQPAF"
+        },
+        {
+          "tile_id": "2023_0027",
+          "state": "READY",
+          "task_id": "KL2Y6Z5GQEJYDMBKCJ4GCLJQ"
+        },
+        {
+          "tile_id": "2023_0026",
+          "state": "READY",
+          "task_id": "TSSXJZ3YE3UKFG7RTJNUQ2EP"
+        },
+        {
+          "tile_id": "2023_0025",
+          "state": "READY",
+          "task_id": "LGJ3PSHQYQM3MCYNPUR2NLWA"
+        },
+        {
+          "tile_id": "2023_0024",
+          "state": "READY",
+          "task_id": "SE2IMBQDWZJJ7DZSVQRQW6LK"
+        },
+        {
+          "tile_id": "2023_0023",
+          "state": "RUNNING",
+          "task_id": "U27C2D22QNQRKKQCEHSGDOKP"
+        },
+        {
+          "tile_id": "2023_0022",
+          "state": "FAILED",
+          "task_id": "62BPDFCJHK4Z4TEBXF2MWZBQ"
+        },
+        {
+          "tile_id": "2023_0021",
+          "state": "FAILED",
+          "task_id": "JYCEDTZGJ5HAW77HWLWSF6AC"
+        },
+        {
+          "tile_id": "2023_0020",
+          "state": "FAILED",
+          "task_id": "I555DIORFDYHV4DKTH65D5VV"
+        },
+        {
+          "tile_id": "2023_0019",
+          "state": "FAILED",
+          "task_id": "IXR2XOK7NF77GLH7ZFFIVGOT"
+        },
+        {
+          "tile_id": "2023_0018",
+          "state": "FAILED",
+          "task_id": "XZDMSDRX7G5UT26A5NRFQ3YY"
+        },
+        {
+          "tile_id": "2023_0017",
+          "state": "FAILED",
+          "task_id": "K2JFCFGSJVGDUK5HS6ARVWRW"
+        },
+        {
+          "tile_id": "2023_0016",
+          "state": "FAILED",
+          "task_id": "HF5E6FVVMQKCROWINEPA7ID2"
+        },
+        {
+          "tile_id": "2023_0015",
+          "state": "FAILED",
+          "task_id": "2TDX6HSU76B3EAJDXQZT6DIG"
+        },
+        {
+          "tile_id": "2023_0014",
+          "state": "FAILED",
+          "task_id": "3SIOIMN7ZQUUG274UYD4LL45"
+        },
+        {
+          "tile_id": "2023_0013",
+          "state": "FAILED",
+          "task_id": "FZIONJU6TJIP4ICJLVVHSAKW"
+        },
+        {
+          "tile_id": "2023_0012",
+          "state": "FAILED",
+          "task_id": "4LRXTKKA2FTHZUKBRYWZH2FA"
+        },
+        {
+          "tile_id": "2023_0011",
+          "state": "FAILED",
+          "task_id": "EMCJRVVYE7BZTYBELWQ55NFR"
+        },
+        {
+          "tile_id": "2023_0010",
+          "state": "FAILED",
+          "task_id": "PLIY6WSE777L5S77Q5D7B3DZ"
+        },
+        {
+          "tile_id": "2023_0009",
+          "state": "FAILED",
+          "task_id": "NBBHU6D4Q7OTJBFYR4XFIPCN"
+        },
+        {
+          "tile_id": "2023_0008",
+          "state": "FAILED",
+          "task_id": "DIGB3TPDZFFWKSAZKG6LMYKW"
+        },
+        {
+          "tile_id": "2023_0007",
+          "state": "RUNNING",
+          "task_id": "KNMWZIYHPZRXNPZN4D6KXXUV"
+        },
+        {
+          "tile_id": "2023_0006",
+          "state": "RUNNING",
+          "task_id": "RFEOAYCGJGPZSPX35447MSMY"
+        },
+        {
+          "tile_id": "2023_0005",
+          "state": "COMPLETED",
+          "task_id": "ERQVQP5BAJIIEHH3F7VO5NEW"
+        },
+        {
+          "tile_id": "2023_0004",
+          "state": "COMPLETED",
+          "task_id": "2YG7R5OAMZJUSNK4AZ6AELWJ"
+        },
+        {
+          "tile_id": "2023_0003",
+          "state": "COMPLETED",
+          "task_id": "VU77V322CNNYN2T3PWVZEUE5"
+        },
+        {
+          "tile_id": "2023_0002",
+          "state": "COMPLETED",
+          "task_id": "NCG55K66T4ZZYPZHQQBBFADA"
+        },
+        {
+          "tile_id": "2023_0001",
+          "state": "FAILED",
+          "task_id": "6M3QJL2HUXS4NNBBLRKZ65Z4"
+        },
+        {
+          "tile_id": "2023_0000",
+          "state": "FAILED",
+          "task_id": "UX7AEUMEFMALC3Q2JK4BRJMH"
+        },
+        {
+          "tile_id": "Netherlands_Embedding_2023_Mosaic",
+          "state": "COMPLETED",
+          "task_id": "MLI253BOVM3NIPKE3VOKOK6M"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2023_10m_grid",
+          "state": "COMPLETED",
+          "task_id": "36JG5BHL4J3CQSQEQSD6WS2F"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2023_10m_grid",
+          "state": "FAILED",
+          "task_id": "ODWVW7F3634CXDFQJX4EWWTA"
+        },
+        {
+          "tile_id": "Netherlands_Embeddings_2023_H3_Res_9",
+          "state": "FAILED",
+          "task_id": "3DN3IE6AGZG3GR3YJAH4LQSJ"
+        }
+      ]
+    },
+    "2024": {
+      "total": 0,
+      "completed": 0,
+      "failed": 0,
+      "running": 0,
+      "pending": 0,
+      "tiles": []
+    }
+  },
+  "completed_tiles": [
+    "2023_0005",
+    "2023_0004",
+    "2023_0003",
+    "2023_0002",
+    "Netherlands_Embedding_2023_Mosaic",
+    "Netherlands_Embedding_2022_Mosaic",
+    "Netherlands_Embedding_2021_Mosaic",
+    "Netherlands_Embedding_2020_Mosaic",
+    "Netherlands_Embeddings_2022_10m_grid_clipped",
+    "Netherlands_Embeddings_2021_10m_grid_clipped",
+    "Netherlands_Embeddings_2020_10m_grid_clipped",
+    "Netherlands_Embeddings_2023_10m_grid",
+    "Netherlands_Embeddings_2022_10m_grid",
+    "Netherlands_Embeddings_2021_10m_grid",
+    "Netherlands_Embeddings_2020_10m_grid"
+  ],
+  "failed_tiles": [
+    "2023_0022",
+    "2023_0021",
+    "2023_0020",
+    "2023_0019",
+    "2023_0018",
+    "2023_0017",
+    "2023_0016",
+    "2023_0015",
+    "2023_0014",
+    "2023_0013",
+    "2023_0012",
+    "2023_0011",
+    "2023_0010",
+    "2023_0009",
+    "2023_0008",
+    "2023_0001",
+    "2023_0000",
+    "Netherlands_Embeddings_2023_10m_grid",
+    "Netherlands_Embeddings_2022_10m_grid",
+    "Netherlands_Embeddings_2021_10m_grid",
+    "Netherlands_Embeddings_2020_10m_grid",
+    "Netherlands_Embeddings_2023_H3_Res_9",
+    "Netherlands_Embeddings_2022_H3_Res_9",
+    "Netherlands_Embeddings_2021_H3_Res_9",
+    "Netherlands_Embeddings_2020_H3_Res_9"
+  ],
+  "running_tiles": [
+    "2023_0023",
+    "2023_0007",
+    "2023_0006"
+  ],
+  "pending_tiles": [
+    "2018_0076",
+    "2018_0075",
+    "2018_0074",
+    "2018_0073",
+    "2018_0072",
+    "2018_0071",
+    "2018_0070",
+    "2018_0069",
+    "2018_0068",
+    "2018_0067",
+    "2018_0066",
+    "2018_0065",
+    "2018_0064",
+    "2018_0063",
+    "2018_0062",
+    "2018_0061",
+    "2018_0060",
+    "2018_0059",
+    "2018_0058",
+    "2018_0057",
+    "2018_0056",
+    "2018_0055",
+    "2018_0054",
+    "2018_0053",
+    "2018_0052",
+    "2018_0051",
+    "2018_0050",
+    "2018_0049",
+    "2018_0048",
+    "2018_0047",
+    "2018_0046",
+    "2018_0045",
+    "2018_0044",
+    "2018_0043",
+    "2018_0042",
+    "2018_0041",
+    "2018_0040",
+    "2018_0039",
+    "2018_0038",
+    "2018_0037",
+    "2018_0036",
+    "2018_0035",
+    "2018_0034",
+    "2018_0033",
+    "2018_0032",
+    "2018_0031",
+    "2018_0030",
+    "2018_0029",
+    "2018_0028",
+    "2018_0027",
+    "2018_0026",
+    "2018_0025",
+    "2018_0024",
+    "2018_0023",
+    "2018_0022",
+    "2018_0021",
+    "2018_0020",
+    "2018_0019",
+    "2018_0018",
+    "2018_0017",
+    "2018_0016",
+    "2018_0015",
+    "2018_0014",
+    "2018_0013",
+    "2018_0012",
+    "2018_0011",
+    "2018_0010",
+    "2018_0009",
+    "2018_0008",
+    "2018_0007",
+    "2018_0006",
+    "2018_0005",
+    "2018_0004",
+    "2018_0003",
+    "2018_0002",
+    "2018_0001",
+    "2018_0000",
+    "2017_0069",
+    "2017_0068",
+    "2017_0067",
+    "2017_0066",
+    "2017_0065",
+    "2017_0064",
+    "2017_0063",
+    "2017_0062",
+    "2017_0061",
+    "2017_0060",
+    "2017_0059",
+    "2017_0058",
+    "2017_0057",
+    "2017_0056",
+    "2017_0055",
+    "2017_0054",
+    "2017_0053",
+    "2017_0052",
+    "2017_0051",
+    "2017_0050",
+    "2017_0049",
+    "2017_0048",
+    "2017_0047",
+    "2017_0046",
+    "2017_0045",
+    "2017_0044",
+    "2017_0043",
+    "2017_0042",
+    "2017_0041",
+    "2017_0040",
+    "2017_0039",
+    "2017_0038",
+    "2017_0037",
+    "2017_0036",
+    "2017_0035",
+    "2017_0034",
+    "2017_0033",
+    "2017_0032",
+    "2017_0031",
+    "2017_0030",
+    "2017_0029",
+    "2017_0028",
+    "2017_0027",
+    "2017_0026",
+    "2017_0025",
+    "2017_0024",
+    "2017_0023",
+    "2017_0022",
+    "2017_0021",
+    "2017_0020",
+    "2017_0019",
+    "2017_0018",
+    "2017_0017",
+    "2017_0016",
+    "2017_0015",
+    "2017_0014",
+    "2017_0013",
+    "2017_0012",
+    "2017_0011",
+    "2017_0010",
+    "2017_0009",
+    "2017_0008",
+    "2017_0007",
+    "2017_0006",
+    "2017_0005",
+    "2017_0004",
+    "2017_0003",
+    "2017_0002",
+    "2017_0001",
+    "2017_0000",
+    "2023_0064",
+    "2023_0063",
+    "2023_0062",
+    "2023_0061",
+    "2023_0060",
+    "2023_0059",
+    "2023_0058",
+    "2023_0057",
+    "2023_0056",
+    "2023_0055",
+    "2023_0054",
+    "2023_0053",
+    "2023_0052",
+    "2023_0051",
+    "2023_0050",
+    "2023_0049",
+    "2023_0048",
+    "2023_0047",
+    "2023_0046",
+    "2023_0045",
+    "2023_0044",
+    "2023_0043",
+    "2023_0042",
+    "2023_0041",
+    "2023_0040",
+    "2023_0039",
+    "2023_0038",
+    "2023_0037",
+    "2023_0036",
+    "2023_0035",
+    "2023_0034",
+    "2023_0033",
+    "2023_0032",
+    "2023_0031",
+    "2023_0030",
+    "2023_0029",
+    "2023_0028",
+    "2023_0027",
+    "2023_0026",
+    "2023_0025",
+    "2023_0024"
+  ],
+  "metadata": {
+    "check_timestamp": "2025-08-08T21:36:33.770307",
+    "expected_tiles_per_year": 644,
+    "expected_years": [
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024
+    ],
+    "total_expected_tiles": 5152
+  }
+}

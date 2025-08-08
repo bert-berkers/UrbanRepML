@@ -1,0 +1,213 @@
+# Cascadia AlphaEarth Multi-Resolution Experiment Configuration
+# GEO-INFER Aligned Spatial Representation Learning
+
+experiment:
+  name: cascadia_geoinfer_alphaearth
+  type: spatial_representation_learning
+  purpose: geoinfer_preparation
+  created: 2025-01-08
+  author: UrbanRepML
+  
+region:
+  name: cascadia
+  definition: geoinfer_standard
+  
+  # Northern California Counties (16)
+  california_counties:
+    - Butte
+    - Colusa
+    - Del Norte
+    - Glenn
+    - Humboldt
+    - Lake
+    - Lassen
+    - Mendocino
+    - Modoc
+    - Nevada
+    - Plumas
+    - Shasta
+    - Sierra
+    - Siskiyou
+    - Tehama
+    - Trinity
+  
+  # Oregon Counties (36 - all counties)
+  oregon_counties: all
+  
+  # Approximate bounding box for GEE exports
+  bounds:
+    north: 46.3  # Northern Oregon border
+    south: 39.0  # Northern California (below Tehama)
+    west: -124.6  # Pacific Coast
+    east: -116.5  # Eastern Oregon/California border
+  
+  # Total area statistics
+  total_area_km2: 421000
+  total_counties: 52
+
+# AlphaEarth Data Configuration
+alphaearth:
+  years: [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
+  resolution_meters: 10  # Native resolution
+  bands: 64  # Embedding dimensions
+  tile_size: 3072  # Pixels per export tile
+  max_pixels_per_export: 1e9
+  crs: EPSG:4326
+  
+# H3 Processing Configuration
+h3_processing:
+  resolutions: [5, 6, 7, 8, 9, 10, 11]
+  primary_resolution: 8  # GEO-INFER standard
+  
+  # Aggregation settings per resolution
+  aggregation:
+    method: mean  # mean, median, or max
+    min_pixels_per_hex: 5  # Minimum pixels for valid aggregation
+    handle_missing: interpolate  # interpolate, skip, or zero
+  
+  # Hierarchical mapping
+  hierarchy:
+    create_parent_child_mappings: true
+    enforce_consistency: true  # Children must be subset of parents
+    
+  # Memory management for large resolutions
+  memory:
+    batch_size_res11: 1000  # Process in batches for res 11
+    batch_size_res10: 10000
+    batch_size_res9: 100000
+    enable_chunking: true
+    chunk_overlap: 100  # Meters of overlap between chunks
+
+# Actualization Configuration
+actualization:
+  # Gap detection parameters
+  gap_detection:
+    spatial_coverage_threshold: 0.8  # Min coverage to consider complete
+    temporal_coverage_threshold: 0.6  # Min years present
+    quality_threshold: 0.2  # Min embedding variance for valid data
+  
+  # Relational learning
+  relational:
+    spatial_radius: 3  # H3 cells for spatial context
+    temporal_window: 2  # Years for temporal context
+    embedding_dimensions: 32  # Reduced dimensions for learning
+    learning_rate: 0.001
+    epochs: 100
+  
+  # Synthetic generation
+  generation:
+    method: vae  # vae, gan, or diffusion
+    latent_dimensions: 16
+    reconstruction_weight: 0.7
+    consistency_weight: 0.3
+    validation_split: 0.2
+  
+  # Validation
+  validation:
+    withhold_counties: [Lassen, Siskiyou]  # Test counties
+    metrics: [mse, spatial_consistency, temporal_stability]
+
+# GEO-INFER Alignment Configuration
+geoinfer_alignment:
+  output_format: parquet
+  coordinate_system: EPSG:4326
+  
+  # Metadata requirements
+  metadata:
+    include_county_id: true
+    include_state_id: true
+    include_agricultural_zones: true
+    include_timestamp: true
+  
+  # Data structure
+  structure:
+    primary_key: h3_res8_index
+    foreign_keys: [county_fips, state_fips]
+    indexes: [h3_res8_index, county_fips, year]
+  
+  # Quality checks
+  quality:
+    check_border_continuity: true
+    check_resolution_consistency: true
+    validate_agricultural_areas: true
+
+# Processing Pipeline Configuration
+pipeline:
+  # Parallelization
+  parallel:
+    max_workers: 8
+    use_gpu: true
+    gpu_device: 0
+  
+  # Caching
+  cache:
+    enable: true
+    cache_dir: data/cache
+    max_cache_size_gb: 100
+  
+  # Logging
+  logging:
+    level: INFO  # DEBUG, INFO, WARNING, ERROR
+    log_to_file: true
+    log_dir: logs
+    verbose_progress: true
+    save_intermediate: true
+  
+  # Error handling
+  errors:
+    continue_on_tile_error: true
+    max_retries: 3
+    retry_delay_seconds: 60
+
+# Output Configuration
+output:
+  # File naming convention
+  naming:
+    pattern: "cascadia_{year}_h3_res{resolution}.parquet"
+    include_timestamp: false
+    compression: snappy
+  
+  # Data organization
+  organization:
+    by_year: true
+    by_resolution: true
+    by_county: false
+  
+  # Statistics generation
+  statistics:
+    generate_summary: true
+    include_histograms: true
+    include_correlations: true
+    save_format: json
+
+# Computational Resources
+resources:
+  # Memory allocation
+  memory:
+    max_memory_gb: 32
+    swap_enabled: true
+    garbage_collection_frequency: 100  # iterations
+  
+  # Disk space
+  disk:
+    required_space_gb: 500
+    temp_dir: /tmp/cascadia_processing
+    cleanup_temp: true
+  
+  # Time limits
+  time:
+    max_processing_hours: 72
+    checkpoint_frequency_minutes: 30
+
+# Experiment Tracking
+tracking:
+  use_wandb: false  # Weights & Biases integration
+  use_mlflow: false  # MLflow integration
+  local_tracking: true
+  metrics_to_track:
+    - processing_time
+    - memory_usage
+    - hexagons_processed
+    - gaps_detected
+    - synthetic_generated
+    - validation_scores

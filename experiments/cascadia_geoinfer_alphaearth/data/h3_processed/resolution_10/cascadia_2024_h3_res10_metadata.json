@@ -1,0 +1,15 @@
+{
+  "year": 2024,
+  "resolution": 10,
+  "n_h3_cells": 3000,
+  "embedding_dimensions": 64,
+  "created_timestamp": "2025-08-08T20:56:44.929098",
+  "data_type": "mock_alphaearth",
+  "region": "cascadia",
+  "bounds": {
+    "north": 46.3,
+    "south": 39.0,
+    "west": -124.6,
+    "east": -116.5
+  }
+}

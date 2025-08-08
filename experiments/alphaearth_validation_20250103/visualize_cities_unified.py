@@ -32,7 +32,7 @@ def create_unified_cities():
     print("Creating unified city visualization...")
     
     # Load embeddings from experiments folder
-    filepath = Path("experiments/alphaearth_validation_20250103/data/alphaearth_processed/netherlands_2023_h3_res10.parquet")
+    filepath = Path("experiments/alphaearth_validation_20250103/data/alphaearth_processed/embeddings_aerial_10_alphaearth.parquet")
     if not filepath.exists():
         print(f"File not found: {filepath}")
         return
