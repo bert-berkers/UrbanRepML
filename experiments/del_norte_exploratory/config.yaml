@@ -1,0 +1,105 @@
+# Del Norte Exploratory Analysis Configuration
+# Focus: 2021 AlphaEarth data at H3 resolution 11
+
+experiment:
+  name: del_norte_exploratory
+  year: 2021
+  h3_resolution: 9  # Use resolution 9 for better spatial detail
+  keep_dimensions: 64  # Full AlphaEarth embeddings
+  
+data:
+  source_dir: "G:/My Drive/AlphaEarth_Cascadia"
+  pattern: "Cascadia_AlphaEarth_2021_*.tif"
+  output_file: "cascadia_2021_res9_full.parquet"
+  h3_resolution: 9  # Add here for compatibility
+  
+  # AlphaEarth specifications
+  bands: 64  # A00 through A63
+  tile_size: 3072  # pixels
+  pixel_resolution: 10  # meters
+  crs: "EPSG:4326"
+  
+  # Del Norte approximate bounds (for reference)
+  del_norte_bounds:
+    north: 42.0
+    south: 41.5
+    west: -124.4
+    east: -123.8
+
+processing:
+  # Batch processing for memory efficiency
+  batch_size: 20  # Process 20 tiles at a time for full dataset
+  aggregation_method: "mean"  # How to aggregate pixels to H3
+  min_pixels_per_hex: 3  # Minimum pixels for valid hexagon
+  
+  # H3 specific
+  h3_resolution: 9
+  
+  # Memory management
+  use_sparse: false  # Keep dense for 64-dim data
+  chunk_size: 1000  # Process hexagons in chunks
+  
+clustering:
+  # K-means configurations
+  kmeans:
+    n_clusters: [5, 10, 15, 20]
+    n_init: 10
+    max_iter: 300
+    random_state: 42
+    
+  # Hierarchical clustering
+  hierarchical:
+    n_clusters: [8, 12, 16]
+    linkage: ["ward", "complete", "average"]
+    
+  # Gaussian Mixture Models
+  gmm:
+    n_components: [5, 10, 15]
+    covariance_type: "full"
+    max_iter: 100
+    random_state: 42
+    
+visualization:
+  # Categorical color schemes for cluster maps
+  colormaps:
+    - "tab10"      # Best for up to 10 clusters
+    - "tab20"      # For 11-20 clusters
+    - "Set1"       # Bright categorical colors
+    - "Set2"       # Pastel categorical colors
+    - "Set3"       # More categorical colors
+    - "Paired"     # Paired categorical colors
+    - "Accent"     # Accent categorical colors
+    
+  # Plot settings
+  figure_size: [15, 10]
+  dpi: 150
+  hex_size: 0.8  # Size multiplier for hexagons
+  
+  # Save formats
+  save_formats: ["png", "pdf"]
+  
+output:
+  # File naming pattern
+  naming_pattern: "{method}_2021_res11_{detail}"
+  
+  # Results structure
+  results_dir: "results"
+  plots_dir: "plots"
+  cache_dir: "data/cache"
+  
+  # Logging
+  log_level: "INFO"
+  log_file: "del_norte_exploratory.log"
+  
+performance:
+  # Parallel processing
+  n_jobs: -1  # Use all cores
+  
+  # Caching
+  enable_cache: true
+  cache_embeddings: true
+  cache_clusters: true
+  
+  # Progress reporting
+  verbose: true
+  show_progress: true

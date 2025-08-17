@@ -1,0 +1,3 @@
+[submodule "external/geo-infer"]
+	path = external/geo-infer
+	url = https://github.com/ActiveInferenceInstitute/GEO-INFER.git
