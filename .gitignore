@@ -84,3 +84,11 @@ Desktop.ini
 *.tmp
 *.temp
 ~*
+
+# Experiment data and outputs - exclude from version control
+experiments/*/data/
+experiments/*/plots/
+experiments/*/results/
+experiments/*/logs/
+*.gpkg
+*.html
