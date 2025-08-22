@@ -1,0 +1,121 @@
+# MASSIVE Cascadia 2021 AlphaEarth Experiment Configuration
+# ========================================================
+# THE ULTIMATE LARGE-SCALE SPATIAL ANALYSIS CONFIGURATION
+
+experiment:
+  name: "massive_cascadia_2021_alphaearth"
+  description: "Ultimate large-scale analysis of ALL 900 AlphaEarth 2021 tiles from Cascadia bioregion"
+  version: "1.0.0"
+  created: "2025-08-15"
+
+# Geographic scope - MASSIVE Cascadia bioregion
+geographic:
+  region: "Cascadia Bioregion"
+  bounds:
+    north: 46.5   # Extended to Washington/Canada border
+    south: 38.5   # Extended to Northern California  
+    west: -125.0  # Extended far into Pacific Ocean
+    east: -116.0  # Extended to Sierra Nevada mountains
+  area_km2: ~600000  # Massive coverage area
+  
+# AlphaEarth data configuration
+alphaearth:
+  year: 2021
+  total_tiles: 900
+  bands: 64
+  resolution_meters: 10
+  source_directory: "G:/My Drive/AlphaEarth_Cascadia"
+  file_pattern: "*2021*.tif"
+  
+# H3 hierarchical processing
+h3:
+  resolutions: [8, 9, 10, 11]
+  primary_resolution: 8
+  expected_hexagons:
+    resolution_8: ~50000    # Coarse scale
+    resolution_9: ~150000   # Medium scale  
+    resolution_10: ~500000  # Fine scale
+    resolution_11: ~1500000 # Ultra-fine scale
+  total_expected: ~2200000  # MILLIONS of hexagons!
+
+# Processing configuration
+processing:
+  parallel_workers: 8
+  chunk_size: 1000
+  memory_limit_gb: 20  # Leave 4GB for system
+  gpu_memory_gb: 24    # Full RTX 3090 power
+  batch_size: 512      # Optimized for RTX 3090
+  
+# Neural network architecture
+neural_network:
+  input_dim: 64        # AlphaEarth bands
+  hidden_dim: 256      # Large for massive data
+  output_dim: 128      # Rich representations
+  num_conv_layers: 3   # Deep processing
+  learning_rate: 0.001
+  epochs: 15
+  dropout: 0.1
+
+# Active inference configuration  
+active_inference:
+  resolutions: [8, 9, 10, 11]
+  coupling_strength: 0.3
+  complexity_weight: 0.5
+  accuracy_weight: 0.5
+  latent_dim: 32       # Large latent space
+
+# Clustering configuration
+clustering:
+  methods: ["kmeans", "gaussian_mixture", "dbscan"]
+  max_clusters: 50     # Large number for massive data
+  min_cluster_size: 100
+  feature_categories:
+    - "alphaearth"     # Satellite embeddings
+    - "topographical"  # Elevation, slope
+    - "spatial"        # Geographic patterns
+    - "hierarchical"   # Cross-resolution
+
+# Visualization configuration
+visualization:
+  resolutions: [8, 9, 10, 11]
+  plot_types:
+    - "individual_resolution_landscapes"
+    - "combined_holographic_landscape" 
+    - "hierarchical_statistics"
+    - "cross_resolution_analysis"
+    - "cluster_quality_metrics"
+  dpi: 300
+  figsize: [24, 18]
+  
+# Output configuration
+output:
+  save_embeddings: true
+  save_neural_weights: true
+  save_cluster_assignments: true
+  save_visualizations: true
+  save_intermediate_results: true
+  formats: ["parquet", "json", "pytorch"]
+  
+# Quality control
+quality:
+  min_valid_pixels_per_tile: 1000
+  max_missing_data_ratio: 0.3
+  outlier_detection: true
+  data_validation: true
+  
+# Monitoring and logging
+monitoring:
+  log_level: "INFO"
+  progress_interval: 100  # Log every 100 tiles
+  memory_monitoring: true
+  gpu_monitoring: true
+  real_time_dashboard: true
+  
+# Performance optimization
+optimization:
+  use_mixed_precision: true
+  gradient_checkpointing: true
+  data_parallel: true
+  pin_memory: true
+  num_workers: 4
+  prefetch_factor: 2

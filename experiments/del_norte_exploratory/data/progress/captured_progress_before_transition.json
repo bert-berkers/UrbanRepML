@@ -1,0 +1,189 @@
+{
+  "capture_time": "2025-08-21T22:03:11.774298",
+  "workers": {
+    "0": {
+      "worker_id": 0,
+      "completed_files": [
+        "Cascadia_AlphaEarth_2021_0138-0000000000-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0138-0000000000-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0138-0000003072-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0138-0000003072-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0139-0000000000-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0139-0000000000-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0139-0000003072-0000000000.tif"
+      ],
+      "current_file": "Cascadia_AlphaEarth_2021_0139-0000003072-0000003072.tif",
+      "hexagon_counts": {
+        "Cascadia_AlphaEarth_2021_0138-0000000000-0000000000.tif": 1059,
+        "Cascadia_AlphaEarth_2021_0138-0000000000-0000003072.tif": 398,
+        "Cascadia_AlphaEarth_2021_0138-0000003072-0000000000.tif": 35,
+        "Cascadia_AlphaEarth_2021_0138-0000003072-0000003072.tif": 12,
+        "Cascadia_AlphaEarth_2021_0139-0000000000-0000000000.tif": 1056,
+        "Cascadia_AlphaEarth_2021_0139-0000000000-0000003072.tif": 394,
+        "Cascadia_AlphaEarth_2021_0139-0000003072-0000000000.tif": 36
+      },
+      "total_hexagons": 2990
+    },
+    "1": {
+      "worker_id": 1,
+      "completed_files": [
+        "Cascadia_AlphaEarth_2021_0210-0000003072-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0210-0000003072-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0211-0000000000-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0211-0000000000-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0211-0000003072-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0211-0000003072-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0212-0000000000-0000000000.tif"
+      ],
+      "current_file": "Cascadia_AlphaEarth_2021_0212-0000000000-0000003072.tif",
+      "hexagon_counts": {
+        "Cascadia_AlphaEarth_2021_0210-0000003072-0000000000.tif": 34,
+        "Cascadia_AlphaEarth_2021_0210-0000003072-0000003072.tif": 13,
+        "Cascadia_AlphaEarth_2021_0211-0000000000-0000000000.tif": 1047,
+        "Cascadia_AlphaEarth_2021_0211-0000000000-0000003072.tif": 390,
+        "Cascadia_AlphaEarth_2021_0211-0000003072-0000000000.tif": 34,
+        "Cascadia_AlphaEarth_2021_0211-0000003072-0000003072.tif": 13,
+        "Cascadia_AlphaEarth_2021_0212-0000000000-0000000000.tif": 1043
+      },
+      "total_hexagons": 2574
+    },
+    "2": {
+      "worker_id": 2,
+      "completed_files": [
+        "Cascadia_AlphaEarth_2021_0283-0000000000-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0283-0000000000-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0283-0000003072-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0283-0000003072-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0277-0000000000-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0277-0000000000-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0277-0000003072-0000000000.tif"
+      ],
+      "current_file": "Cascadia_AlphaEarth_2021_0277-0000003072-0000003072.tif",
+      "hexagon_counts": {
+        "Cascadia_AlphaEarth_2021_0283-0000000000-0000000000.tif": 1033,
+        "Cascadia_AlphaEarth_2021_0283-0000000000-0000003072.tif": 386,
+        "Cascadia_AlphaEarth_2021_0283-0000003072-0000000000.tif": 33,
+        "Cascadia_AlphaEarth_2021_0283-0000003072-0000003072.tif": 12,
+        "Cascadia_AlphaEarth_2021_0277-0000000000-0000000000.tif": 1057,
+        "Cascadia_AlphaEarth_2021_0277-0000000000-0000003072.tif": 393,
+        "Cascadia_AlphaEarth_2021_0277-0000003072-0000000000.tif": 33
+      },
+      "total_hexagons": 2947
+    },
+    "3": {
+      "worker_id": 3,
+      "completed_files": [
+        "Cascadia_AlphaEarth_2021_0326-0000000000-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0326-0000003072-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0326-0000003072-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0325-0000000000-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0325-0000000000-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0325-0000003072-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0325-0000003072-0000003072.tif"
+      ],
+      "current_file": "Cascadia_AlphaEarth_2021_0328-0000000000-0000000000.tif",
+      "hexagon_counts": {
+        "Cascadia_AlphaEarth_2021_0326-0000000000-0000003072.tif": 393,
+        "Cascadia_AlphaEarth_2021_0326-0000003072-0000000000.tif": 32,
+        "Cascadia_AlphaEarth_2021_0326-0000003072-0000003072.tif": 13,
+        "Cascadia_AlphaEarth_2021_0325-0000000000-0000000000.tif": 1051,
+        "Cascadia_AlphaEarth_2021_0325-0000000000-0000003072.tif": 395,
+        "Cascadia_AlphaEarth_2021_0325-0000003072-0000000000.tif": 34,
+        "Cascadia_AlphaEarth_2021_0325-0000003072-0000003072.tif": 13
+      },
+      "total_hexagons": 1931
+    },
+    "4": {
+      "worker_id": 4,
+      "completed_files": [
+        "Cascadia_AlphaEarth_2021_0072-0000003072-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0072-0000003072-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0075-0000000000-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0075-0000000000-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0075-0000003072-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0075-0000003072-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0076-0000000000-0000000000.tif"
+      ],
+      "current_file": "Cascadia_AlphaEarth_2021_0076-0000000000-0000003072.tif",
+      "hexagon_counts": {
+        "Cascadia_AlphaEarth_2021_0072-0000003072-0000000000.tif": 35,
+        "Cascadia_AlphaEarth_2021_0072-0000003072-0000003072.tif": 13,
+        "Cascadia_AlphaEarth_2021_0075-0000000000-0000000000.tif": 1038,
+        "Cascadia_AlphaEarth_2021_0075-0000000000-0000003072.tif": 387,
+        "Cascadia_AlphaEarth_2021_0075-0000003072-0000000000.tif": 34,
+        "Cascadia_AlphaEarth_2021_0075-0000003072-0000003072.tif": 13,
+        "Cascadia_AlphaEarth_2021_0076-0000000000-0000000000.tif": 1038
+      },
+      "total_hexagons": 2558
+    },
+    "5": {
+      "worker_id": 5,
+      "completed_files": [
+        "Cascadia_AlphaEarth_2021_0348-0000003072-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0348-0000000000-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0347-0000000000-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0347-0000000000-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0348-0000000000-0000000000.tif",
+        "Cascadia_AlphaEarth_2021_0349-0000003072-0000003072.tif",
+        "Cascadia_AlphaEarth_2021_0349-0000003072-0000000000.tif"
+      ],
+      "current_file": "Cascadia_AlphaEarth_2021_0349-0000000000-0000003072.tif",
+      "hexagon_counts": {
+        "Cascadia_AlphaEarth_2021_0348-0000003072-0000000000.tif": 34,
+        "Cascadia_AlphaEarth_2021_0348-0000000000-0000003072.tif": 392,
+        "Cascadia_AlphaEarth_2021_0347-0000000000-0000003072.tif": 393,
+        "Cascadia_AlphaEarth_2021_0347-0000000000-0000000000.tif": 1057,
+        "Cascadia_AlphaEarth_2021_0348-0000000000-0000000000.tif": 1050,
+        "Cascadia_AlphaEarth_2021_0349-0000003072-0000003072.tif": 13,
+        "Cascadia_AlphaEarth_2021_0349-0000003072-0000000000.tif": 33
+      },
+      "total_hexagons": 2972
+    }
+  },
+  "total_completed": 42,
+  "files_completed": [
+    "Cascadia_AlphaEarth_2021_0138-0000003072-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0211-0000003072-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0211-0000000000-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0349-0000003072-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0326-0000000000-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0347-0000000000-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0212-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0325-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0349-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0072-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0075-0000003072-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0283-0000000000-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0075-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0139-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0211-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0348-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0283-0000003072-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0325-0000000000-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0138-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0326-0000003072-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0138-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0076-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0072-0000003072-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0075-0000000000-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0325-0000003072-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0283-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0325-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0277-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0210-0000003072-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0347-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0139-0000000000-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0277-0000000000-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0075-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0277-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0210-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0348-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0138-0000000000-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0283-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0348-0000000000-0000003072.tif",
+    "Cascadia_AlphaEarth_2021_0326-0000003072-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0139-0000000000-0000000000.tif",
+    "Cascadia_AlphaEarth_2021_0211-0000003072-0000000000.tif"
+  ],
+  "unique_completed": 42
+}

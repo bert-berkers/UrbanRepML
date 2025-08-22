@@ -134,15 +134,130 @@ This project implements a Graph Neural Network-based approach for learning urban
 
 ### Dependencies
 
-Core libraries: PyTorch, PyTorch Geometric, GeoPandas, H3, OSMnx, scikit-learn, WandB
+Core libraries: PyTorch, PyTorch Geometric, GeoPandas, H3, OSMnx, scikit-learn, WandB, **SRAI** (for H3 operations)
 
 ---
 
-# CASCADIA ALPHAEARTH EXPERIMENT
+# CASCADIA COASTAL FORESTS PROCESSING
+
+**Status:** ACTIVE (January 2025)
+**Purpose:** Process Cascadia coastal forest AlphaEarth satellite embeddings to H3 hexagons
+**Location:** `experiments/del_norte_exploratory/` (legacy folder name)
+**Focus:** Forested coastal band west of -121° (excludes eastern prairies/valleys)
+
+## Quick Start
+
+### Run Modular Processor
+```bash
+cd experiments/del_norte_exploratory
+
+# Test with 2 tiles
+python run_modular_processor.py --max-tiles 2 --clean-start
+
+# Resume from checkpoint
+python run_modular_processor.py --resume
+
+# Full processing
+python run_modular_processor.py
+```
+
+### Monitor Progress
+```bash
+# Check current progress
+python monitor_progress.py
+
+# View checkpoint status
+cat data/checkpoints/modular_progress.json
+```
+
+## Architecture: Modular Tile Processing with SRAI
+
+### Key Innovation: Pre-regionalization with SRAI
+- **Pre-compute all H3 hexagons** for Cascadia study area (436,944 hexagons at resolution 8)
+- **Use SRAI's H3Regionalizer** for proper H3 operations (no API issues)
+- **Build spatial KDTree index** for fast pixel-to-hexagon mapping
+- **Process subtiles** (256×256) and map pixels to pre-existing hexagon buckets
+
+### Study Area: Cascadia Coastal Forests
+- **Full data extent**: -124.70°W to -117.35°E, 38.67°N to 43.37°N (~426,000 sq km)
+- **Focused study area**: West of -121°W (~185,000 sq km)
+- **Ecosystems**: Coast Range, Klamath Mountains, Coastal Douglas-fir, Coastal Redwood
+- **Rationale**: Excludes eastern Oregon/California prairies, focuses on forested ecosystems
+- **Tiles**: ~612 out of 968 AlphaEarth TIFFs fall within coastal area (63% of dataset)
+
+### Directory Structure
+```
+experiments/del_norte_exploratory/
+├── config.yaml                 # Main configuration
+├── run_modular_processor.py    # Main runner with archiving
+├── simple_local_srai.py        # Baseline SRAI approach
+├── scripts/
+│   ├── modular_tiff_processor.py  # Core modular processor
+│   ├── srai_rioxarray_processor.py # SRAI+rioxarray hybrid
+│   ├── monitor_progress.py     # Progress monitoring
+│   └── [visualization scripts]
+├── data/
+│   ├── h3_2021_res8_modular/  # Final H3 outputs
+│   ├── intermediate/           # Subtile results
+│   ├── checkpoints/            # Processing state
+│   ├── archive/                # Completed run archives
+│   └── progress/               # Progress tracking
+└── logs/
+    └── modular_processing.log  # Detailed logs
+```
+
+### Configuration (config.yaml)
+```yaml
+experiment:
+  name: del_norte_modular_2021
+  h3_resolution: 8
+  processing_mode: modular
+
+processing:
+  subtile_size: 256       # Chunk size
+  subtiles_per_batch: 10  # Checkpoint frequency
+  min_pixels_per_hex: 5   # Quality threshold
+  checkpoint_enabled: true
+  resume_from_checkpoint: true
+```
+
+### Processing Workflow
+
+1. **Pre-regionalization**: Generate H3 hexagons for coastal forest area (west of -121°) using SRAI
+2. **Spatial Filtering**: Only process tiles that intersect the coastal forest study area
+3. **Spatial Index**: Build KDTree for O(log n) pixel-to-hexagon lookup (~105k hexagons)
+4. **Tile Loading**: Open 3072×3072×64 band TIFF files
+5. **Subtiling**: Split into 12×12 grid of 256×256 chunks
+6. **Pixel Mapping**: Find nearest hexagon for each pixel using KDTree
+7. **Aggregation**: Average pixel values within each hexagon bucket
+8. **Checkpointing**: Save progress after each batch
+9. **Merging**: Combine results into final coastal forest dataset
+
+### Performance Metrics
+- **Subtile processing**: 5-10 seconds
+- **Full tile**: 12-24 minutes
+- **Daily throughput**: 50-100 tiles
+- **Complete dataset**: 3-6 days for 288 tiles
+
+### Resumability Features
+- JSON checkpoint with completed tiles/subtiles
+- Intermediate results saved per subtile
+- Automatic resume on restart
+- Archive completed runs with metadata
+
+### Memory Management
+- Fixed 256×256 chunk size (vs full 3072×3072)
+- Garbage collection every 5 tiles
+- Batch processing with controlled memory
+- No GPU memory requirements
+
+---
+
+# CASCADIA COASTAL FORESTS EXPERIMENT  
 
 **Status:** ACTIVE (January 2025)  
-**Purpose:** Multi-resolution spatial representation learning using AlphaEarth satellite embeddings for GEO-INFER agricultural analysis  
-**Location:** `experiments/cascadia_geoinfer_alphaearth/`
+**Purpose:** Modular TIFF processing workflow for AlphaEarth satellite embeddings analysis  
+**Location:** `experiments/cascadia_exploratory/`
 
 ## Quick Start Guide
 
@@ -151,292 +266,281 @@ Core libraries: PyTorch, PyTorch Geometric, GeoPandas, H3, OSMnx, scikit-learn, 
 # 1. Install dependencies
 pip install -e .
 
-# 2. Set up Google Earth Engine authentication
-earthengine authenticate --project=boreal-union-296021
-
-# 3. Navigate to experiment directory
-cd experiments/cascadia_geoinfer_alphaearth
+# 2. Navigate to experiment directory
+cd experiments/cascadia_exploratory
 ```
 
-### Current Status Check
+### Two-Stage Processing Workflow
 ```bash
-# Check AlphaEarth export progress
-python scripts/gee/check_export_status.py
+# Stage 1: TIFF → Intermediate JSONs (parallel processing)
+python run_coastal_processing.py --workers 6
 
-# View comprehensive tile tracking log
-cat TILE_EXPORT_LOG.md
+# Monitor progress
+python scripts/monitor_modular_progress.py --continuous
 
-# Monitor tasks at: https://code.earthengine.google.com/tasks?project=boreal-union-296021
+# Stage 2: Stitch intermediate JSONs → Final Parquet
+python stitch_results.py
 ```
 
 ## Project Overview
 
-### Core Concept: "Actualization"
-This experiment implements **actualization** - a philosophical approach to machine learning that:
-1. **Identifies gaps** in satellite data coverage (spatial, temporal, quality)
-2. **Learns relational structures** between existing data points
-3. **Generates synthetic data** for missing regions through understanding of underlying patterns
-4. **"Carves nature at its joints"** - discovers natural boundaries and relationships in geographic data
+### Focus: Cascadia Coastal Forests
+**Spatial Filtering:** West of -121° longitude to focus on forested coastal ecosystems, excluding eastern prairies/valleys
 
-### Geographic Scope
-- **Region:** Cascadia Bioregion (Northern California + Oregon)
-- **Counties:** 52 total (16 CA + 36 OR)  
-- **Bounds:** [-124.6, 39.0] to [-116.5, 46.3]
-- **Area:** ~421,000 km²
+### Geographic Scope  
+- **Region:** Cascadia Coastal Band (Coast Range, Klamath Mountains)
+- **Bounds:** West of -121°, from Northern California to Southern Oregon
+- **Coverage:** ~592 out of 968 AlphaEarth tiles (~185,000 km²)
+- **H3 Resolution:** 8 (~223,904 hexagons pre-regionalized)
 
-### Data Pipeline
+### Processing Pipeline
 ```
-AlphaEarth (GEE) → H3 Multi-Resolution → Gap Detection → Synthetic Generation → GEO-INFER Format
+AlphaEarth TIFFs (968 files) → Coastal Filter → Stage 1: Parallel → Intermediate JSONs → Stage 2: Stitch → Final Parquet
 ```
 
 ## Data Sources & Configuration
 
 ### AlphaEarth Satellite Embeddings
-- **Collection:** `GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL`  
+- **Source:** Local TIFFs from Google Drive (`G:/My Drive/AlphaEarth_Cascadia`)
 - **Dimensions:** 64 embedding features (bands A00-A63)
-- **Resolution:** 10 meters native
-- **Years:** 2017-2024 (8 years)
-- **Coverage:** 288 images over Cascadia region
-- **Export Format:** 3072×3072 pixel tiles per year → Google Drive
+- **Resolution:** 10 meters native  
+- **Tile Format:** 3072×3072 pixel TIFFs
+- **Year:** 2021 (single year for coastal forest analysis)
+- **Coverage:** 968 total tiles, ~592 coastal tiles after filtering
 
-### H3 Hexagonal Processing
-- **Resolutions:** 5-11 (adaptive based on analysis needs)
-- **Primary Resolution:** 8 (GEO-INFER standard)  
-- **Architecture:** Hierarchical parent-child mappings
-- **Memory Management:** Chunked processing for high resolutions
+### H3 Hexagonal Processing via SRAI
+- **Resolution:** 8 (fixed for coastal analysis)
+- **Pre-regionalization:** 223,904 hexagons covering coastal area
+- **Spatial Library:** SRAI (Spatial Representations for AI)
+- **Aggregation:** Mean pooling of pixels within each hexagon
+- **Overlap Handling:** Multiple tile contributions averaged during stitching
 
 ## Current Implementation Status
 
 ### ✅ COMPLETED (January 2025)
-1. **Google Earth Engine Integration**
-   - Authentication with project `boreal-union-296021`
-   - AlphaEarth collection access confirmed
-   - Export architecture validated
+1. **Experiment Restructuring**
+   - Renamed from del_norte_exploratory to cascadia_exploratory
+   - Moved all utility scripts to scripts/ folder
+   - Created comprehensive scripts/README.md documentation
+   - Implemented two-stage processing architecture
 
-2. **Export Infrastructure** 
-   - **1,093+ tiles queued** across multiple years
-   - Systematic tile tracking and logging
-   - Automated progress monitoring
-   - Real-time status checking
+2. **Core Processing Components**
+   - **ModularTiffProcessor:** SRAI-based H3 operations with spatial filtering
+   - **run_coastal_processing.py:** Stage 1 orchestrator with parallel workers
+   - **stitch_results.py:** Stage 2 final assembly with overlap resolution
+   - **Spatial filtering:** Coast-only processing (west of -121°)
+   - **Pre-regionalization:** 223,904 H3 hexagons cached for efficiency
 
-3. **Data Organization**
-   - Comprehensive configuration system
-   - Modular script architecture
-   - Error handling and retry mechanisms
-   - Structured logging throughout
+3. **Configuration & Architecture**
+   - Updated config.yaml for coastal forest focus
+   - Intermediate storage system for resumable processing  
+   - Comprehensive logging and progress monitoring
+   - Error handling and checkpointing
 
-### 🔄 IN PROGRESS
-- **AlphaEarth Exports:** 21.2% coverage (1,093/5,152 tiles)
-  - 2017: 70+ tiles queued
-  - 2018: 569+ tiles queued  
-  - 2019: 81+ tiles queued
-  - 2020: 294+ tiles queued
-  - 2021: 75+ tiles submitting
-  - 2022: Ready to start
-  - 2023: 69 tiles (16 completed, 27 failed)
-  - 2024: Ready to start
+### 🔄 READY TO RUN
+- **Stage 1:** Parallel TIFF processing to intermediate JSONs
+- **Stage 2:** Final dataset stitching with overlap handling
+- **Monitoring:** Real-time progress tracking available
 
-### ⏳ PENDING
-1. **H3 Multi-Resolution Processing**
-2. **Gap Detection & Analysis** 
-3. **Synthetic Data Generation**
-4. **GEO-INFER Dataset Preparation**
+### ⏳ FUTURE ENHANCEMENTS
+1. **Advanced Analytics:** Clustering and spatial analysis of coastal forests
+2. **Multi-Year Processing:** Extend to temporal analysis
+3. **Visualization Pipeline:** Interactive coastal forest mapping
 
 ## Key Scripts & Usage
 
-### Google Earth Engine Operations
+### Core Processing Pipeline
 ```bash
-# Check AlphaEarth data availability
-python scripts/gee/check_years_availability.py --save_report
+# Stage 1: TIFF → Intermediate JSONs (main processing)
+python run_coastal_processing.py --workers 6            # Standard run
+python run_coastal_processing.py --max-tiles 50 --workers 4  # Test run
+python run_coastal_processing.py --clean-start --workers 8   # Fresh start
 
-# Start exports for specific years
-python scripts/gee/export_cascadia_alphaearth.py --year 2022
-python scripts/gee/export_cascadia_alphaearth.py --years 2022 2024
-python scripts/gee/export_cascadia_alphaearth.py --all_years
-
-# Monitor export progress  
-python scripts/gee/check_export_status.py
+# Stage 2: Stitch intermediate JSONs → Final Parquet
+python stitch_results.py                                # Standard stitching
+python stitch_results.py --cleanup                      # Archive intermediates
+python stitch_results.py --output-name custom_name      # Custom output
 ```
 
-### H3 Processing Pipeline
+### Monitoring & Utilities  
 ```bash
-# Process downloaded AlphaEarth to H3 format
-python scripts/h3/process_alphaearth_to_h3.py --year 2023 --resolution 8
+# Real-time progress monitoring
+python scripts/monitor_modular_progress.py --continuous
 
-# Generate multi-resolution hierarchy
-python scripts/h3/create_hierarchical_mapping.py --resolutions 5,6,7,8,9,10,11
+# Test processing on small batch
+python scripts/test_modular.py --max-tiles 5
 
-# Validate H3 data quality
-python scripts/h3/validate_h3_data.py --year 2023 --check_coverage
+# Check processing status
+python scripts/check_progress.py
 ```
 
-### Gap Detection & Actualization
+### Visualization & Analysis
 ```bash  
-# Detect spatial/temporal gaps
-python scripts/actualization/gap_detector.py --all_years --all_resolutions --save_report
+# Generate spatial visualizations
+python scripts/visualizations.py --method kmeans --clusters 10
 
-# Generate synthetic embeddings for gaps
-python scripts/actualization/synthetic_generator.py --year 2023 --method vae --validate
+# SRAI-specific visualizations
+python scripts/srai_visualizations.py --resolution 8
 
-# Quality assessment of synthetic data
-python scripts/actualization/validate_synthetic.py --comparison_year 2022
+# Load and explore AlphaEarth data
+python scripts/load_alphaearth.py --explore --year 2021
 ```
 
-### GEO-INFER Integration
+### Configuration & Setup
 ```bash
-# Prepare data for GEO-INFER agricultural analysis
-python scripts/geoinfer/prepare_for_geoinfer.py --year 2023 --include_synthetic
+# Validate configuration
+python -c "import yaml; print(yaml.safe_load(open('config.yaml')))"
 
-# Validate GEO-INFER compatibility
-python scripts/geoinfer/prepare_for_geoinfer.py --validate_only --all_years
+# Test SRAI dependencies
+python scripts/test_dependencies.py
 
-# Generate final datasets
-python scripts/geoinfer/create_final_datasets.py --output_format parquet
+# Benchmark different processors
+python scripts/benchmark_processors.py
 ```
 
-## Medium Term Goals (Next 30 Days)
+## Immediate Next Steps
 
-### Phase 1: Complete Data Acquisition
-1. **Finish AlphaEarth Exports**
+### Run Complete Processing Pipeline
+1. **Execute Stage 1 Processing**
    ```bash
-   # Start remaining years
-   python scripts/gee/export_cascadia_alphaearth.py --years 2022 2024
+   # Navigate to experiment directory
+   cd experiments/cascadia_exploratory
    
-   # Monitor completion
-   python scripts/gee/check_export_status.py
+   # Run main processing with 6 workers
+   python run_coastal_processing.py --workers 6
    ```
 
-2. **Local Data Sync**
-   - Monitor Google Drive "AlphaEarth_Cascadia" folder
-   - Validate downloaded tile integrity
-   - Organize by year/tile structure
-
-### Phase 2: H3 Multi-Resolution Processing  
-1. **Convert to H3 Format**
+2. **Monitor Progress**
    ```bash
-   # Process each year as data becomes available
-   for year in {2017..2024}; do
-     python scripts/h3/process_alphaearth_to_h3.py --year $year --all_resolutions
-   done
+   # In separate terminal, monitor progress
+   python scripts/monitor_modular_progress.py --continuous
    ```
 
-2. **Build Hierarchical Mappings**
+3. **Execute Stage 2 Stitching**
    ```bash
-   python scripts/h3/create_hierarchical_mapping.py --validate_consistency
+   # After Stage 1 completes, stitch results
+   python stitch_results.py
    ```
 
-### Phase 3: Gap Detection & Analysis
-1. **Comprehensive Gap Analysis**
+### Expected Outcomes
+- **Processing Time:** ~4 hours for 592 coastal tiles with 6 workers
+- **Intermediate Storage:** ~2-5 GB JSON files in `data/intermediate/`
+- **Final Dataset:** Parquet file with ~223,904 H3 hexagons × 64 embedding dimensions
+- **Coverage:** Cascadia coastal forests west of -121° longitude
+
+### Data Quality & Validation
+1. **Automatic Validation**
+   - Spatial bounds checking during tile filtering
+   - H3 hexagon overlap resolution during stitching
+   - Embedding dimension consistency (64 bands A00-A63)
+
+2. **Manual Quality Checks**
    ```bash
-   python scripts/actualization/gap_detector.py --all_years --all_resolutions --save_report
+   # Check final dataset statistics
+   python -c "import pandas as pd; df=pd.read_parquet('data/h3_2021_res8_coastal_forests/cascadia_coastal_forests_2021_res8_final.parquet'); print(f'Hexagons: {len(df)}, Columns: {df.columns.tolist()}')"
    ```
 
-2. **Spatial Coverage Assessment**
-   - Identify regions with missing data
-   - Quantify temporal inconsistencies  
-   - Flag quality issues
+## Future Development Directions
 
-### Phase 4: Actualization - Synthetic Data Generation
-1. **Train Generative Models**
+### Multi-Resolution Analysis
+1. **Cross-Scale Processing**
+   - Extend to H3 resolutions 9-10 for detailed coastal analysis
+   - Hierarchical hexagon relationships for multi-scale insights
+   - Scale-adaptive feature aggregation
+
+2. **Temporal Extensions**
+   - Multi-year coastal change detection (2017-2024)
+   - Seasonal forest dynamics analysis
+   - Climate impact on coastal ecosystems
+
+### Advanced Analytics
+1. **Coastal Forest Clustering**
    ```bash
-   python scripts/actualization/synthetic_generator.py --all_years --method vae
+   # Future implementation
+   python scripts/forest_analytics.py --method hierarchical --clusters 15
+   python scripts/temporal_analysis.py --years 2021,2023 --change_detection
    ```
 
-2. **Validate Synthetic Quality** 
-   ```bash
-   python scripts/actualization/validate_synthetic.py --comprehensive
-   ```
+2. **Ecological Insights**
+   - Old-growth vs second-growth forest distinction
+   - Coastal fog influence on forest health
+   - Fire recovery pattern analysis
 
-## Long Term Vision (6+ Months)
+### Integration Opportunities
+1. **Multi-Modal Enhancement**
+   - Integrate LiDAR data for canopy structure
+   - Combine with climate data for environmental modeling
+   - Cross-validate with field survey data
 
-### Advanced Actualization Research
-1. **Multi-Modal Learning**
-   - Integrate additional satellite data (Sentinel-2, Landsat)
-   - Cross-validate synthetic quality
-   - Temporal consistency learning
+2. **Policy Applications**
+   - Carbon sequestration mapping
+   - Biodiversity corridor identification
+   - Sustainable forestry planning support
 
-2. **Relational Pattern Discovery**
-   - Agricultural boundary detection
-   - Seasonal pattern learning
-   - Cross-county relationship modeling
-
-### GEO-INFER Agricultural Integration
-1. **Policy Analysis Ready Datasets**
-   ```bash
-   python scripts/geoinfer/create_policy_datasets.py --county_level --time_series
-   ```
-
-2. **Agricultural Trend Analysis**
-   - Multi-year change detection
-   - Climate impact assessment
-   - Sustainable farming indicators
-
-### Scaling & Methodology Development
-1. **Expand Geographic Coverage**
-   - Pacific Northwest (Washington, British Columbia)
-   - Other bioregions (Colorado Plateau, Great Basin)
-
-2. **Framework Generalization**
-   - Create reusable actualization pipeline
-   - Multi-domain synthetic data generation
-   - Cross-regional validation
-
-## Configuration & Customization
+## Technical Architecture
 
 ### Key Configuration Files
-- **Primary Config:** `experiments/cascadia_geoinfer_alphaearth/config.yaml`
-- **GEE Settings:** `scripts/gee/` (authentication, export parameters)
-- **H3 Processing:** Configure resolutions, memory management
-- **Actualization:** Gap detection thresholds, synthetic generation methods
+- **Primary Config:** `experiments/cascadia_exploratory/config.yaml`
+- **Study Area:** Coastal filtering bounds and H3 regionalization
+- **Processing:** Parallel workers, checkpointing, memory management
+- **Output:** Directory structure and file naming conventions
 
 ### Customization Options
 ```yaml
-# Example config modifications in config.yaml:
+# Key config modifications in config.yaml:
 
-# Change H3 resolution focus
-h3_processing:
-  resolutions: [8, 9, 10]  # Focus on core resolutions
-  primary_resolution: 9    # Higher resolution analysis
+# Adjust spatial filtering
+study_area:
+  bounds:
+    east: -120.0           # Extend further inland
+    west: -125.0           # Extend further offshore
+    
+# Modify processing parameters
+processing:
+  subtile_size: 512        # Larger chunks for more memory
+  min_pixels_per_hex: 10   # Stricter hexagon inclusion
 
-# Adjust actualization parameters  
-actualization:
-  generation:
-    method: diffusion        # Advanced synthetic generation
-    latent_dimensions: 32    # Higher dimensional learning
+# Change output structure
+output:
+  modular_dir: "data/custom_output"
+  log_level: "DEBUG"       # More detailed logging
 ```
 
-### Error Handling & Debugging
+### Debugging & Monitoring
 ```bash
-# Debug export issues
-python scripts/gee/export_cascadia_alphaearth.py --year 2023 --dry_run
-
 # Check processing logs
-tail -f logs/processing_*.log
+tail -f logs/coastal_processing_*.log
 
-# Validate intermediate outputs
-python scripts/validation/check_data_integrity.py --comprehensive
+# Validate configuration
+python scripts/test_modular.py --dry-run
+
+# Monitor system resources during processing
+python scripts/monitor_modular_progress.py --system-stats
 ```
 
-## Important Notes
+## System Requirements & Notes
 
-### Data Management
-- **Storage Requirements:** ~500GB for complete dataset
-- **Backup Strategy:** Keep raw exports + processed H3 data
-- **Version Control:** Track data lineage through processing pipeline
+### Hardware Recommendations
+- **Memory:** 16GB+ RAM for 6-worker processing (32GB optimal)
+- **Storage:** ~10-20GB for intermediate files, ~5GB for final dataset
+- **CPU:** Multi-core processor (6+ cores recommended for parallel processing)
+- **Network:** Stable connection for large TIFF file access from Google Drive
 
-### Computational Resources
-- **Memory:** 32GB+ recommended for full resolution processing
-- **GPU:** CUDA-enabled GPU for synthetic generation
-- **Network:** Stable connection for GEE exports
+### Processing Characteristics
+- **Resumable:** Checkpointing allows recovery from interruptions
+- **Scalable:** Worker count adjustable based on system capabilities
+- **Memory-Efficient:** Subtile chunking prevents memory exhaustion
+- **Fault-Tolerant:** Individual tile failures don't stop entire pipeline
 
-### Collaboration & Sharing
-- **Data Sharing:** Processed datasets compatible with GEO-INFER standards
-- **Code Reusability:** Modular architecture supports adaptation
-- **Documentation:** Comprehensive logging enables reproducibility
+### Data Outputs
+- **Intermediate:** JSON files per tile (~592 files, 2-5GB total)
+- **Final:** Single Parquet file (~223k hexagons × 64 dimensions)
+- **Metadata:** Processing logs, statistics, and run archives
+- **Format:** Standards-compatible H3 + AlphaEarth embeddings
 
 ---
 
-This experiment represents a novel approach to satellite data analysis through actualization - using AI to understand and fill gaps in Earth observation data, enabling more complete agricultural and environmental analysis for policy making.
+**Clean, focused coastal forest processing pipeline ready for execution with two-stage architecture, parallel processing, and comprehensive monitoring.**
 
 ## Modular Scripts Architecture
 

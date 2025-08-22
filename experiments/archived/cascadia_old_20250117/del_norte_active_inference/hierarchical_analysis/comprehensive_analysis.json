@@ -1,0 +1,114 @@
+{
+  "experiment_metadata": {
+    "timestamp": "2025-08-15T21:56:03.339208",
+    "resolutions": [
+      8,
+      9,
+      10,
+      11
+    ],
+    "study_area": "Del Norte County, California",
+    "bounds": {
+      "north": 42.0,
+      "south": 41.5,
+      "west": -124.4,
+      "east": -123.8
+    },
+    "methods_used": [
+      "hierarchical_unet",
+      "active_inference",
+      "clustering",
+      "srai"
+    ]
+  },
+  "spatial_embedding_summary": {
+    "8": {
+      "total_cells": 1600,
+      "total_features": 73,
+      "topographical_features": 1,
+      "poi_features": 5,
+      "distance_features": 0,
+      "alphaearth_features": 64,
+      "elevation_range": [
+        0.0,
+        399.148950116649
+      ]
+    },
+    "9": {
+      "total_cells": 2025,
+      "total_features": 9,
+      "topographical_features": 1,
+      "poi_features": 5,
+      "distance_features": 0,
+      "alphaearth_features": 0,
+      "elevation_range": [
+        0.0,
+        396.9264839888801
+      ]
+    },
+    "10": {
+      "total_cells": 2550,
+      "total_features": 9,
+      "topographical_features": 1,
+      "poi_features": 5,
+      "distance_features": 0,
+      "alphaearth_features": 0,
+      "elevation_range": [
+        0.0,
+        391.7040595154876
+      ]
+    },
+    "11": {
+      "total_cells": 3080,
+      "total_features": 10,
+      "topographical_features": 2,
+      "poi_features": 5,
+      "distance_features": 0,
+      "alphaearth_features": 0,
+      "elevation_range": [
+        0.0,
+        406.6568406750319
+      ]
+    }
+  },
+  "neural_learning_summary": {
+    "8": {
+      "embedding_shape": [
+        1600,
+        64
+      ],
+      "embedding_dim": 64,
+      "mean_activation": 0.0016876462614163756,
+      "std_activation": 0.26214149594306946
+    },
+    "9": {
+      "embedding_shape": [
+        2025,
+        64
+      ],
+      "embedding_dim": 64,
+      "mean_activation": -0.026955798268318176,
+      "std_activation": 0.28730136156082153
+    },
+    "10": {
+      "embedding_shape": [
+        2550,
+        64
+      ],
+      "embedding_dim": 64,
+      "mean_activation": 0.00944850780069828,
+      "std_activation": 0.25596854090690613
+    },
+    "11": {
+      "embedding_shape": [
+        3080,
+        64
+      ],
+      "embedding_dim": 64,
+      "mean_activation": -0.006971073802560568,
+      "std_activation": 0.25422394275665283
+    }
+  },
+  "active_inference_summary": {
+    "free_energies": {
+      "8": 

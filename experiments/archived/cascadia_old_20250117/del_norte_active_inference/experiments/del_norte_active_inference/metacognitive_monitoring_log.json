@@ -1,0 +1,746 @@
+[
+  {
+    "timestamp": "2025-08-15T22:10:00.964400",
+    "runtime_minutes": 0.0018331,
+    "resources": {
+      "timestamp": "2025-08-15T22:10:00.963631",
+      "cpu_percent": 15.8,
+      "memory_used_gb": 20.967594146728516,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 32.8,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:10:31.075070",
+    "runtime_minutes": 0.5036776166666667,
+    "resources": {
+      "timestamp": "2025-08-15T22:10:31.074721",
+      "cpu_percent": 15.5,
+      "memory_used_gb": 21.149822235107422,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 33.1,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:11:01.184711",
+    "runtime_minutes": 1.00550495,
+    "resources": {
+      "timestamp": "2025-08-15T22:11:01.184371",
+      "cpu_percent": 6.8,
+      "memory_used_gb": 22.24779510498047,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 34.8,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:11:31.293757",
+    "runtime_minutes": 1.5073223666666666,
+    "resources": {
+      "timestamp": "2025-08-15T22:11:31.293482",
+      "cpu_percent": 4.4,
+      "memory_used_gb": 21.857757568359375,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 34.2,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:12:01.404459",
+    "runtime_minutes": 2.0091674999999998,
+    "resources": {
+      "timestamp": "2025-08-15T22:12:01.403691",
+      "cpu_percent": 7.7,
+      "memory_used_gb": 23.868213653564453,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 37.3,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:12:31.657443",
+    "runtime_minutes": 2.5133838333333336,
+    "resources": {
+      "timestamp": "2025-08-15T22:12:31.657087",
+      "cpu_percent": 6.9,
+      "memory_used_gb": 23.88808822631836,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 37.4,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:13:01.769580",
+    "runtime_minutes": 3.015252783333333,
+    "resources": {
+      "timestamp": "2025-08-15T22:13:01.769181",
+      "cpu_percent": 19.9,
+      "memory_used_gb": 22.90023422241211,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 35.8,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:13:31.879787",
+    "runtime_minutes": 3.517089566666667,
+    "resources": {
+      "timestamp": "2025-08-15T22:13:31.879443",
+      "cpu_percent": 42.2,
+      "memory_used_gb": 22.900772094726562,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 35.8,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:14:01.990651",
+    "runtime_minutes": 4.018937283333333,
+    "resources": {
+      "timestamp": "2025-08-15T22:14:01.990225",
+      "cpu_percent": 7.0,
+      "memory_used_gb": 22.916248321533203,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 35.9,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:14:32.099183",
+    "runtime_minutes": 4.520746133333334,
+    "resources": {
+      "timestamp": "2025-08-15T22:14:32.098906",
+      "cpu_percent": 4.9,
+      "memory_used_gb": 22.881855010986328,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 35.8,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:15:02.209910",
+    "runtime_minutes": 5.0225916,
+    "resources": {
+      "timestamp": "2025-08-15T22:15:02.209634",
+      "cpu_percent": 11.9,
+      "memory_used_gb": 24.117900848388672,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 37.7,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:15:32.320112",
+    "runtime_minutes": 5.524428299999999,
+    "resources": {
+      "timestamp": "2025-08-15T22:15:32.319813",
+      "cpu_percent": 6.9,
+      "memory_used_gb": 23.90428924560547,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 37.4,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:16:02.429704",
+    "runtime_minutes": 6.026254833333334,
+    "resources": {
+      "timestamp": "2025-08-15T22:16:02.429423",
+      "cpu_percent": 7.5,
+      "memory_used_gb": 24.160602569580078,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 37.8,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:16:32.538992",
+    "runtime_minutes": 6.528076283333333,
+    "resources": {
+      "timestamp": "2025-08-15T22:16:32.538716",
+      "cpu_percent": 1.4,
+      "memory_used_gb": 19.588428497314453,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 30.6,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:17:02.648193",
+    "runtime_minutes": 7.029896316666666,
+    "resources": {
+      "timestamp": "2025-08-15T22:17:02.647869",
+      "cpu_percent": 16.6,
+      "memory_used_gb": 19.609996795654297,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 30.7,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:17:32.759308",
+    "runtime_minutes": 7.531748233333333,
+    "resources": {
+      "timestamp": "2025-08-15T22:17:32.759013",
+      "cpu_percent": 4.4,
+      "memory_used_gb": 19.691654205322266,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 30.8,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:18:02.868357",
+    "runtime_minutes": 8.033565716666667,
+    "resources": {
+      "timestamp": "2025-08-15T22:18:02.868075",
+      "cpu_percent": 0.6,
+      "memory_used_gb": 19.62969970703125,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 30.7,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:18:32.976834",
+    "runtime_minutes": 8.535373666666667,
+    "resources": {
+      "timestamp": "2025-08-15T22:18:32.976533",
+      "cpu_percent": 1.2,
+      "memory_used_gb": 19.5927734375,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 30.7,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:19:03.085547",
+    "runtime_minutes": 9.03718555,
+    "resources": {
+      "timestamp": "2025-08-15T22:19:03.085273",
+      "cpu_percent": 4.8,
+      "memory_used_gb": 19.60729217529297,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 30.7,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:19:33.194574",
+    "runtime_minutes": 9.539002666666667,
+    "resources": {
+      "timestamp": "2025-08-15T22:19:33.194313",
+      "cpu_percent": 8.3,
+      "memory_used_gb": 19.95819091796875,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 31.2,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:20:03.305676",
+    "runtime_minutes": 10.040854366666668,
+    "resources": {
+      "timestamp": "2025-08-15T22:20:03.305383",
+      "cpu_percent": 6.5,
+      "memory_used_gb": 28.445545196533203,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 44.5,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:20:33.414887",
+    "runtime_minutes": 10.542674533333333,
+    "resources": {
+      "timestamp": "2025-08-15T22:20:33.414585",
+      "cpu_percent": 9.9,
+      "memory_used_gb": 39.991912841796875,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 62.6,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:21:03.526442",
+    "runtime_minutes": 11.0445338,
+    "resources": {
+      "timestamp": "2025-08-15T22:21:03.526072",
+      "cpu_percent": 8.2,
+      "memory_used_gb": 46.36531448364258,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 72.5,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  },
+  {
+    "timestamp": "2025-08-15T22:21:33.636829",
+    "runtime_minutes": 11.546373583333333,
+    "resources": {
+      "timestamp": "2025-08-15T22:21:33.636543",
+      "cpu_percent": 11.8,
+      "memory_used_gb": 51.0738639831543,
+      "memory_total_gb": 63.91352462768555,
+      "memory_percent": 79.9,
+      "gpu": {
+        "memory_used_gb": 0,
+        "memory_total_gb": 24.0,
+        "memory_percent": 0,
+        "utilization_percent": 0,
+        "temperature_c": 0
+      }
+    },
+    "progress": {
+      "phases_completed": 0,
+      "current_phase": "Unknown",
+      "hexagon_counts": {},
+      "latest_activity": "No activity detected",
+      "error_count": 0
+    },
+    "files": {
+      "results_files": [],
+      "visualization_files": [],
+      "log_files": [],
+      "total_output_size_mb": 0
+    }
+  }
+]

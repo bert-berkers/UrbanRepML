@@ -1,0 +1,2 @@
+county_name,state,fips_code,area_km2,centroid_lat,centroid_lon,bbox_west,bbox_south,bbox_east,bbox_north
+Cascadia Bioregion,CA_OR,N/A,728540.7299999993,42.65,-120.55000000000003,-124.6,39.0,-116.5,46.3

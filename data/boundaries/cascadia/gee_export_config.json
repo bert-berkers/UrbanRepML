@@ -1,0 +1,39 @@
+{
+  "region_name": "cascadia",
+  "total_counties": 1,
+  "california_counties": 0,
+  "oregon_counties": 0,
+  "bounds": {
+    "west": -124.6,
+    "south": 39.0,
+    "east": -116.5,
+    "north": 46.3
+  },
+  "gee_export": {
+    "collection": "GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL",
+    "years": [
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024
+    ],
+    "scale": 10,
+    "crs": "EPSG:4326",
+    "max_pixels": 1000000000.0,
+    "tile_size": 3072
+  },
+  "h3_resolutions": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "primary_resolution": 8
+}
