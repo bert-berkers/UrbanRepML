@@ -1,98 +1,36 @@
-# UrbanRepML 🏙️
+# UrbanRepML & Cascadia Experiment 🏙️🌲
 
-**Multi-scale urban representation learning using Graph Neural Networks**
+This repository contains the `UrbanRepML` library for multi-scale urban representation learning and the `Cascadia` experiment, a large-scale application of this technology to study the bioregions of the Pacific Northwest.
 
-UrbanRepML learns meaningful representations of urban areas by integrating multiple data sources (transit, roads, buildings, points of interest) across different spatial scales. Using a novel U-Net inspired GNN architecture, it captures how cities function at walking, cycling, and driving scales simultaneously.
+## 🚀 Getting Started
 
-## 🚀 Quick Start
-
-### Installation
+First, clone the repository and install the required dependencies in editable mode. This command works for both the core library and the experiments.
 
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/UrbanRepML.git
 cd UrbanRepML
 
-# Install the package
+# Install the package and dependencies
 pip install -e .
 ```
 
-### Run Your First Experiment
+For AI agent collaborators (like Jules and Claude), please see **`AGENTS.md`** for standardized workflows and commands.
 
-```bash
-# Run South Holland with 95th percentile density filtering
-python run_south_holland_fsi95.py
-```
+---
 
-This will:
-1. Setup H3 hexagonal regions for South Holland
-2. Calculate building density from OpenStreetMap data
-3. Filter to the densest 5% of urban areas
-4. Generate multi-modal accessibility graphs
-5. Train the UrbanUNet model
-6. Output learned embeddings and cluster visualizations
+## 🔬 The `UrbanRepML` Library
 
-## 📊 What Does UrbanRepML Do?
+`UrbanRepML` is a Python library that learns meaningful representations of urban areas by integrating multiple data sources (transit, roads, buildings, points of interest) across different spatial scales. It uses a novel U-Net-inspired GNN architecture to capture how cities function at walking, cycling, and driving scales simultaneously.
 
-### Input
-- **Multi-modal urban embeddings**: Pre-computed representations from GTFS (transit), aerial imagery, POIs, and road networks
-- **Building density data**: FSI (Floor Space Index) from OpenStreetMap or government sources
-- **Street networks**: From OpenStreetMap for accessibility calculations
+### 🎯 Core Features
+- **Hierarchical Analysis**: Creates and processes multi-scale H3 hexagonal grids.
+- **Multi-Modal Integration**: Fuses data from GTFS, OpenStreetMap, satellite imagery, and more.
+- **Representation Learning**: Trains a powerful GNN to produce rich, dense embeddings of urban areas.
+- **Flexible & Modular**: Designed to be configurable and extensible for new cities and data sources.
 
-### Process
-1. **Hierarchical regionalization**: Creates multi-scale H3 hexagonal grids
-2. **Urban filtering**: Focuses on dense urban areas using FSI thresholds
-3. **Accessibility graphs**: Models how areas connect via walking, cycling, and driving
-4. **Representation learning**: Trains a GNN to learn urban embeddings
-5. **Analysis**: Clusters and visualizes learned representations
-
-### Output
-- **Urban embeddings**: Dense vector representations of urban areas
-- **Cluster maps**: Spatial visualization of urban typologies
-- **Accessibility networks**: Travel-time based urban connectivity graphs
-
-## 🎯 Use Cases
-
-- **Urban Planning**: Identify similar neighborhoods across cities
-- **Transport Analysis**: Understand multi-modal accessibility patterns
-- **Real Estate**: Characterize location types for valuation models
-- **Policy Making**: Compare urban development patterns
-- **Research**: Study urban morphology and function
-
-## 📁 Project Structure
-
-```
-UrbanRepML/
-├── scripts/                 # Executable scripts
-│   ├── preprocessing/       # Data preparation pipeline
-│   └── experiments/         # Experiment orchestration
-├── urban_embedding/         # Core package
-├── experiments/            # Experiment outputs
-├── data/                   # Input data
-└── docs/                   # Documentation
-    ├── ARCHITECTURE.md     # Technical details
-    └── CONFIG_GUIDE.md     # Configuration reference
-```
-
-## 🔧 Custom Experiments
-
-### Basic Usage
-
-```python
-from urban_embedding import UrbanEmbeddingPipeline
-
-# Configure your experiment
-config = UrbanEmbeddingPipeline.create_default_config(
-    city_name="amsterdam",
-    threshold=90  # Top 10% densest areas
-)
-
-# Run the pipeline
-pipeline = UrbanEmbeddingPipeline(config)
-embeddings = pipeline.run()
-```
-
-### Advanced: Run Complete Experiment Pipeline
+### 🔧 Running a `UrbanRepML` Experiment
+You can run a complete experiment using the central `run_experiment.py` script:
 
 ```bash
 python scripts/experiments/run_experiment.py \
@@ -103,96 +41,74 @@ python scripts/experiments/run_experiment.py \
   --epochs 200
 ```
 
-### Step-by-Step Data Preparation
+For more details on the library's architecture and capabilities, see the **`urban_embedding/README.md`** file.
+
+---
+
+## 🌲 The Cascadia Experiment
+
+The Cascadia experiment is a large-scale research project applying the `UrbanRepML` toolkit to the Cascadia bioregion (covering Oregon and Northern California). Its goal is to create a detailed, multi-resolution, multi-year dataset of environmental and land-use embeddings for analysis and integration with the [GEO-INFER](https://github.com/ActiveInferenceInstitute/GEO-INFER) project.
+
+### 🎯 Core Features
+- **Large Geographic Scope**: Covers over 400,000 km² across two states.
+- **Multi-Resolution**: Processes data from H3 resolutions 5 (regional) to 11 (ultra-fine).
+- **Temporal Analysis**: Incorporates satellite data from 2017-2024.
+- **Advanced Processing**: Includes a two-stage parallel processing pipeline for handling massive amounts of data.
+
+### 🔧 Running the Cascadia Processing Pipeline
+The Cascadia experiment has its own specialized workflow.
 
 ```bash
-# 1. Create H3 regions
-python scripts/preprocessing/setup_regions.py \
-  --city_name amsterdam \
-  --resolutions 8,9,10
+# Navigate to the experiment directory
+cd experiments/cascadia_exploratory
 
-# 2. Calculate building density
-python scripts/preprocessing/setup_density.py \
-  --city_name amsterdam \
-  --building_data path/to/buildings.shp
-
-# 3. Filter by density
-python scripts/preprocessing/setup_fsi_filter.py \
-  --city_name amsterdam \
-  --fsi_percentile 90 \
-  --output_dir experiments/amsterdam_dense/data
-
-# 4. Generate accessibility graphs
-python scripts/preprocessing/setup_hierarchical_graphs.py \
-  --data_dir experiments/amsterdam_dense/data \
-  --output_dir experiments/amsterdam_dense/graphs
+# Run the two-stage processing pipeline
+python run_coastal_processing.py --workers 6
+python stitch_results.py
 ```
+For complete instructions, see the **`experiments/cascadia_exploratory/README.md`** file.
 
-## 📊 Key Concepts
+---
 
-### H3 Resolution Strategy
-- **Resolution 8**: City-scale, driving accessibility (~450m hexagons)
-- **Resolution 9**: Neighborhood-scale, cycling accessibility (~170m hexagons)
-- **Resolution 10**: Block-scale, walking accessibility (~65m hexagons)
+## 📁 Project Structure
 
-### FSI (Floor Space Index) Filtering
-- Focuses analysis on urban areas with significant built density
-- Can use percentile (e.g., top 5%) or absolute threshold (e.g., FSI ≥ 0.1)
-- Hierarchical: selecting a parent hexagon includes all its children
+This repository is organized into a core library and a set of experiments.
 
-### Multi-Modal Integration
-- **GTFS**: Public transit accessibility
-- **Aerial**: Land use and building patterns
-- **POI**: Urban amenities and services
-- **Roads**: Street network structure
-
-## 🛠️ Configuration
-
-See [CONFIG_GUIDE.md](CONFIG_GUIDE.md) for detailed parameter documentation.
-
-### Quick Parameter Reference
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `fsi_percentile` | Urban density threshold | 95 |
-| `resolutions` | H3 levels to analyze | [8,9,10] |
-| `epochs` | Training iterations | 100 |
-| `hidden_dim` | Model capacity | 128 |
+```
+UrbanRepML/
+├── AGENTS.md                # Standardized instructions for AI agents
+├── urban_embedding/         # The core UrbanRepML library
+│   └── README.md            # --> Detailed library documentation
+├── experiments/             # Research experiments applying the library
+│   ├── README.md            # --> Guide to the experiments structure
+│   └── cascadia_exploratory/
+│       └── README.md        # --> Detailed Cascadia experiment guide
+├── data/                    # Data used for experiments
+│   └── README.md            # --> Overview of data sources and structure
+├── scripts/                 # Reusable scripts for data processing and experiments
+└── DEVELOPMENT_LOG.md       # A narrative log of development sessions
+```
 
 ## 📚 Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Technical system design
-- [CONFIG_GUIDE.md](CONFIG_GUIDE.md) - Configuration parameters
-- [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) - Development history
-- [CLAUDE.md](CLAUDE.md) - AI assistant context
+- **`AGENTS.md`**: Standardized instructions for AI agents (Jules & Claude).
+- **`ARCHITECTURE.md`**: The deep-dive technical design of the `UrbanRepML` system.
+- **`CONFIG_GUIDE.md`**: A reference for all configuration parameters.
+- **`DEVELOPMENT_LOG.md`**: The narrative history of the project's development.
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our contributing guidelines (coming soon).
+We welcome contributions! Please add your work sessions to the `DEVELOPMENT_LOG.md` to help us maintain a clear project narrative.
 
 ## 📖 Citation
 
-If you use UrbanRepML in your research, please cite:
+If you use this work in your research, please cite:
 
 ```bibtex
 @software{urbanrepml2025,
-  title = {UrbanRepML: Multi-scale Urban Representation Learning},
+  title = {UrbanRepML: Multi-scale Urban Representation Learning and the Cascadia Bioregional Experiment},
   author = {Your Name},
   year = {2025},
   url = {https://github.com/yourusername/UrbanRepML}
 }
 ```
-
-## 📝 License
-
-MIT License - see LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- H3 spatial indexing by Uber
-- OpenStreetMap contributors
-- PyTorch Geometric team
-
----
-
-**Need help?** Check the [documentation](ARCHITECTURE.md) or open an issue!
