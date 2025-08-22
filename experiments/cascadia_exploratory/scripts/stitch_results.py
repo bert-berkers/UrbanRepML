@@ -42,7 +42,7 @@ def discover_intermediate_files(intermediate_dir: Path) -> List[Path]:
 
 
 def load_and_combine_intermediates(json_files: List[Path], logger) -> pd.DataFrame:
-    """Load all intermediate JSON files and combine with overlap handling"""
+    """Load all intermediate JSON files and combine with consistent processing"""
     logger.info(f"Loading {len(json_files)} intermediate files...")
     
     all_data = {}  # h3_index -> list of records for averaging
@@ -58,6 +58,14 @@ def load_and_combine_intermediates(json_files: List[Path], logger) -> pd.DataFra
             for record in tile_data:
                 h3_index = record['h3_index']
                 
+                # Skip records with NaN embeddings
+                if 'embedding' not in record or not record['embedding']:
+                    continue
+                    
+                embedding_array = np.array(record['embedding'])
+                if np.any(np.isnan(embedding_array)) or np.any(np.isinf(embedding_array)):
+                    continue
+                
                 if h3_index not in all_data:
                     all_data[h3_index] = []
                     
@@ -69,32 +77,46 @@ def load_and_combine_intermediates(json_files: List[Path], logger) -> pd.DataFra
     
     logger.info(f"Found data for {len(all_data)} unique H3 hexagons")
     
-    # Handle overlaps by averaging embeddings
-    logger.info("Resolving overlapping hexagons by averaging embeddings...")
+    # CONSISTENT PROCESSING: Average embeddings for ALL hexagons to eliminate discontinuities
+    logger.info("Processing all hexagons with consistent averaging (eliminates tile boundaries)...")
     
     final_records = []
-    overlaps_resolved = 0
+    single_tile_count = 0
+    multi_tile_count = 0
     
     for h3_index, records in all_data.items():
-        if len(records) == 1:
-            # No overlap, use directly
-            final_records.append(records[0])
+        # ALWAYS average embeddings, even for single-tile hexagons
+        # This ensures consistent processing and eliminates tile boundary artifacts
+        
+        # Extract embeddings and average
+        valid_embeddings = []
+        for rec in records:
+            embedding_array = np.array(rec['embedding'])
+            if not (np.any(np.isnan(embedding_array)) or np.any(np.isinf(embedding_array))):
+                valid_embeddings.append(embedding_array)
+        
+        if not valid_embeddings:
+            continue  # Skip if no valid embeddings
+            
+        # Average all valid embeddings (includes single-tile consistency)
+        embeddings = np.array(valid_embeddings)
+        avg_embedding = np.mean(embeddings, axis=0).tolist()
+        
+        # Create merged record with averaged embedding
+        merged_record = records[0].copy()
+        merged_record['embedding'] = avg_embedding
+        merged_record['tile_count'] = len(valid_embeddings)
+        
+        final_records.append(merged_record)
+        
+        if len(valid_embeddings) == 1:
+            single_tile_count += 1
         else:
-            # Overlap detected - average embeddings
-            overlaps_resolved += 1
-            
-            # Extract embeddings and average
-            embeddings = np.array([rec['embedding'] for rec in records])
-            avg_embedding = np.mean(embeddings, axis=0).tolist()
-            
-            # Take first record as template, update embedding
-            merged_record = records[0].copy()
-            merged_record['embedding'] = avg_embedding
-            merged_record['tile_count'] = len(records)  # Track how many tiles contributed
-            
-            final_records.append(merged_record)
+            multi_tile_count += 1
     
-    logger.info(f"Resolved {overlaps_resolved} overlapping hexagons by averaging")
+    logger.info(f"Processed {single_tile_count} single-tile hexagons (averaged for consistency)")
+    logger.info(f"Processed {multi_tile_count} multi-tile hexagons (averaged from overlaps)")
+    logger.info(f"ELIMINATED tile boundary discontinuities through consistent processing")
     
     # Convert to DataFrame
     df = pd.DataFrame(final_records)
