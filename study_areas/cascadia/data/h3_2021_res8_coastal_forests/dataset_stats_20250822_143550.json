@@ -1,0 +1,8 @@
+{
+  "total_hexagons": 160730,
+  "coastal_area_km2": 118458.01,
+  "embedding_dimensions": 64,
+  "overlap_hexagons": 10416,
+  "avg_embeddings_per_hex": 2.4603494623655915,
+  "processing_timestamp": "20250822_143550"
+}

@@ -54,7 +54,7 @@ class UrbanEmbeddingPipeline:
         """Setup directory structure."""
         self.project_dir = Path(self.config['project_dir'])
         self.output_dir = self.project_dir / 'results'
-        self.data_dir = self.project_dir / 'data' / 'preprocessed'
+        self.data_dir = self.project_dir / 'data' / 'preprocessed [TODO SORT & CLEAN UP]'
         self.embeddings_dir = self.project_dir / 'data' / 'embeddings'
         self.cache_dir = self.project_dir / 'cache'
 

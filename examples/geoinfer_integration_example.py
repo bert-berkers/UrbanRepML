@@ -73,7 +73,7 @@ def main():
         print("Cascadia data not found. Creating example with South Holland data...")
         
         # Alternative: Use South Holland data as example
-        sh_data_path = Path("data/preprocessed/south_holland_fsi99/regions/regions_8_gdf.parquet")
+        sh_data_path = Path("data/preprocessed [TODO SORT & CLEAN UP]/south_holland_fsi99/regions/regions_8_gdf.parquet")
         if sh_data_path.exists():
             sh_data = pd.read_parquet(sh_data_path)
             print(f"Using South Holland data: {len(sh_data)} regions")

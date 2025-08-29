@@ -178,7 +178,7 @@ def parse_args():
     parser.add_argument('--output_dir', type=str, default=None,
                         help='Output directory for density data')
     parser.add_argument('--building_data', type=str, 
-                        default='data/preprocessed/density/PV28__00_Basis_Bouwblok.shp',
+                        default='data/preprocessed [TODO SORT & CLEAN UP]/density/PV28__00_Basis_Bouwblok.shp',
                         help='Path to building density shapefile')
     parser.add_argument('--resolutions', type=str, default='8,9,10',
                         help='Comma-separated H3 resolutions to process')
@@ -199,7 +199,7 @@ def main():
     if args.input_dir:
         input_dir = Path(args.input_dir)
     else:
-        input_dir = Path(f"data/preprocessed/{args.city_name}_base")
+        input_dir = Path(f"data/preprocessed [TODO SORT & CLEAN UP]/{args.city_name}_base")
     
     if args.output_dir:
         output_dir = Path(args.output_dir)

@@ -1,6 +1,6 @@
 """
 Script to rebuild the complete UrbanRepML pipeline data from scratch.
-Run this after project cleanup to regenerate all preprocessed data.
+Run this after project cleanup to regenerate all preprocessed [TODO SORT & CLEAN UP] data.
 """
 
 import os

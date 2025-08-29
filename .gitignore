@@ -1,94 +1,399 @@
+# ==========================================
+# UrbanRepML Project .gitignore
+# ==========================================
+# Multi-Modal Urban Representation Learning
+# ==========================================
+
+# ==========================================
+# Python
+# ==========================================
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Cache and temporary files
-cache/
-*.pyc
-.DS_Store
-Thumbs.db
-
-# Large data files and results
-data/preprocessed*/
-data/embeddings/aerial_alphaearth/embeddings_AlphaEarth/processed/
-data/skeleton/density/*.shp
-data/skeleton/density/*.dbf
-data/skeleton/density/*.shx
-data/skeleton/density/*.prj
-data/skeleton/density/*.cpg
-data/skeleton/density/*.sbn
-data/skeleton/density/*.sbx
-data/skeleton/density/*.ods
-data/skeleton/density/*.xlsx
-results/
-*.parquet
-*.pkl
+# ==========================================
+# Machine Learning & Data Science
+# ==========================================
+# Model checkpoints and weights
 *.pt
-*.png
-*.jpg
-*.jpeg
-*.tif
-*.tiff
-
-# Keep essential data structure but exclude large files
-data/embeddings/aerial_alphaearth/embeddings_AlphaEarth/*.parquet
-data/embeddings/*.parquet
-
-# Logs and experiment tracking
-wandb/
-*.log
-logs/
-
-# IDE files (keep .idea for PyCharm users but exclude some)
-.vscode/
-*.swp
-*.swo
-
-# Model checkpoints and large files
+*.pth
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.model
+*.joblib
+*.sav
 checkpoints/
 models/
-*.h5
-*.joblib
-*.model
+saved_models/
+weights/
 
-# Personal/local settings
-.claude/settings.local.json
+# Experiment tracking
+wandb/
+mlruns/
+tensorboard/
+lightning_logs/
+*.tfevents.*
 
-# Python packaging
-build/
-dist/
-*.egg-info/
+# ==========================================
+# Geospatial Data Files
+# ==========================================
+# Large raster files
+*.tif
+*.tiff
+*.geotiff
+*.img
+*.hdr
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
+# Vector data files (keep structure, exclude data)
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.sbn
+*.sbx
+*.gpkg
+*.geojson
+# Exception: Keep small example files
+!examples/data/*.geojson
+!tests/data/*.geojson
 
-# Environment variables
-.env
-.env.local
+# Processed data formats
+*.parquet
+*.feather
+*.arrow
+*.orc
 
-# Virtual environments
-venv/
-env/
-ENV/
+# ==========================================
+# Project-Specific Data Directories
+# ==========================================
+# Raw data downloads
+data/raw/
+data/preprocessed [TODO SORT & CLEAN UP]/
+data/temporal/
+data/cache/
 
-# MacOS
-.DS_Store
+# Large processed embeddings
+data/processed/embeddings/*/
+!data/processed/embeddings/README.md
 
-# Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
+# AlphaEarth specific
+data/embeddings/aerial_alphaearth/embeddings_AlphaEarth/processed/
+data/embeddings/aerial_alphaearth/embeddings_AlphaEarth/*.parquet
 
-# Temporary files
-*.tmp
-*.temp
-~*
+# Keep directory structure documentation
+!data/*/README.md
+!data/*/*/README.md
 
-# Experiment data and outputs - exclude from version control
+# ==========================================
+# Experiment Outputs
+# ==========================================
 experiments/*/data/
 experiments/*/plots/
 experiments/*/results/
 experiments/*/logs/
-*.gpkg
-*.html
+experiments/*/*.html
+experiments/*/*.json
+# Keep experiment configs and scripts
+!experiments/*/config.yaml
+!experiments/*/run_*.py
+
+# Results and visualizations
+results/
+plots/
+figures/
+outputs/
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+# Keep documentation images
+!docs/images/*
+!README_images/*
+
+# ==========================================
+# IDE and Editor Files
+# ==========================================
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/dictionaries
+.idea/vcs.xml
+.idea/jsLibraryMappings.xml
+.idea/datasources.xml
+.idea/dataSources.ids
+.idea/sqlDataSources.xml
+.idea/dynamic.xml
+.idea/uiDesigner.xml
+.idea/gradle.xml
+.idea/libraries
+.idea/mongoSettings.xml
+*.iws
+/out/
+.idea_modules/
+
+# Vim
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# ==========================================
+# Operating System Files
+# ==========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# ==========================================
+# Virtual Environments
+# ==========================================
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+env.bak/
+venv.bak/
+virtualenv/
+pipenv/
+.python-version
+.pyenv/
+
+# Conda
+conda-meta/
+*.conda
+*.tar.bz2
+
+# ==========================================
+# Testing and Coverage
+# ==========================================
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+htmlcov/
+.mutmut-cache
+
+# ==========================================
+# Documentation
+# ==========================================
+docs/_build/
+docs/.doctrees/
+site/
+.mkdocs/
+
+# ==========================================
+# Logs and Temporary Files
+# ==========================================
+*.log
+*.logs
+log/
+logs/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+.~*
+tmp/
+temp/
+cache/
+
+# ==========================================
+# Configuration and Secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+!.env.template
+*.env
+secrets.yml
+secrets.yaml
+config.local.yml
+config.local.yaml
+.claude/settings.local.json
+
+# ==========================================
+# Package Management
+# ==========================================
+# npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# ==========================================
+# Database Files
+# ==========================================
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+!migrations/*.sql
+!schema/*.sql
+
+# ==========================================
+# Miscellaneous
+# ==========================================
+# Batch files and shell scripts (keep essential ones)
+*.bat
+!scripts/setup.bat
+!scripts/run.bat
+
+# Archive files
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+# Keep documentation archives
+!docs/*.zip
+
+# Compiled source
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# LaTeX
+*.aux
+*.lof
+*.log
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+.*.lb
+
+# ==========================================
+# Exceptions and Keeps
+# ==========================================
+# Keep important configuration templates
+!config/template.*
+!config/example.*
+!.github/
+!.gitkeep
+!requirements*.txt
+!setup.py
+!setup.cfg
+!pyproject.toml
+!Makefile
+!LICENSE
+!README.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+!AUTHORS.md
+!CITATION.cff
+
+# Keep test data
+!tests/fixtures/
+!tests/data/
+# But exclude large test files
+tests/data/*.tif
+tests/data/*.parquet
+
+# Keep documentation source files
+!docs/source/
+
+# ==========================================
+# End of .gitignore
+# ==========================================

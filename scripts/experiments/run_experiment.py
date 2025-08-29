@@ -59,7 +59,7 @@ def run_experiment(args):
     print(f"Resolutions: {args.resolutions}")
     
     # Setup paths
-    base_data_dir = Path(f"data/preprocessed/{args.city}_base")
+    base_data_dir = Path(f"data/preprocessed [TODO SORT & CLEAN UP]/{args.city}_base")
     experiment_dir = Path(f"experiments/{args.experiment_name}")
     experiment_data_dir = experiment_dir / "data"
     experiment_graphs_dir = experiment_dir / "graphs"
@@ -264,7 +264,7 @@ def parse_args():
     
     # Data paths
     parser.add_argument('--building_data', type=str,
-                        default='data/preprocessed/density/PV28__00_Basis_Bouwblok.shp',
+                        default='data/preprocessed [TODO SORT & CLEAN UP]/density/PV28__00_Basis_Bouwblok.shp',
                         help='Path to building data shapefile')
     
     # Graph parameters

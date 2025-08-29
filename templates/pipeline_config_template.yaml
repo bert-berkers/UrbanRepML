@@ -62,7 +62,7 @@ study_area:
   paths:
     base: "${study_area.data_root}/${study_area.name}"
     embeddings: "${study_area.paths.base}/embeddings"
-    preprocessed: "${study_area.paths.base}/preprocessed"
+    preprocessed: "${study_area.paths.base}/preprocessed [TODO SORT & CLEAN UP]"
     raw: "${study_area.paths.base}/raw"  # For original data if needed
 
 # Data Configuration
