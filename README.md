@@ -80,30 +80,34 @@ UrbanRepML/
 
 ## 📊 Supported Data Modalities
 
-| Modality | Description | Data Source | Output Format |
-|----------|-------------|-------------|---------------|
-| **AlphaEarth** | Deep learning satellite embeddings | 10m resolution imagery | 64-dim feature vectors |
-| **POI** | Points of interest patterns | OpenStreetMap, Overture | Categorical embeddings |
-| **GTFS** | Public transit accessibility | Transit agencies | Travel time matrices |
-| **Roads** | Street network topology | OpenStreetMap | Graph embeddings |
-| **Buildings** | Built environment density | OpenStreetMap, cadastral | Morphology metrics |
-| **StreetView** | Ground-level visual features | Mapillary, KartaView | Scene embeddings |
+| Modality | Status | Description | Data Source | Output Format |
+|----------|--------|-------------|-------------|---------------|
+| **AlphaEarth** | ✅ **Complete** | Deep learning satellite embeddings | Google Earth Engine | 64-dim feature vectors |
+| **Semantic Segmentation** | ✅ **Complete** | AlphaEarth + DINOv3 fusion | Satellite + aerial imagery | Categorical land cover classes |
+| **Aerial Imagery** | ✅ **Complete** | High-res DINOv3 encoding | PDOK (Netherlands) | 768-dim visual features |
+| **Buildings** | ✅ **Complete** | Building density (FSI) analysis | OpenStreetMap, cadastral | Density and morphology metrics |
+| **POI** | 🚧 *Planned* | Points of interest patterns | OpenStreetMap, Overture | Categorical embeddings |
+| **GTFS** | 🚧 *Planned* | Public transit accessibility | Transit agencies | Travel time matrices |
+| **Roads** | 🚧 *Planned* | Street network topology | OpenStreetMap | Graph embeddings |
+| **StreetView** | 🚧 *Planned* | Ground-level visual features | Mapillary, KartaView | Scene embeddings |
 
 ## 🗺️ Study Areas
 
 The framework includes pre-configured study areas with research-specific parameters:
 
 ### Cascadia Bioregion
-- **Focus**: Coastal temperate rainforest ecosystems
-- **Extent**: Pacific Northwest (west of -121° longitude)
-- **Resolution**: H3 level 8-10
-- **Applications**: Forest fragmentation, urban-wildland interface
+- **Focus**: Multi-year agricultural and forest analysis, GEO-INFER integration
+- **Extent**: 52 counties (Northern CA + Oregon), ~421,000 km²
+- **Resolution**: H3 levels 10-5 (6-scale hierarchy)
+- **Temporal**: Multi-year AlphaEarth data (2017-2024)
+- **Applications**: Agricultural patterns, forest-urban interface, synthetic data generation
 
-### Netherlands Urban Regions
-- **Focus**: High-density sustainable urbanism
-- **Regions**: South Holland, Utrecht, Amsterdam metropolitan
-- **Resolution**: H3 level 8-11
-- **Applications**: Cycling infrastructure, compact development patterns
+### Netherlands Urban Systems
+- **Focus**: High-density urbanism with multiple analysis variants
+- **Regions**: South Holland with FSI filtering (0.1, 95%, 99% thresholds)
+- **Resolution**: H3 levels 10-5 (full hierarchy)
+- **Data**: Building density (FSI), accessibility networks, PDOK aerial imagery
+- **Applications**: Urban density analysis, cycling infrastructure, compact development
 
 ### Custom Study Areas
 ```python
@@ -118,48 +122,67 @@ create_study_area(
 
 ## 💻 Advanced Examples
 
-### Processing AlphaEarth Satellite Embeddings
+### AlphaEarth + Semantic Segmentation Processing
 ```python
-from modalities import load_modality_processor
+from modalities.semantic_segmentation import SemanticSegmentationProcessor
 
-processor = load_modality_processor('alphaearth', {
-    'source_dir': 'path/to/alphaearth/tiles',
-    'max_workers': 10  # Parallel processing threads
-})
+config = {
+    'study_area': 'cascadia',
+    'model_config': {
+        'alphaearth_dim': 64,
+        'dinov3_dim': 768,
+        'conditioning_dim': 256
+    }
+}
 
-embeddings = processor.run_pipeline(
+processor = SemanticSegmentationProcessor(config)
+results = processor.run_pipeline(
     study_area='cascadia',
-    h3_resolution=8,
-    output_dir='data/processed/embeddings/alphaearth'
+    h3_resolution=10,
+    output_dir='data/processed/embeddings/semantic_segmentation'
 )
 ```
 
-### Multi-Modal Urban Learning Pipeline
+### Renormalizing Multi-Scale Architecture
+```python
+from urban_embedding import RenormalizingUrbanPipeline, create_renormalizing_config_preset
+
+# Create configuration for 7-level hierarchy
+config = create_renormalizing_config_preset("default")
+config['city_name'] = 'south_holland'
+
+# Initialize renormalizing pipeline
+pipeline = RenormalizingUrbanPipeline(config)
+embeddings_by_resolution = pipeline.run()
+
+# Access multi-resolution embeddings
+for resolution in [10, 9, 8, 7, 6, 5]:
+    print(f"Resolution {resolution}: {embeddings_by_resolution[resolution].shape}")
+```
+
+### Standard Multi-Modal Pipeline
 ```python
 from urban_embedding import UrbanEmbeddingPipeline
 
 config = {
-    'study_area': 'south_holland',
-    'modalities': ['alphaearth', 'poi', 'gtfs', 'roads'],
-    'h3_resolution': 9,
+    'city_name': 'south_holland',
     'model': {
-        'architecture': 'UrbanUNet',
         'hidden_dim': 128,
-        'num_layers': 3
+        'output_dim': 32,
+        'num_convs': 4
     },
     'training': {
-        'epochs': 200,
-        'batch_size': 32,
-        'learning_rate': 0.001
+        'num_epochs': 500,
+        'learning_rate': 1e-4
     }
 }
 
 pipeline = UrbanEmbeddingPipeline(config)
 results = pipeline.run()
 
-# Access learned representations
-embeddings = results['embeddings']  # H3 → feature vectors
-clusters = results['clusters']      # Spatial clustering results
+# Results include embeddings at multiple resolutions
+embeddings = results['embeddings']
+clusters = results['clusters']
 ```
 
 ### Visualizing Results

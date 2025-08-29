@@ -21,7 +21,7 @@ This guide documents all configuration parameters for UrbanRepML experiments. Pa
 |-----------|------|---------|-------------|
 | `experiment_name` | str | required | Unique identifier for the experiment |
 | `city` | str | "south_holland" | City or region to analyze |
-| `resolutions` | list | [8,9,10] | H3 resolutions to process |
+| `resolutions` | list | [10,9,8,7,6,5] | H3 resolutions to process (full hierarchy) |
 
 ### File Paths
 | Parameter | Type | Default | Description |
