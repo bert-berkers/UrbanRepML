@@ -5,6 +5,7 @@ UrbanRepML Modalities Package
 
 This package contains processors for different urban data modalities:
 - AlphaEarth: Satellite imagery embeddings
+- Aerial Imagery: High-res RGB images with DINOv3 encoding
 - POI: Points of interest embeddings  
 - GTFS: Public transit embeddings
 - Roads: Road network embeddings
@@ -93,6 +94,7 @@ def get_available_modalities() -> Dict[str, str]:
     """Get list of available modality processors."""
     return {
         'alphaearth': 'Satellite imagery embeddings from AlphaEarth',
+        'aerial_imagery': 'High-resolution RGB images with DINOv3 encoding',
         'poi': 'Points of interest embeddings using Hex2Vec',
         'gtfs': 'Public transit accessibility embeddings',
         'roads': 'Road network topology embeddings', 
@@ -109,6 +111,9 @@ def load_modality_processor(modality: str, config: Optional[Dict] = None):
     if modality == 'alphaearth':
         from .alphaearth.processor import AlphaEarthProcessor
         return AlphaEarthProcessor(config)
+    elif modality == 'aerial_imagery':
+        from .aerial_imagery.processor import AerialImageryProcessor
+        return AerialImageryProcessor(config)
     elif modality == 'poi':
         from .poi.processor import POIProcessor  
         return POIProcessor(config)
