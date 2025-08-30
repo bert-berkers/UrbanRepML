@@ -260,17 +260,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- AlphaEarth satellite embeddings from Scale AI
+- AlphaEarth satellite embeddings from Earth Engine by Google
 - H3 hexagonal indexing system by Uber
 - SRAI spatial analysis framework
 - OpenStreetMap contributors worldwide
-
-## 📞 Contact
-
-- **Issues**: [GitHub Issues](https://github.com/bertberkers/UrbanRepML/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/bertberkers/UrbanRepML/discussions)
-- **Email**: bert.berkers@example.com
-
 ---
-
-*UrbanRepML is actively developed for advancing urban sustainability and geospatial intelligence research.*
