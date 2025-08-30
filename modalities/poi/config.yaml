@@ -1,0 +1,246 @@
+# POI Modality Configuration
+
+default:
+  # Data source: 'osm_online' or 'pbf'
+  data_source: osm_online
+  
+  # Path to PBF file (required if data_source is 'pbf')
+  pbf_path: null
+  
+  # Output directory for embeddings
+  output_dir: data/processed/embeddings/poi
+  
+  # Processing parameters
+  chunk_size: 1000
+  max_workers: 4
+  
+  # Embedding methods
+  use_hex2vec: true
+  hex2vec_dimensions: 64
+  compute_diversity_metrics: true
+  
+  # POI categories to include
+  poi_categories:
+    amenity:
+      - restaurant
+      - cafe
+      - bar
+      - pub
+      - fast_food
+      - food_court
+      - hospital
+      - clinic
+      - pharmacy
+      - doctors
+      - dentist
+      - school
+      - university
+      - college
+      - kindergarten
+      - library
+      - bank
+      - atm
+      - post_office
+      - police
+      - fire_station
+      - place_of_worship
+      - community_centre
+      - theatre
+      - cinema
+      - parking
+      - fuel
+      - charging_station
+      - bicycle_parking
+    
+    shop:
+      - supermarket
+      - convenience
+      - bakery
+      - butcher
+      - greengrocer
+      - clothes
+      - fashion
+      - shoes
+      - jewelry
+      - department_store
+      - electronics
+      - mobile_phone
+      - computer
+      - furniture
+      - hardware
+      - sports
+      - bicycle
+      - car
+      - car_repair
+      - hairdresser
+      - beauty
+    
+    leisure:
+      - park
+      - playground
+      - sports_centre
+      - stadium
+      - swimming_pool
+      - fitness_centre
+      - golf_course
+      - marina
+      - nature_reserve
+    
+    tourism:
+      - hotel
+      - motel
+      - hostel
+      - guest_house
+      - apartment
+      - museum
+      - gallery
+      - attraction
+      - viewpoint
+      - information
+    
+    landuse:
+      - retail
+      - commercial
+      - industrial
+      - residential
+      - forest
+      - meadow
+      - farmland
+      - cemetery
+    
+    natural:
+      - water
+      - wetland
+      - beach
+      - wood
+      - tree
+      - peak
+    
+    public_transport:
+      - station
+      - stop_position
+      - platform
+      - stop_area
+
+# Category groupings for aggregated analysis
+category_groups:
+  food_drink:
+    - restaurant
+    - cafe
+    - bar
+    - pub
+    - fast_food
+    - bakery
+    - food_court
+  
+  healthcare:
+    - hospital
+    - clinic
+    - pharmacy
+    - doctors
+    - dentist
+  
+  education:
+    - school
+    - university
+    - college
+    - kindergarten
+    - library
+  
+  retail:
+    - supermarket
+    - convenience
+    - clothes
+    - department_store
+    - electronics
+  
+  recreation:
+    - park
+    - playground
+    - sports_centre
+    - fitness_centre
+    - cinema
+    - theatre
+  
+  transport:
+    - parking
+    - fuel
+    - charging_station
+    - station
+    - stop_position
+
+# Diversity metrics configuration
+diversity_metrics:
+  # Calculate Shannon entropy
+  shannon_entropy: true
+  
+  # Calculate Simpson diversity index
+  simpson_diversity: true
+  
+  # Calculate richness (unique category count)
+  richness: true
+  
+  # Calculate evenness
+  evenness: true
+
+# Hex2Vec configuration
+hex2vec:
+  # Embedding dimensions
+  dimensions: 64
+  
+  # Random walk parameters
+  walk_length: 30
+  num_walks: 100
+  
+  # Skip-gram window size
+  window_size: 5
+  
+  # Return parameter (p)
+  p: 1
+  
+  # In-out parameter (q)
+  q: 1
+  
+  # Use skip-gram (vs CBOW)
+  skip_gram: true
+
+# H3 resolution settings
+h3_resolutions:
+  # Resolution levels to process
+  available: [8, 9, 10]
+  
+  # Default resolution
+  default: 9
+
+# Data sources by region
+data_sources:
+  netherlands:
+    source: pbf
+    pbf_url: "https://download.geofabrik.de/europe/netherlands-latest.osm.pbf"
+    pbf_path: "data/raw/osm/netherlands-latest.osm.pbf"
+  
+  cascadia:
+    source: pbf
+    pbf_url: "https://download.geofabrik.de/north-america/us-west-latest.osm.pbf"
+    pbf_path: "data/raw/osm/us-west-latest.osm.pbf"
+  
+  default:
+    source: osm_online
+
+# Performance optimization
+performance:
+  # Use multiprocessing for large areas
+  use_multiprocessing: true
+  
+  # Memory limit for processing (MB)
+  memory_limit: 8192
+  
+  # Batch size for API requests
+  api_batch_size: 100
+  
+  # Rate limiting for OSM API (requests per second)
+  api_rate_limit: 1
+  
+  # Cache downloaded data
+  use_cache: true
+  cache_dir: "data/cache/poi"

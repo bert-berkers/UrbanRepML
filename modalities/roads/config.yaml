@@ -1,0 +1,109 @@
+# Roads Modality Configuration
+
+default:
+  # Data source: 'osm_online' or 'pbf'
+  data_source: osm_online
+  
+  # Path to PBF file (required if data_source is 'pbf')
+  pbf_path: null
+  
+  # Output directory for embeddings
+  output_dir: data/processed/embeddings/roads
+  
+  # Processing parameters
+  chunk_size: 1000
+  max_workers: 4
+  compute_network_metrics: true
+  
+  # Road types to include (OSM highway tags)
+  road_types:
+    - motorway
+    - motorway_link
+    - trunk
+    - trunk_link
+    - primary
+    - primary_link
+    - secondary
+    - secondary_link
+    - tertiary
+    - tertiary_link
+    - unclassified
+    - residential
+    - living_street
+    - service
+    - pedestrian
+    - track
+    - footway
+    - cycleway
+    - path
+
+# Road importance weights (0-1 scale)
+road_hierarchy:
+  motorway: 1.0
+  motorway_link: 0.9
+  trunk: 0.85
+  trunk_link: 0.8
+  primary: 0.75
+  primary_link: 0.7
+  secondary: 0.65
+  secondary_link: 0.6
+  tertiary: 0.55
+  tertiary_link: 0.5
+  unclassified: 0.4
+  residential: 0.35
+  living_street: 0.3
+  service: 0.25
+  pedestrian: 0.2
+  track: 0.15
+  footway: 0.1
+  cycleway: 0.1
+  path: 0.05
+
+# Network analysis parameters
+network_analysis:
+  # Whether to compute graph-based metrics
+  enabled: true
+  
+  # Centrality measures
+  compute_degree_centrality: true
+  compute_betweenness_centrality: true
+  
+  # Performance settings for large networks
+  betweenness_sample_size: 100  # Sample nodes for betweenness if network is large
+  
+# H3 resolution settings
+h3_resolutions:
+  # Resolution levels to process
+  available: [8, 9, 10]
+  
+  # Default resolution
+  default: 9
+
+# Data sources by region
+data_sources:
+  netherlands:
+    source: pbf
+    pbf_url: "https://download.geofabrik.de/europe/netherlands-latest.osm.pbf"
+    pbf_path: "data/raw/osm/netherlands-latest.osm.pbf"
+  
+  cascadia:
+    source: pbf
+    pbf_url: "https://download.geofabrik.de/north-america/us-west-latest.osm.pbf"
+    pbf_path: "data/raw/osm/us-west-latest.osm.pbf"
+  
+  default:
+    source: osm_online
+
+# Performance optimization
+performance:
+  # Use multiprocessing for large areas
+  use_multiprocessing: true
+  
+  # Memory limit for processing (MB)
+  memory_limit: 8192
+  
+  # Batch size for hexagon processing
+  hexagon_batch_size: 1000
+  
+  # Simplify geometries for faster processing
+  simplify_tolerance: 0.0001
