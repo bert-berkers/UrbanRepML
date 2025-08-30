@@ -115,6 +115,28 @@ Choose **one** of these filtering methods:
 
 ---
 
+## Modality-Specific Parameters
+
+These parameters are passed within a modality's configuration dictionary.
+
+### POI Processor (`modalities.poi`)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `data_source` | str | "osm_online"| Source for OSM data ("osm_online" or "pbf") |
+| `pbf_path` | str | None | Path to `.osm.pbf` file if `data_source` is "pbf" |
+| `use_hex2vec` | bool | True | Whether to generate contextual Hex2Vec embeddings |
+| `hex2vec_dimensions`| int | 64 | Dimension of Hex2Vec embeddings |
+| `compute_diversity_metrics`| bool | True | Whether to calculate diversity metrics (Shannon, Simpson) |
+
+### Roads Processor (`modalities.roads`)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `data_source` | str | "osm_online"| Source for OSM data ("osm_online" or "pbf") |
+| `pbf_path` | str | None | Path to `.osm.pbf` file if `data_source` is "pbf" |
+| `compute_network_metrics`| bool | True | Whether to compute graph-based centrality metrics |
+
+---
+
 ## Model Architecture Parameters
 
 ### Core Architecture

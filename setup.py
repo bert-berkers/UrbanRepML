@@ -44,7 +44,7 @@ setup(
     },
     python_requires=">=3.8",
     author="Bert Berkers",
-    author_email="bert.berkers@example.com",
+    author_email="your-email@example.com",
     description="Multi-Modal Urban Representation Learning for Geospatial Intelligence",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -70,11 +70,6 @@ setup(
         "Topic :: Scientific/Engineering :: Information Analysis",
     ],
     keywords="urban-analysis, geospatial, machine-learning, h3, graph-neural-networks, remote-sensing, poi, multi-modal, representation-learning",
-    entry_points={
-        'console_scripts': [
-            'urbanrepml=urban_embedding.cli:main',
-        ],
-    },
     include_package_data=True,
     package_data={
         'urbanrepml': [

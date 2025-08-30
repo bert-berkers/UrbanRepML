@@ -13,21 +13,31 @@ This modality will process GTFS (General Transit Feed Specification) data into H
 - Travel time isochrones
 - Service coverage metrics
 
-## Expected Interface
+## Example Usage (Hypothetical)
 ```python
-from modalities import load_modality_processor
+from modalities.gtfs import GTFSProcessor  # This processor is not yet implemented
+import geopandas as gpd
 
-processor = load_modality_processor('gtfs', {
-    'gtfs_feeds': ['metro', 'bus', 'rail'],
-    'time_windows': ['morning_rush', 'evening_rush', 'midday'],
-    'max_walk_time': 600  # seconds
-})
+# Define a study area
+study_area_gdf = gpd.read_file("path/to/your/study_area.geojson")
 
-embeddings = processor.run_pipeline(
-    study_area='netherlands',
-    h3_resolution=9,
-    output_dir='data/processed/embeddings/gtfs'
-)
+# Configuration for the processor
+config = {
+    'output_dir': 'data/processed/embeddings/gtfs',
+    'gtfs_feeds': {
+        'source_url': 'https://example.com/gtfs.zip'
+    },
+    'time_windows': ['morning_peak', 'off_peak'],
+}
+
+# Initialize and run the processor
+# processor = GTFSProcessor(config)
+# embeddings_path = processor.run_pipeline(
+#     study_area=study_area_gdf,
+#     h3_resolution=9
+# )
+
+# print(f"GTFS embeddings saved to: {embeddings_path}")
 ```
 
 ## Data Sources

@@ -1,3 +1,5 @@
+> **Note:** This is a historical development log. While it provides valuable insight into the project's evolution, some details may be out of date or reflect a point-in-time understanding that has since changed. For the most accurate and current information, please refer to the main `README.md` and the specific `README.md` file for each modality.
+
 # UrbanRepML Development Log
 
 ## 2025-01-04 - Major Data Organization Cleanup & Pipeline Setup

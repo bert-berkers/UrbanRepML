@@ -13,22 +13,30 @@ This modality will process street-level imagery into H3 hexagon-based visual fea
 - Temporal change detection
 - Aesthetic and environmental quality metrics
 
-## Expected Interface
+## Example Usage (Hypothetical)
 ```python
-from modalities import load_modality_processor
+from modalities.streetview import StreetViewProcessor  # This processor is not yet implemented
+import geopandas as gpd
 
-processor = load_modality_processor('streetview', {
-    'image_sources': ['google_streetview', 'mapillary'],
-    'feature_model': 'clip_vit_large',
-    'scene_categories': ['greenery', 'walkability', 'safety'],
-    'temporal_analysis': True
-})
+# Define a study area
+study_area_gdf = gpd.read_file("path/to/your/study_area.geojson")
 
-embeddings = processor.run_pipeline(
-    study_area='cascadia',
-    h3_resolution=10,
-    output_dir='data/processed/embeddings/streetview'
-)
+# Configuration for the processor
+config = {
+    'output_dir': 'data/processed/embeddings/streetview',
+    'image_source': 'mapillary',
+    'feature_model': 'dinov3_large',
+    'images_per_hexagon': 16,
+}
+
+# Initialize and run the processor
+# processor = StreetViewProcessor(config)
+# embeddings_path = processor.run_pipeline(
+#     study_area=study_area_gdf,
+#     h3_resolution=10
+# )
+
+# print(f"StreetView embeddings saved to: {embeddings_path}")
 ```
 
 ## Data Sources

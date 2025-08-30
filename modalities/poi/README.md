@@ -1,42 +1,54 @@
 # POI Modality
 
-**Points of Interest Embeddings using Hex2Vec**
+**Points of Interest Embeddings using SRAI and Hex2Vec**
 
-## Status: Not Yet Implemented
+## ✅ Status: Complete
 
-This modality will process Points of Interest (POI) data into H3 hexagon-based embeddings.
+This modality processes Points of Interest (POI) data from OpenStreetMap into H3 hexagon-based embeddings. It uses the `srai` library to generate count-based features, diversity metrics, and contextual embeddings using Hex2Vec.
 
-## Planned Features
-- OSM POI extraction and categorization
-- Hex2Vec categorical embeddings
-- Density and diversity metrics
-- Commercial/residential/recreational classification
+## Features
+- Fetches POI data from OpenStreetMap (online or from a PBF file).
+- Categorizes POIs into groups like `amenity`, `shop`, `leisure`, etc.
+- **Count-based embeddings**: Calculates the number of each POI category per H3 hexagon.
+- **Density calculation**: Computes POI density per km².
+- **Diversity metrics**: Generates Shannon entropy, Simpson diversity, richness, and evenness scores for POI categories within each hexagon.
+- **Contextual embeddings**: Optionally creates dense, contextual embeddings using the Hex2Vec algorithm.
 
-## Expected Interface
+## Generated Features (Examples)
+- `amenity_count`, `shop_count`, ... (for each category)
+- `total_poi_count`
+- `poi_density`
+- `poi_shannon_entropy`
+- `poi_simpson_diversity`
+- `poi_richness`
+- `poi_evenness`
+- `hex2vec_0`, `hex2vec_1`, ... (if enabled)
+
+## Example Usage
 ```python
-from modalities import load_modality_processor
+from modalities.poi import POIProcessor
+import geopandas as gpd
 
-processor = load_modality_processor('poi', {
-    'osm_cache_dir': 'data/cache/osm',
-    'categories': ['commercial', 'amenity', 'leisure', 'shop']
-})
+# Define a study area (e.g., load from a file)
+study_area_gdf = gpd.read_file("path/to/your/study_area.geojson")
 
-embeddings = processor.run_pipeline(
-    study_area='cascadia',
-    h3_resolution=10,
-    output_dir='data/processed/embeddings/poi'
+# Configuration for the processor
+config = {
+    'output_dir': 'data/processed/embeddings/poi',
+    'data_source': 'osm_online',  # or 'pbf' if you have a file
+    'use_hex2vec': True,
+    'hex2vec_dimensions': 32,
+}
+
+# Initialize and run the processor
+processor = POIProcessor(config)
+embeddings_path = processor.run_pipeline(
+    study_area=study_area_gdf,
+    h3_resolution=10
 )
+
+print(f"POI embeddings saved to: {embeddings_path}")
 ```
 
 ## Data Sources
-- OpenStreetMap POI data
-- Local business directories
-- Municipal datasets
-
-## Implementation Status
-- [ ] ModalityProcessor interface
-- [ ] OSM data extraction
-- [ ] POI categorization
-- [ ] Hex2Vec embeddings
-- [ ] H3 aggregation
-- [ ] Testing and validation
+- OpenStreetMap (via `srai` library)

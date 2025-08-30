@@ -24,7 +24,7 @@ H3 Resolution Hierarchy (6 Levels):
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    INPUT MODALITIES                         │
-│  AlphaEarth | Semantic Segmentation | POI | GTFS | Roads    │
+│ AlphaEarth | Semantic Segmentation | Aerial Imagery | Buildings | POI | Roads │
 └────────────────────────┬────────────────────────────────────┘
                          │
 ┌────────────────────────▼────────────────────────────────────┐
@@ -119,6 +119,7 @@ Hierarchical Aggregation → H3 Embeddings
 ```
 
 #### 3. Additional Modalities
+- **Aerial Imagery**: High-resolution visual features with DINOv3 encoding
 - **POI**: Points of interest with Hex2Vec embeddings
 - **GTFS**: Public transit accessibility matrices
 - **Roads**: OSM network topology with graph metrics

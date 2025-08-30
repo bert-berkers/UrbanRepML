@@ -45,7 +45,7 @@ pip install -e ".[viz]"
 python -m modalities.alphaearth --study-area cascadia --resolution 8
 
 # Run multi-modal urban embedding pipeline
-python -m urban_embedding --study-area south_holland --modalities alphaearth,poi,gtfs
+python -m urban_embedding --study-area south_holland --modalities alphaearth,poi,roads
 
 # Analyze results with clustering
 python -m urban_embedding.analytics --study-area netherlands --method clustering
@@ -86,9 +86,9 @@ UrbanRepML/
 | **Semantic Segmentation** | ✅ **Complete** | AlphaEarth + DINOv3 fusion | Satellite + aerial imagery | Categorical land cover classes |
 | **Aerial Imagery** | ✅ **Complete** | High-res DINOv3 encoding | PDOK (Netherlands) | 768-dim visual features |
 | **Buildings** | ✅ **Complete** | Building density (FSI) analysis | OpenStreetMap, cadastral | Density and morphology metrics |
-| **POI** | 🚧 *Planned* | Points of interest patterns | OpenStreetMap, Overture | Categorical embeddings |
+| **POI** | ✅ **Complete** | POI counts, diversity, and Hex2Vec embeddings | OpenStreetMap | Count & contextual embeddings |
+| **Roads** | ✅ **Complete** | Road network topology and centrality metrics | OpenStreetMap | Connectivity & graph metrics |
 | **GTFS** | 🚧 *Planned* | Public transit accessibility | Transit agencies | Travel time matrices |
-| **Roads** | 🚧 *Planned* | Street network topology | OpenStreetMap | Graph embeddings |
 | **StreetView** | 🚧 *Planned* | Ground-level visual features | Mapillary, KartaView | Scene embeddings |
 
 ## 🗺️ Study Areas

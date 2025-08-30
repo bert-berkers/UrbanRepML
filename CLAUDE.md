@@ -9,11 +9,11 @@ Instructions for Claude Code and developers working with the UrbanRepML project.
 ```
 modalities/          # Data processing pipelines (one per data source)
 ├── alphaearth/     # Satellite imagery → H3 embeddings
-├── poi/            # Points of interest → categorical embeddings
-├── gtfs/           # Transit data → accessibility features
-├── roads/          # OSM networks → graph embeddings
-├── buildings/      # Footprints → density metrics
-└── streetview/     # Street imagery → visual features
+├── poi/            # Points of interest → count, diversity & contextual embeddings
+├── gtfs/           # Transit data → accessibility features (PLANNED)
+├── roads/          # OSM networks → connectivity & centrality metrics
+├── buildings/      # Footprints → FSI density metrics (via script)
+└── streetview/     # Street imagery → visual features (PLANNED)
 
 data/               # ALL data storage (no data in code directories)
 ├── raw/            # Original downloads
