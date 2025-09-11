@@ -87,7 +87,7 @@ class SpatialBatchDataset(Dataset):
 
 
 class SpatialBatcher:
-    """Create and manage spatial batches for large-scale processing."""
+    """Create and manage spatial batches for large-scale processing embeddings."""
     
     def __init__(
         self,

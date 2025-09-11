@@ -42,14 +42,14 @@ class ModularTiffProcessor:
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         # Processing parameters
-        self.subtile_size = config['processing'].get('subtile_size', 256)
-        self.batch_size = config['processing'].get('subtiles_per_batch', 10)
-        self.min_pixels = config['processing']['min_pixels_per_hex']
+        self.subtile_size = config['processing embeddings'].get('subtile_size', 256)
+        self.batch_size = config['processing embeddings'].get('subtiles_per_batch', 10)
+        self.min_pixels = config['processing embeddings']['min_pixels_per_hex']
         
         # Enhanced boundary handling parameters
-        self.boundary_buffer = config['processing'].get('boundary_buffer_pixels', 32)  # Overlap buffer
-        self.edge_sampling_density = config['processing'].get('edge_sampling_density', 2)  # Higher sampling near edges
-        self.coverage_tracking = config['processing'].get('track_coverage', True)
+        self.boundary_buffer = config['processing embeddings'].get('boundary_buffer_pixels', 32)  # Overlap buffer
+        self.edge_sampling_density = config['processing embeddings'].get('edge_sampling_density', 2)  # Higher sampling near edges
+        self.coverage_tracking = config['processing embeddings'].get('track_coverage', True)
 
         # Checkpoint tracking
         self.checkpoint_file = self.checkpoint_dir / "modular_progress.json"
@@ -71,7 +71,7 @@ class ModularTiffProcessor:
         logger.info(f"  Previously completed: {len(self.completed_tiles)} tiles")
 
     def load_checkpoint(self):
-        """Load processing checkpoint"""
+        """Load processing embeddings checkpoint"""
         if self.checkpoint_file.exists():
             with open(self.checkpoint_file, 'r') as f:
                 checkpoint = json.load(f)
@@ -80,7 +80,7 @@ class ModularTiffProcessor:
             logger.info(f"Loaded checkpoint with {len(self.completed_tiles)} completed tiles")
 
     def save_checkpoint(self):
-        """Save processing checkpoint"""
+        """Save processing embeddings checkpoint"""
         checkpoint = {
             'timestamp': datetime.now().isoformat(),
             'completed_tiles': list(self.completed_tiles),
@@ -326,7 +326,7 @@ class ModularTiffProcessor:
         return output_records
 
     def process_single_tile_worker(self, tile_path: Path) -> Optional[Tuple[str, List[Dict]]]:
-        """Process a single tile - worker function for parallel processing. Returns tile name and its data."""
+        """Process a single tile - worker function for parallel processing embeddings. Returns tile name and its data."""
         tile_name = tile_path.stem
 
         logger.debug(f"Processing tile: {tile_name}")
@@ -392,7 +392,7 @@ class ModularTiffProcessor:
                 # Format results into JSON-serializable records
                 json_output = self._format_tile_results(final_hex_values)
 
-                # Log enhanced processing statistics
+                # Log enhanced processing embeddings statistics
                 coverage_stats = ""
                 if json_output and isinstance(json_output[0], dict) and 'coverage_quality' in json_output[0]:
                     avg_quality = np.mean([r.get('coverage_quality', 1.0) for r in json_output])
@@ -402,7 +402,7 @@ class ModularTiffProcessor:
                 return tile_name, json_output
 
         except Exception as e:
-            logger.error(f"Error processing tile {tile_name}: {e}")
+            logger.error(f"Error processing embeddings tile {tile_name}: {e}")
             return None
 
     def process_to_intermediate(self, n_workers: int = 4):
@@ -464,11 +464,11 @@ class ModularTiffProcessor:
                             f"Progress: {processed_count}/{total_tiles_to_process} tiles completed ({processed_count / total_tiles_to_process * 100:.1f}%) - Saved {output_file.name}")
 
                 except Exception as e:
-                    logger.error(f"Error in parallel processing for {tile_path.name}: {e}", exc_info=True)
+                    logger.error(f"Error in parallel processing embeddings for {tile_path.name}: {e}", exc_info=True)
 
         elapsed = time.time() - start_time
-        logger.info(f"Stage 1 processing finished in {elapsed / 3600:.2f} hours")
-        logger.info(f"Enhanced boundary processing: {self.edge_sampling_density}x edge sampling density")
+        logger.info(f"Stage 1 processing embeddings finished in {elapsed / 3600:.2f} hours")
+        logger.info(f"Enhanced boundary processing embeddings: {self.edge_sampling_density}x edge sampling density")
         logger.info(f"Coverage tracking: {'enabled' if self.coverage_tracking else 'disabled'}")
         logger.info(f"Boundary buffer: {self.boundary_buffer} pixels")
         logger.info(f"Next Step: Run 'stitch_results.py' to combine intermediate files.")
@@ -486,9 +486,9 @@ class ModularTiffProcessor:
         self.process_to_intermediate(n_workers=n_workers)
 
 
-# Worker function for parallel processing (needs to be at module level)
+# Worker function for parallel processing embeddings (needs to be at module level)
 def process_tile_worker(tile_path: Path, config: dict, h3_gdf, hex_lookup: dict, hex_tree) -> Dict[str, Dict]:
-    """Worker function for processing a single tile (module level for pickling)"""
+    """Worker function for processing embeddings a single tile (module level for pickling)"""
 
     # Recreate processor instance for this worker
     processor = ModularTiffProcessor.__new__(ModularTiffProcessor)  # Create without __init__
@@ -496,8 +496,8 @@ def process_tile_worker(tile_path: Path, config: dict, h3_gdf, hex_lookup: dict,
     processor.h3_gdf = h3_gdf
     processor.hex_lookup = hex_lookup
     processor.hex_tree = hex_tree
-    processor.subtile_size = config['processing'].get('subtile_size', 256)
-    processor.min_pixels = config['processing']['min_pixels_per_hex']
+    processor.subtile_size = config['processing embeddings'].get('subtile_size', 256)
+    processor.min_pixels = config['processing embeddings']['min_pixels_per_hex']
     processor.completed_tiles = set()  # Worker doesn't need checkpoint state
 
     return processor.process_single_tile_worker(tile_path)

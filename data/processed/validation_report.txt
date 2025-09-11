@@ -1,0 +1,31 @@
+================================================================================
+EMBEDDING VALIDATION REPORT
+================================================================================
+
+
+ALPHAEARTH MODALITY
+----------------------------------------
+✗ Embeddings not found
+✓ Intermediate data found:
+  Features: 0 files
+  Regions: 0 files
+  Joints: 0 files
+
+POI MODALITY
+----------------------------------------
+✓ Embeddings found: 6460557 hexagons, 28 features
+  Memory usage: 1158.32 MB
+  Missing values: 0
+  H3 validation: ✓ Valid
+  H3 resolutions: [10]
+✓ Intermediate data found:
+  Features: 0 files
+  Regions: 0 files
+  Joints: 0 files
+
+================================================================================
+MODALITY COMPARISON
+================================================================================
+
+Common hexagons across all modalities: 6,460,557
+  poi: 100.0% coverage

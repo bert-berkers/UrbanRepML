@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PreprocessingStats:
-    """Statistics for preprocessing validation"""
+    """Statistics for preprocessing auxiliary data validation"""
     shape: Tuple[int, int]
     original_range: Tuple[float, float]
     normalized_range: Tuple[float, float]
@@ -70,7 +70,7 @@ class UrbanFeatureProcessor:
             pca: PCA,
             n_components: int
     ) -> PreprocessingStats:
-        """Compute comprehensive preprocessing statistics"""
+        """Compute comprehensive preprocessing auxiliary data statistics"""
         return PreprocessingStats(
             shape=features.shape,
             original_range=(float(np.min(features)), float(np.max(features))),

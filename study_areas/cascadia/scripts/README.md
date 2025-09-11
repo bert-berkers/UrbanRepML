@@ -56,7 +56,7 @@ Testing script for small-batch validation
 ## Usage
 
 ```bash
-# Main processing (from main directory)
+# Main processing embeddings (from main directory)
 python run_coastal_processing.py --workers 6
 
 # Monitor progress (from scripts directory)  

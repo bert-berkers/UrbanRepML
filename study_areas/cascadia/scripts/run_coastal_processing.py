@@ -38,7 +38,7 @@ def setup_logging(config, run_id):
 
 
 def main():
-    """Main entry point for Cascadia coastal forest processing"""
+    """Main entry point for Cascadia coastal forest processing embeddings"""
     
     parser = argparse.ArgumentParser(
         description='Process Cascadia coastal forest AlphaEarth data to H3 hexagons',
@@ -72,7 +72,7 @@ Examples:
     if args.max_tiles:
         config['experiment']['max_tiles'] = args.max_tiles
     if args.clean_start:
-        config['processing']['resume_from_checkpoint'] = False
+        config['processing embeddings']['resume_from_checkpoint'] = False
     
     # Create run ID
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -88,7 +88,7 @@ Examples:
     logger.info(f"Run ID: {run_id}")
     logger.info(f"Workers: {args.workers}")
     logger.info(f"Max tiles: {config['experiment']['max_tiles'] or 'ALL'}")
-    logger.info(f"Resume: {config['processing']['resume_from_checkpoint']}")
+    logger.info(f"Resume: {config['processing embeddings']['resume_from_checkpoint']}")
     logger.info(f"Output: Stage 1 - Intermediate JSON files per tile")
     logger.info("-"*80)
     
@@ -97,8 +97,8 @@ Examples:
         logger.info("Initializing coastal forest processor...")
         processor = ModularTiffProcessor(config)
         
-        # Run Stage 1 processing  
-        logger.info(f"Starting Stage 1: TIFF → Intermediate JSON processing...")
+        # Run Stage 1 processing embeddings
+        logger.info(f"Starting Stage 1: TIFF → Intermediate JSON processing embeddings...")
         logger.info(f"Using {args.workers} parallel workers for optimal throughput")
         
         start_time = datetime.now()

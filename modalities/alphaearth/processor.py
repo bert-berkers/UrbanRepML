@@ -174,7 +174,7 @@ def process_tile_worker(tiff_path: Path, h3_resolution: int, subtile_size: int, 
             return True
 
     except Exception as e:
-        logger.error(f"Error processing tile {tile_name}: {e}", exc_info=True)
+        logger.error(f"Error processing embeddings tile {tile_name}: {e}", exc_info=True)
         if intermediate_file.exists():
             intermediate_file.unlink()
         return False
@@ -213,8 +213,13 @@ class AlphaEarthProcessor(ModalityProcessor):
         if not tiff_files:
             raise ValueError(f"No TIFF files found in {raw_data_path} with year filter {year_filter}")
         
-        # Create intermediate directory
-        intermediate_dir = raw_data_path / "intermediate"
+        # Create intermediate directory in new structure
+        intermediate_base = Path('data/processed/intermediate/alphaearth')
+        intermediate_base.mkdir(parents=True, exist_ok=True)
+        
+        # Create study-specific intermediate directory
+        study_name = raw_data_path.parent.name  # e.g., 'cascadia_2021'
+        intermediate_dir = intermediate_base / study_name
         intermediate_dir.mkdir(exist_ok=True)
         
         logger.info(f"Processing {len(tiff_files)} TIFF files with {self.max_workers} workers")
@@ -330,7 +335,7 @@ class AlphaEarthProcessor(ModalityProcessor):
         return gdf
     
     def to_h3(self, gdf: gpd.GeoDataFrame, resolution: int, **kwargs) -> pd.DataFrame:
-        """Convert to H3 format - already in H3 format from processing."""
+        """Convert to H3 format - already in H3 format from processing embeddings."""
         # AlphaEarth processor already outputs in H3 format
         return gdf.drop('geometry', axis=1)
     

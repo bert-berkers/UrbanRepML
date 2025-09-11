@@ -5,7 +5,7 @@ Extends the existing UrbanEmbeddingPipeline to support:
 - H3 resolutions 5-10 (6-level hierarchy)
 - Renormalizing data flow (upward accumulation, downward pass-through)
 - Simple MSE losses (reconstruction at res 10 + consistency between levels)
-- Integration with existing data loading and preprocessing
+- Integration with existing data loading and preprocessing auxiliary data
 """
 
 import logging

@@ -16,7 +16,7 @@ pyproj>=3.5.0
 shapely>=2.0.0
 srai>=0.7.0
 
-# Data processing
+# Data processing embeddings
 pandas>=2.0.0
 numpy>=1.24.0
 scikit-learn>=1.3.0

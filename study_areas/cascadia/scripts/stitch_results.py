@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Dict, List
 import numpy as np
 
-# Import targeted gap elimination for efficient boundary processing
+# Import targeted gap elimination for efficient boundary processing embeddings
 from targeted_gap_elimination import apply_targeted_gap_elimination
 
 def setup_logging(config, run_id):
@@ -39,13 +39,13 @@ def setup_logging(config, run_id):
 
 
 def discover_intermediate_files(intermediate_dir: Path) -> List[Path]:
-    """Discover all intermediate JSON files from Stage 1 processing"""
+    """Discover all intermediate JSON files from Stage 1 processing embeddings"""
     json_files = list(intermediate_dir.glob("*.json"))
     return sorted(json_files)
 
 
 def load_and_combine_intermediates(json_files: List[Path], config: dict, logger) -> pd.DataFrame:
-    """Load all intermediate JSON files and combine with consistent processing"""
+    """Load all intermediate JSON files and combine with consistent processing embeddings"""
     logger.info(f"Loading {len(json_files)} intermediate files...")
     
     all_data = {}  # h3_index -> list of records for averaging
@@ -89,7 +89,7 @@ def load_and_combine_intermediates(json_files: List[Path], config: dict, logger)
     
     for h3_index, records in all_data.items():
         # ALWAYS average embeddings, even for single-tile hexagons
-        # This ensures consistent processing and eliminates tile boundary artifacts
+        # This ensures consistent processing embeddings and eliminates tile boundary artifacts
         
         # Extract embeddings and average
         valid_embeddings = []
@@ -119,7 +119,7 @@ def load_and_combine_intermediates(json_files: List[Path], config: dict, logger)
     
     logger.info(f"Processed {single_tile_count} single-tile hexagons (averaged for consistency)")
     logger.info(f"Processed {multi_tile_count} multi-tile hexagons (averaged from overlaps)")
-    logger.info(f"ELIMINATED tile boundary discontinuities through consistent processing")
+    logger.info(f"ELIMINATED tile boundary discontinuities through consistent processing embeddings")
     
     # Convert to DataFrame
     df = pd.DataFrame(final_records)
@@ -133,7 +133,7 @@ def load_and_combine_intermediates(json_files: List[Path], config: dict, logger)
         logger.info(f"Filled {quality_metrics['filled_gaps']} gaps")
         df = df_processed
     except Exception as e:
-        logger.warning(f"Gap elimination failed, continuing with basic processing: {e}")
+        logger.warning(f"Gap elimination failed, continuing with basic processing embeddings: {e}")
         # Continue with original dataframe if gap elimination fails
     
     # Expand embeddings into separate columns
@@ -186,7 +186,7 @@ def save_final_dataset(df: pd.DataFrame, config: dict, run_id: str, logger):
 
 def cleanup_intermediates(intermediate_dir: Path, config: dict, logger):
     """Archive intermediate files after successful stitching"""
-    if config['processing'].get('cleanup_intermediates', False):
+    if config['processing embeddings'].get('cleanup_intermediates', False):
         archive_dir = Path("data/archive/intermediates") / datetime.now().strftime("%Y%m%d_%H%M%S")
         archive_dir.mkdir(parents=True, exist_ok=True)
         
@@ -230,7 +230,7 @@ Examples:
     
     # Override config with command line arguments
     if args.cleanup:
-        config['processing']['cleanup_intermediates'] = True
+        config['processing embeddings']['cleanup_intermediates'] = True
     
     # Create run ID
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -253,7 +253,7 @@ Examples:
         
         if not intermediate_dir.exists():
             logger.error(f"Intermediate directory not found: {intermediate_dir}")
-            logger.info("Make sure Stage 1 processing has completed successfully")
+            logger.info("Make sure Stage 1 processing embeddings has completed successfully")
             sys.exit(1)
             
         logger.info(f"Using intermediate directory: {intermediate_dir}")
@@ -264,7 +264,7 @@ Examples:
         
         if not json_files:
             logger.error(f"No intermediate JSON files found in: {intermediate_dir}")
-            logger.info("Make sure Stage 1 processing has completed successfully")
+            logger.info("Make sure Stage 1 processing embeddings has completed successfully")
             sys.exit(1)
             
         logger.info(f"Found {len(json_files)} intermediate files to stitch")
@@ -277,7 +277,7 @@ Examples:
         parquet_file, stats = save_final_dataset(df, config, run_id, logger)
         
         # Cleanup if requested
-        if config['processing'].get('cleanup_intermediates', False):
+        if config['processing embeddings'].get('cleanup_intermediates', False):
             cleanup_intermediates(intermediate_dir, config, logger)
         
         end_time = datetime.now()

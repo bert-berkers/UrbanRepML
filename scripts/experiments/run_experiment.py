@@ -74,7 +74,7 @@ def run_experiment(args):
             print("[SKIP] Region setup - data already exists")
         else:
             run_command([
-                sys.executable, "scripts/preprocessing/setup_regions.py",
+                sys.executable, "scripts/preprocessing auxiliary data/setup_regions.py",
                 "--city_name", args.city,
                 "--output_dir", str(base_data_dir),
                 "--resolutions", args.resolutions
@@ -93,7 +93,7 @@ def run_experiment(args):
                 return False
             
             run_command([
-                sys.executable, "scripts/preprocessing/setup_density.py",
+                sys.executable, "scripts/preprocessing auxiliary data/setup_density.py",
                 "--city_name", args.city,
                 "--input_dir", str(base_data_dir),
                 "--output_dir", str(base_data_dir),
@@ -108,7 +108,7 @@ def run_experiment(args):
             print("[SKIP] FSI filtering - data already exists")
         else:
             filter_cmd = [
-                sys.executable, "scripts/preprocessing/setup_fsi_filter.py",
+                sys.executable, "scripts/preprocessing auxiliary data/setup_fsi_filter.py",
                 "--city_name", args.city,
                 "--input_dir", str(base_data_dir),
                 "--output_dir", str(experiment_data_dir),
@@ -130,7 +130,7 @@ def run_experiment(args):
             print("[SKIP] Graph generation - graphs already exist")
         else:
             run_command([
-                sys.executable, "scripts/preprocessing/setup_hierarchical_graphs.py",
+                sys.executable, "scripts/preprocessing auxiliary data/setup_hierarchical_graphs.py",
                 "--data_dir", str(experiment_data_dir),
                 "--output_dir", str(experiment_graphs_dir),
                 "--city_name", args.experiment_name,

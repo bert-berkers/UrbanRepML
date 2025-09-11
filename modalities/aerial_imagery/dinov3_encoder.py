@@ -74,7 +74,7 @@ class DINOv3Encoder:
         self.model = self._load_model()
         self.model.eval()
         
-        # Image preprocessing
+        # Image preprocessing auxiliary data
         self.transform = self._create_transform()
         
         # Feature dimensions
@@ -167,7 +167,7 @@ class DINOv3Encoder:
         return model.to(self.device)
     
     def _create_transform(self) -> transforms.Compose:
-        """Create preprocessing transform for images."""
+        """Create preprocessing auxiliary data transform for images."""
         return transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((518, 518)),  # DINOv3 uses 518x518 for better performance
@@ -211,116 +211,7 @@ class DINOv3Encoder:
             features.attention_maps = self._extract_attention(img_tensor)
         
         return features
-    
-    def _extract_hierarchical_features(self, x: torch.Tensor) -> EncodingResult:
-        """
-        Extract multi-scale hierarchical features.
-        
-        This implements the hierarchical aggregation you described,
-        where we can marginalize out different levels of detail.
-        """
-        # Get intermediate features from different layers
-        features = {}
-        
-        # Hook for intermediate layers
-        def hook_fn(name):
-            def hook(module, input, output):
-                features[name] = output
-            return hook
-        
-        # Register hooks for different depths
-        hooks = []
-        if hasattr(self.model, 'blocks'):
-            # Vision Transformer architecture
-            for i in [3, 6, 9, 11]:  # Different depths
-                if i < len(self.model.blocks):
-                    hook = self.model.blocks[i].register_forward_hook(hook_fn(f'block_{i}'))
-                    hooks.append(hook)
-        
-        # Forward pass
-        output = self.model(x)
-        
-        # Remove hooks
-        for hook in hooks:
-            hook.remove()
-        
-        # Aggregate multi-scale features
-        if features:
-            # Stack features from different scales
-            multi_scale = torch.stack([features[k] for k in sorted(features.keys())], dim=1)
-            
-            # Adaptive pooling for hierarchical aggregation
-            # This implements the "coarse graining" you mentioned
-            aggregated = self._hierarchical_pool(multi_scale)
-            
-            return EncodingResult(
-                embeddings=output,
-                patch_features=aggregated,
-                cls_token=output[:, 0] if output.dim() > 2 else output
-            )
-        else:
-            return EncodingResult(embeddings=output)
-    
-    def _hierarchical_pool(self, features: torch.Tensor) -> torch.Tensor:
-        """
-        Hierarchical pooling for multi-scale features.
-        
-        Implements the thermodynamic-inspired coarse graining:
-        taking the "macro of the micro" at different scales.
-        """
-        B, L, N, D = features.shape  # Batch, Layers, Tokens, Dims
-        
-        # Apply different pooling strategies at different scales
-        pooled_features = []
-        
-        for i in range(L):
-            scale_features = features[:, i]
-            
-            # Finer scales: preserve more detail
-            if i < L // 2:
-                pooled = scale_features
-            # Coarser scales: aggregate more aggressively
-            else:
-                # Spatial pooling with learned weights
-                pooled = F.adaptive_avg_pool1d(
-                    scale_features.transpose(1, 2), 
-                    N // (2 ** (i - L // 2))
-                ).transpose(1, 2)
-            
-            pooled_features.append(pooled)
-        
-        # Combine with attention-based weighting
-        # This allows dynamic weighting as in active inference
-        scale_attention = F.softmax(torch.randn(L, device=features.device), dim=0)
-        
-        weighted_features = sum(
-            pooled_features[i] * scale_attention[i] 
-            for i in range(len(pooled_features))
-        )
-        
-        return weighted_features
-    
-    def _extract_attention(self, x: torch.Tensor) -> torch.Tensor:
-        """Extract attention maps from the model."""
-        attention_maps = []
-        
-        def hook_fn(module, input, output):
-            if hasattr(module, 'attn'):
-                attention_maps.append(output)
-        
-        # Register hook
-        hook = self.model.blocks[-1].attn.register_forward_hook(hook_fn)
-        
-        # Forward pass
-        _ = self.model(x)
-        
-        # Remove hook
-        hook.remove()
-        
-        if attention_maps:
-            return torch.stack(attention_maps, dim=1)
-        return None
-    
+
     def encode_batch(self, 
                     images: List[np.ndarray],
                     batch_size: int = 8) -> List[EncodingResult]:
@@ -329,7 +220,7 @@ class DINOv3Encoder:
         
         Args:
             images: List of RGB images
-            batch_size: Batch size for processing
+            batch_size: Batch size for processing embeddings
             
         Returns:
             List of EncodingResults
@@ -360,22 +251,3 @@ class DINOv3Encoder:
                         results.append(EncodingResult(embeddings=embeddings[j]))
         
         return results
-    
-    def compute_fisher_information(self, features: torch.Tensor) -> torch.Tensor:
-        """
-        Compute Fisher Information for active inference.
-        
-        This measures the information geometry of the feature space,
-        useful for the natural gradients in hierarchical processing.
-        """
-        # Compute empirical Fisher Information Matrix
-        mean = features.mean(dim=0, keepdim=True)
-        centered = features - mean
-        
-        # Covariance (approximation to Fisher Information)
-        fisher = torch.mm(centered.t(), centered) / (features.shape[0] - 1)
-        
-        # Add regularization for stability
-        fisher = fisher + 1e-6 * torch.eye(fisher.shape[0], device=fisher.device)
-        
-        return fisher

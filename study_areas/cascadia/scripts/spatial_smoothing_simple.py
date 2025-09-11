@@ -225,7 +225,7 @@ class SimpleSpatialSmoother:
 
     def process_spatial_smoothing(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, float]]:
         """
-        Main processing pipeline for spatial smoothing
+        Main processing embeddings pipeline for spatial smoothing
         """
         logger.info("="*60)
         logger.info("SIMPLE SPATIAL SMOOTHING PIPELINE")

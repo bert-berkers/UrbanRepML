@@ -99,11 +99,25 @@ performance:
   # Use multiprocessing for large areas
   use_multiprocessing: true
   
-  # Memory limit for processing (MB)
+  # Memory limit for processing embeddings (MB)
   memory_limit: 8192
   
-  # Batch size for hexagon processing
+  # Batch size for hexagon processing embeddings
   hexagon_batch_size: 1000
   
-  # Simplify geometries for faster processing
+  # Simplify geometries for faster processing embeddings
   simplify_tolerance: 0.0001
+
+# Highway2Vec Embedder Configuration
+highway2vec:
+  # Model architecture
+  embedding_size: 64        # Final embedding dimensions (increased for RTX 3090)
+  hidden_size: 128         # Hidden layer size in autoencoder (increased for RTX 3090)
+  
+  # Training parameters - optimized for RTX 3090 24GB VRAM
+  epochs: 50               # More epochs for better convergence with GPU power
+  batch_size: 512          # Larger batch size for RTX 3090 (24GB VRAM)
+  
+  # Performance settings
+  use_gpu: true           # Use GPU if available (auto-detected)
+  progress_bar: true      # Show training progress

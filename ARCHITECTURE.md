@@ -2,279 +2,291 @@
 
 ## 🎯 Project Vision
 
-UrbanRepML is an advanced **multi-modal, multi-scale urban representation learning system** that combines sophisticated neural architectures with geospatial intelligence to understand urban dynamics from regional patterns to fine-grained local features.
+UrbanRepML creates **high-quality urban embeddings** through a **manageable late-fusion approach** that processes modalities independently before combining them with spatial awareness. Built entirely on **SRAI** (not h3-py) for all spatial operations.
 
 ### Core Innovation
-The system implements **hierarchical spatial-temporal modeling** using H3 hexagonal grids (resolutions 5-11) with multiple neural architectures, including renormalizing generative models and active inference frameworks, to capture urban complexity across seven spatial scales.
 
-## 🏗️ System Architecture Overview
+Two-stage architecture that acknowledges the difficulty of multi-modal development:
+1. **Individual modality encoders** create H3-indexed embeddings independently
+2. **Spatial fusion network** combines embeddings using accessibility-based graph constraints
 
-### Multi-Resolution Spatial Framework
-```
-H3 Resolution Hierarchy (6 Levels):
-├── Res 10 (66m edge)     → Liveability: Block-level analysis, daily patterns
-├── Res 9  (170m edge)    → Neighborhood patterns, accessibility zones
-├── Res 8  (460m edge)    → District analysis, GEO-INFER standard
-├── Res 7  (1.2km edge)   → Municipal boundaries, urban structure
-├── Res 6  (3.2km edge)   → County-level planning, watershed dynamics
-└── Res 5  (9.2km edge)   → Sustainability: Regional patterns, bioregional analysis
-```
+**Key Insight**: Late-fusion enables compartmentalized development while maintaining spatial coherence through accessibility graphs.
 
-### Neural Architecture Stack
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    INPUT MODALITIES                         │
-│  AlphaEarth | Semantic Segmentation | POI | GTFS | Roads    │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                RENORMALIZING U-NET                          │
-│  • Upward Flow: Accumulated updates (res 10→5)             │
-│  • Downward Flow: Direct pass-through (res 5→10)           │
-│  • Normalization-style batching for hierarchical learning   │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│              HIERARCHICAL SPATIAL U-NET                     │
-│  • Cross-scale consistency via skip connections             │
-│  • SRAI-powered hexagonal convolutions                      │
-│  • Ring aggregation for neighborhood awareness              │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│               ACTIVE INFERENCE ENGINE                       │
-│  • Hierarchical belief updating across scales              │
-│  • Policy optimization for intervention modeling           │
-│  • Bridge integration with external inference systems      │
-└─────────────────────────────────────────────────────────────┘
-```
+## 🌍 Study Area Organization
 
-## 🧠 Neural Architecture Components
-
-### 1. Renormalizing Urban U-Net
-**Purpose**: Implements renormalizing generative models inspired by Friston et al. for hierarchical urban pattern learning.
-
-**Key Features**:
-- **Upward Flow** (res 10→5): Momentum-based accumulation from liveability to sustainability
-- **Downward Flow** (res 5→10): Direct pass-through from sustainability to liveability  
-- **Simple MSE Losses**: Reconstruction at res 10 (liveability) + consistency between all adjacent levels
-- **No Active Inference**: Pure transmission architecture focused on representation learning
-
-**Use Cases**: 
-- Multi-scale urban pattern discovery
-- Hierarchical feature extraction from fine to coarse scales
-- Sustainability (slow dynamics, res 5-7) to liveability (fast dynamics, res 9-10) modeling
-
-### 2. Hierarchical Spatial U-Net  
-**Purpose**: SRAI-integrated spatial processing with hexagonal awareness.
-
-**Key Features**:
-- Ring aggregation for hexagonal neighborhoods
-- Cross-scale skip connections maintaining spatial hierarchy
-- Hexagonal convolutions respecting H3 topology
-- Multi-modal feature fusion at each resolution
-
-### 3. Active Inference Module
-**Purpose**: Hierarchical belief updating and policy optimization.
-
-**Key Features**:
-- Bayesian belief updating across spatial scales
-- Integration with external inference systems (RxInfer)
-- Policy optimization for urban intervention modeling
-- Hierarchical Markov Decision Process support
-
-### 4. Bridge Infrastructure
-**Purpose**: Integration with external systems and advanced inference.
-
-**Components**:
-- **Model Integration**: Seamless switching between neural architectures
-- **P-adic MDP Scheduler**: Advanced mathematical scheduling for hierarchical decisions
-- **RxInfer Server**: Bayesian inference backend integration
-- **Data Exchange**: Standardized interfaces for multi-modal data flow
-
-## 📊 Data Pipeline Architecture
-
-### Multi-Modal Processing Pipeline
-
-#### 1. AlphaEarth + Semantic Segmentation
-**Primary Modality**: Satellite imagery with deep learning embeddings + semantic understanding.
+All work is organized by study areas, each containing a complete data ecosystem:
 
 ```
-Google Earth Engine (2017-2024) → AlphaEarth 64-dim → DINOv3 Encoder → 
-Semantic Segmentation → Categorical Urban Classes → H3 Aggregation
+data/study_areas/{area_name}/
+├── area_gdf/              # Study area boundary polygon
+├── regions_gdf/           # H3 tessellation (via SRAI!)
+│   ├── h3_res5.parquet   # Regional patterns
+│   ├── h3_res8.parquet   # District analysis  
+│   ├── h3_res9.parquet   # Neighborhood patterns
+│   └── h3_res10.parquet  # Block-level detail
+├── embeddings/            # Per-modality embeddings
+│   ├── alphaearth/       # Primary visual features
+│   ├── poi/              # Urban function indicators
+│   ├── roads/            # Connectivity structure
+│   └── gtfs/             # Transit accessibility
+├── urban_embedding/       # Fused results
+│   ├── embeddings/       # Final urban representations
+│   ├── graphs/           # Accessibility graphs
+│   └── models/           # Trained fusion networks
+└── plots/                 # Visualizations and analysis
 ```
 
-**Features**:
-- Multi-year temporal coverage (8 years)
-- 64-dimensional AlphaEarth embeddings at 10m resolution
-- DINOv3-powered semantic segmentation with AlphaEarth conditioning
-- Categorical land cover classes with urban/natural classification
+### Primary Study Areas
 
-#### 2. Aerial Imagery (Netherlands)
-**Regional Specialization**: High-resolution PDOK imagery with DINOv3 encoding.
+- **netherlands**: Complete coverage for maximum training data volume
+- **cascadia**: Urban-forest interface research 
+- **south_holland**: Dense urban subset for detailed analysis
+- Additional areas configured in `study_areas/configs/`
 
-```
-PDOK WMS Service → RGB Images → DINOv3 (Remote Sensing) → 
-Hierarchical Aggregation → H3 Embeddings
-```
+## 🏗️ Two-Stage Architecture
 
-#### 3. Additional Modalities
-- **POI**: Points of interest with Hex2Vec embeddings
-- **GTFS**: Public transit accessibility matrices
-- **Roads**: OSM network topology with graph metrics
-- **Buildings**: Footprint density and morphology (FSI calculations)
+### Stage 1: Individual Modality Encoders
 
-### Study Area Implementations
-
-#### Cascadia Bioregion
-**Scale**: 52 counties (CA + OR), ~421,000 km²
-**Purpose**: Agricultural analysis, forest-urban interface, GEO-INFER integration
-**Data**: Multi-year AlphaEarth (2017-2024), all H3 resolutions 5-10
-**Innovation**: Actualization framework for synthetic data generation in gaps
-
-#### Netherlands Urban Systems  
-**Scale**: Dense urban regions, multiple variants (FSI thresholds 0.1, 95%, 99%)
-**Purpose**: Urban density analysis, cycling infrastructure, compact development
-**Data**: Building density (FSI), accessibility networks, aerial imagery
-**Focus**: High-resolution urban pattern analysis (res 8-10)
-
-## 🔄 Hierarchical Processing Workflow
-
-### 1. Data Preparation Pipeline
-
-```bash
-# Multi-resolution region setup
-python scripts/preprocessing/setup_regions.py --city cascadia --resolutions 10,9,8,7,6,5
-
-# Building density calculation (where applicable)  
-python scripts/preprocessing/setup_density.py --city netherlands
-
-# Hierarchical filtering with parent-child preservation
-python scripts/preprocessing/setup_fsi_filter.py --city netherlands --fsi-percentile 95
-
-# Multi-modal accessibility graphs
-python scripts/preprocessing/setup_hierarchical_graphs.py --city netherlands
-```
-
-### 2. Neural Architecture Selection
+**Philosophy**: Process one thing at a time because development is hard.
 
 ```python
-from urban_embedding import (
-    RenormalizingUrbanPipeline,        # For hierarchical pattern learning
-    UrbanEmbeddingPipeline,            # For standard multi-modal fusion  
-    SemanticSegmentationProcessor      # For satellite+aerial fusion
-)
+# Always use SRAI for H3 operations
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
 
-# Renormalizing architecture for multi-scale learning
-config = create_renormalizing_config_preset("default")
-pipeline = RenormalizingUrbanPipeline(config)
-embeddings = pipeline.run()
+# Create H3 regions
+regionalizer = H3Regionalizer(resolution=9)
+regions_gdf = regionalizer.transform(area_gdf)
 
-# Semantic segmentation for satellite imagery
-processor = SemanticSegmentationProcessor(config)
-segmentation = processor.run_pipeline(study_area, h3_resolution=10, output_dir)
+# Process each modality independently
+for modality in ['alphaearth', 'poi', 'roads', 'gtfs']:
+    processor = get_processor(modality)
+    embeddings = processor.process_to_h3(data, regions_gdf)
+    save_embeddings(embeddings, f"data/study_areas/{area}/embeddings/{modality}/")
 ```
 
-### 3. Advanced Analysis Capabilities
+#### Core Modalities
 
-**Hierarchical Clustering**: Cross-scale pattern discovery
-**Active Inference**: Policy optimization and intervention modeling  
-**Actualization**: Synthetic data generation for missing regions/timepoints
-**Bridge Integration**: External system connectivity
+1. **AlphaEarth Processor** (`modalities/alphaearth/`)
+   - Pre-computed Google Earth Engine embeddings
+   - Primary visual features for urban environments
+   - Direct H3 indexing of satellite-derived features
 
-## 🎛️ Configuration & Tuning
+2. **POI Processor** (`modalities/poi/`)
+   - OpenStreetMap points of interest
+   - Uses SRAI for spatial aggregation and density calculation
+   - Categorical embeddings for urban function
 
-### Architecture Selection Guidelines
+3. **Roads Processor** (`modalities/roads/`)
+   - OSM street network topology
+   - SRAI-based connectivity analysis
+   - Graph embeddings for accessibility potential
 
-| Use Case | Architecture | Resolutions | Notes |
-|----------|--------------|-------------|-------|
-| **Regional Analysis** | RenormalizingUrbanUNet | 5-8 | Sustainability focus, slow dynamics |
-| **Urban Planning** | HierarchicalSpatialUNet | 7-10 | Cross-scale planning integration |
-| **Neighborhood Study** | Standard UrbanUNet | 8-10 | Proven for local-scale analysis |
-| **Satellite Analysis** | SemanticSegmentation | 10 | AlphaEarth + DINOv3 fusion |
-| **Policy Modeling** | Active Inference | 5-11 | Full hierarchy with intervention modeling |
+4. **GTFS Processor** (`modalities/gtfs/`)
+   - Public transit stop locations and schedules
+   - Accessibility zone calculation via SRAI
+   - Transit-oriented development indicators
 
-### Key Parameters
+### Stage 2: Urban Embedding Fusion
 
-**Renormalizing Flow**:
-- `upward_momentum`: 0.9 (accumulation strength)
-- `normalization_type`: "layer" (LayerNorm, GroupNorm, BatchNorm)
-- `accumulation_mode`: "grouped" (batching strategy)
+**Philosophy**: Wrangling multiple parallel datasets during training is challenging. Late-fusion with spatial constraints makes it manageable.
 
-**Multi-Resolution**:
-- `resolutions`: [10,9,8,7,6,5] (full hierarchy)
-- `primary_resolution`: 8 (GEO-INFER compatibility)
-- `fine_resolution`: 10 (liveability focus)
-
-**Loss Functions**:
-- `reconstruction_weight`: 1.0 (only at res 10)
-- `consistency_weight`: 2.0-3.0 (between adjacent levels)
-
-## 🚀 Performance & Scalability
-
-### Computational Requirements
-
-| Study Area | Hexagons | Memory | Processing Time | Storage |
-|------------|----------|---------|-----------------|---------|
-| Netherlands (res 10) | 261K | 16GB | 2-4 hours | 5GB |
-| Cascadia (res 8) | 915K | 32GB | 12-24 hours | 50GB |
-| Cascadia (res 10) | 67M | 64GB+ | 3-5 days | 500GB |
-
-### Optimization Strategies
-
-**Memory Management**:
-- Adaptive sampling for high resolutions (5-7)
-- Batch processing with configurable sizes
-- Gradient checkpointing for deep hierarchies
-
-**Processing Efficiency**:
-- GPU acceleration for neural architectures
-- Parallel processing for data preparation  
-- Smart caching and intermediate result storage
-
-## 🔗 Integration Points
-
-### GEO-INFER Compatibility
-- Primary interface at H3 resolution 8
-- County-level aggregation support  
-- Agricultural pattern analysis alignment
-- Cross-border regional analysis (CA-OR)
-
-### External Systems
-- **Google Earth Engine**: Satellite data export
-- **RxInfer**: Bayesian inference backend
-- **SRAI**: Spatial analysis and regionalization
-- **Weights & Biases**: Experiment tracking
-
-## 🧪 Experimental Framework
-
-### Experiment Orchestration
-```bash
-# Complete experiment workflow
-python scripts/experiments/run_experiment.py \
-  --experiment_name cascadia_multi_resolution \
-  --study_area cascadia \
-  --resolutions 10,9,8,7,6,5 \
-  --architecture renormalizing \
-  --run_training
+```
+┌─────────────────────────────────────────────────────────┐
+│                INPUT: MODALITY EMBEDDINGS               │
+│  AlphaEarth | POI | Roads | GTFS (per H3 cell)         │
+└────────────────────┬────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────┐
+│           ACCESSIBILITY GRAPH CONSTRUCTION               │
+│  • Floodfill travel time calculation                   │
+│  • Gravity weighting (building density)                │
+│  • Percentile-based edge pruning                       │
+│  • SRAI neighborhood analysis                          │
+└────────────────────┬────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────┐
+│            GRAPH CONVOLUTIONAL U-NET                    │
+│  • Multi-modal input concatenation                     │
+│  • GCN layers on pruned accessibility graphs           │
+│  • Multi-resolution processing (H3 5-11)               │
+│  • Skip connections for hierarchical consistency       │
+└────────────────────┬────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────┐
+│              HIGH-QUALITY URBAN EMBEDDINGS              │
+│  • Dense representations suitable for generation       │
+│  • Multi-scale spatial awareness                       │
+│  • Ready for downstream tasks                          │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Results & Analysis
-- **Embeddings**: Multi-resolution learned representations
-- **Clusters**: Hierarchical spatial typologies  
-- **Visualizations**: Interactive and static maps
-- **Metrics**: Cross-scale validation and performance tracking
+## 📊 Accessibility Graph Construction
 
-## 📈 Current Capabilities Summary
+**Core Innovation**: Spatial constraints guide the fusion network through accessibility relationships.
 
-✅ **Multi-Resolution Processing**: 6 H3 levels (10-5)  
-✅ **Advanced Neural Architectures**: 4+ specialized architectures  
-✅ **Semantic Segmentation**: Complete satellite+aerial fusion  
-✅ **Multi-Year Analysis**: 8-year temporal coverage (Cascadia)  
-✅ **Professional Tooling**: Experiment orchestration, visualization  
-✅ **Bridge Infrastructure**: External system integration  
-✅ **Active Inference**: Hierarchical belief updating and policy optimization
+### Process (via SRAI)
+
+1. **Floodfill Travel Time**
+   ```python
+   from srai.neighbourhoods import H3Neighbourhood
+   
+   # Calculate travel times with local cutoff
+   neighbourhood = H3Neighbourhood()
+   travel_times = calculate_floodfill_times(
+       regions_gdf, 
+       cutoff_minutes=5,
+       use_srai_neighbors=True
+   )
+   ```
+
+2. **Gravity Weighting**
+   ```python
+   # Weight edges by building density attraction
+   weights = gravity_model(
+       origin_density=building_counts,
+       destination_density=building_counts,
+       travel_times=travel_times
+   )
+   ```
+
+3. **Percentile Pruning**
+   ```python
+   # Keep only strongest connections per resolution
+   pruning_thresholds = {
+       5: 0.99,  # Regional: very sparse
+       8: 0.95,  # District: sparse
+       9: 0.90,  # Neighborhood: moderate
+       10: 0.85  # Block: denser
+   }
+   ```
+
+### Multi-Resolution Hierarchy (via SRAI)
+
+```
+H3 Resolution Stack:
+├── Res 5  (8.5km)    → Regional patterns, bioregional analysis
+├── Res 8  (460m)     → District-level urban structure  
+├── Res 9  (170m)     → Neighborhood accessibility zones
+└── Res 10 (66m)      → Block-level daily patterns
+```
+
+## 🔧 Implementation Components
+
+### Spatial Operations (SRAI Only)
+
+```python
+# ✅ CORRECT: All spatial operations via SRAI
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+from srai.embedders import Hex2VecEmbedder
+
+# ❌ WRONG: Never use h3-py directly
+# import h3  # FORBIDDEN!
+```
+
+### Data Flow
+
+1. **Study Area Definition**
+   ```python
+   area_gdf = load_study_area('netherlands')
+   regions_gdf = H3Regionalizer(resolution=9).transform(area_gdf)
+   ```
+
+2. **Modality Processing** (Independent)
+   ```python
+   for modality in ['alphaearth', 'poi', 'roads', 'gtfs']:
+       embeddings = process_modality(modality, regions_gdf)
+       save_study_area_embeddings(embeddings, 'netherlands', modality)
+   ```
+
+3. **Graph Construction** (SRAI Neighborhoods)
+   ```python
+   accessibility_graph = build_accessibility_graph(
+       regions_gdf, 
+       use_srai_neighborhoods=True
+   )
+   ```
+
+4. **Fusion Training**
+   ```python
+   fusion_model = UrbanUNet(
+       input_dim=sum(modality_dims),
+       graph=accessibility_graph,
+       resolutions=[5, 8, 9, 10]
+   )
+   ```
+
+## 🎯 Design Principles
+
+### Why This Architecture?
+
+1. **Honest Complexity**: We acknowledge that development is hard
+2. **Manageable Development**: One modality at a time
+3. **Spatial Awareness**: Accessibility graphs provide meaningful constraints
+4. **Study Area Organization**: Self-contained data ecosystems
+5. **SRAI Integration**: Leverage existing spatial analysis tools
+
+### Performance Considerations
+
+- **Memory**: SRAI operations can be memory-intensive
+- **Caching**: Save intermediate results (regions_gdf, embeddings)
+- **Chunking**: Process large study areas in tiles
+- **Graph Sparsity**: Percentile pruning reduces computational load
+
+## 🔄 Data Pipeline
+
+```
+Raw Data Sources
+├── Google Earth Engine (AlphaEarth)
+├── OpenStreetMap (POI, Roads)
+├── GTFS Transit Data
+└── PDOK Netherlands (Aerial)
+         │
+         ▼
+SRAI-based H3 Processing
+├── Regionalizer creates H3 tessellation
+├── Individual modality processors
+└── Embeddings saved per study area
+         │
+         ▼
+Accessibility Graph Construction
+├── SRAI neighborhood analysis
+├── Travel time calculation
+└── Gravity-weighted pruning
+         │
+         ▼
+Fusion Network Training
+├── Graph Convolutional U-Net
+├── Multi-resolution processing
+└── High-quality urban embeddings
+```
+
+## 🚀 Future Extensions
+
+### Planned Enhancements
+
+1. **Aerial Image Generation**: Use embeddings to generate PDOK-style imagery
+2. **Temporal Dynamics**: Multi-year embedding evolution
+3. **Interactive Analysis**: Real-time exploration tools
+4. **Transfer Learning**: Cross-study-area knowledge transfer
+
+### Research Directions
+
+- **Optimal Graph Pruning**: Adaptive percentile thresholds
+- **Modality Weighting**: Learned importance scores
+- **Hierarchical Consistency**: Cross-resolution constraints
+- **Generative Applications**: Urban scenario modeling
 
 ---
 
-*Last Updated: August 29, 2025 - Reflects current implementation with renormalizing architectures, semantic segmentation, and multi-year Cascadia experiments*
+## 📚 References
+
+- **SRAI Framework**: https://srai.readthedocs.io/
+- **H3 Specification**: https://h3geo.org/ (accessed via SRAI)
+- **Graph Neural Networks**: PyTorch Geometric
+- **Urban Computing**: Spatial analysis for cities
+
+---
+
+*This architecture reflects our honest approach to complex multi-modal urban modeling through manageable late-fusion development.*

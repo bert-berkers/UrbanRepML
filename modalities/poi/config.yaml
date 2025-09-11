@@ -232,7 +232,7 @@ performance:
   # Use multiprocessing for large areas
   use_multiprocessing: true
   
-  # Memory limit for processing (MB)
+  # Memory limit for processing embeddings (MB)
   memory_limit: 8192
   
   # Batch size for API requests

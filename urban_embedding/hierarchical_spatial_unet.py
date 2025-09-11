@@ -159,7 +159,7 @@ class SRAIHierarchicalEmbedding:
                         lon += lon_step
                     lat += lat_step
                 
-                cells = list(cells)  # Convert back to list for processing
+                cells = list(cells)  # Convert back to list for processing embeddings
                 
                 # Create GeoDataFrame
                 geometries = []
@@ -455,7 +455,7 @@ class HierarchicalUNet(nn.Module):
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         
-        # Simple multi-resolution processing layers
+        # Simple multi-resolution processing embeddings layers
         self.resolution_encoders = nn.ModuleDict()
         self.output_projections = nn.ModuleDict()
         

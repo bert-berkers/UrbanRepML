@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 def setup_semantic_segmentation_config():
-    """Create configuration for semantic segmentation processing."""
+    """Create configuration for semantic segmentation processing embeddings."""
     return {
         'study_area': 'netherlands',
         'output_dir': 'data/processed/embeddings/semantic_segmentation',
@@ -88,7 +88,7 @@ def process_netherlands_segmentation():
     Process semantic segmentation for Netherlands study area.
     
     This will:
-    1. Queue AlphaEarth processing in Google Earth Engine
+    1. Queue AlphaEarth processing embeddings in Google Earth Engine
     2. Process PDOK aerial imagery with DINOv3
     3. Train the conditioned segmentation model
     4. Generate categorical land use maps
@@ -106,7 +106,7 @@ def process_netherlands_segmentation():
         study_area='netherlands',
         h3_resolution=10,
         output_dir=config['output_dir'],
-        queue_gee=True  # Queue Earth Engine processing
+        queue_gee=True  # Queue Earth Engine processing embeddings
     )
     
     # Load and analyze results
@@ -360,10 +360,10 @@ def main():
     pipeline_config = integrate_with_urban_embedding_pipeline()
     print(f"   * Configured {len(pipeline_config['modalities'])} modality pipeline")
     
-    # Example 5: Full Netherlands processing (commented out - would take hours)
+    # Example 5: Full Netherlands processing embeddings (commented out - would take hours)
     print("\n5. Full Netherlands Processing")
     print("-" * 40)
-    print("   Note: Full processing would queue Earth Engine tasks")
+    print("   Note: Full processing embeddings would queue Earth Engine tasks")
     print("   This can take several hours for the complete Netherlands")
     print("   Uncomment the following line to run:")
     print("   # results_df = process_netherlands_segmentation()")
@@ -375,11 +375,11 @@ def main():
     print("* Hierarchical U-Net with cross-attention mechanisms") 
     print("* 25 Netherlands-specific land cover classes")
     print("* Categorical variables for spatial analysis")
-    print("* H3 hexagon-based output for multi-scale processing")
+    print("* H3 hexagon-based output for multi-scale processing embeddings")
     print("* Integration with broader urban embedding pipeline")
     
     print("\nNext Steps:")
-    print("- Queue AlphaEarth processing in Google Earth Engine")
+    print("- Queue AlphaEarth processing embeddings in Google Earth Engine")
     print("- Train model on labeled Netherlands imagery")
     print("- Validate against official land use statistics")
     print("- Deploy for real-time urban monitoring")

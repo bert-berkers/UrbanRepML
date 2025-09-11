@@ -17,7 +17,7 @@ Usage:
     # Apply filtering to dataset
     filtered_data = area_filter.filter_dataset(h3_data_dict)
     
-    # Get processing chunks for memory management
+    # Get processing embeddings chunks for memory management
     chunks = area_filter.get_processing_chunks(memory_limit_gb=16)
 """
 
@@ -504,7 +504,7 @@ class StudyAreaFilter:
                             filtered_data: Dict[int, gpd.GeoDataFrame],
                             memory_limit_gb: Optional[float] = None) -> List[Dict]:
         """
-        Create processing chunks for memory-aware computation.
+        Create processing embeddings chunks for memory-aware computation.
         
         Args:
             filtered_data: Filtered H3 data
@@ -575,7 +575,7 @@ class StudyAreaFilter:
                     })
                     chunk_id += 1
         
-        logger.info(f"Created {len(chunks)} processing chunks")
+        logger.info(f"Created {len(chunks)} processing embeddings chunks")
         logger.info(f"Average hexagons per chunk: {total_hexagons / len(chunks):.0f}")
         
         return chunks

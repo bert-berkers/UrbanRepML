@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Spatial Smoothing Utilities for Cascadia Coastal Forests Processing
-Eliminates tile boundary gaps through geographic continuity-aware processing
+Eliminates tile boundary gaps through geographic continuity-aware processing embeddings
 """
 
 import numpy as np
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class SpatialSmoother:
     """
     Geographic continuity-aware spatial smoothing for H3 hexagon data
-    Eliminates artificial boundaries from tile-based processing
+    Eliminates artificial boundaries from tile-based processing embeddings
     """
     
     def __init__(self, config: dict):
@@ -351,7 +351,7 @@ class SpatialSmoother:
 
     def process_spatial_smoothing(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, float]]:
         """
-        Main processing pipeline for spatial smoothing
+        Main processing embeddings pipeline for spatial smoothing
         """
         logger.info("="*60)
         logger.info("SPATIAL SMOOTHING PIPELINE")

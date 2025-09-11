@@ -50,7 +50,7 @@ def process_aerial_imagery_standalone():
     processor = AerialImageryProcessor(config)
     
     # Run pipeline
-    logger.info("Starting aerial imagery processing for South Holland")
+    logger.info("Starting aerial imagery processing embeddings for South Holland")
     output_path = processor.run_pipeline(
         study_area='south_holland',
         h3_resolution=10,
@@ -111,7 +111,7 @@ def combine_with_alphaearth():
         )
         results['alphaearth'] = pd.read_parquet(alphaearth_path)
     except Exception as e:
-        logger.warning(f"AlphaEarth processing skipped: {e}")
+        logger.warning(f"AlphaEarth processing embeddings skipped: {e}")
     
     # Merge embeddings
     if len(results) > 1:
@@ -143,7 +143,7 @@ def combine_with_alphaearth():
 
 def hierarchical_active_inference_example():
     """
-    Demonstrate hierarchical processing with active inference principles.
+    Demonstrate hierarchical processing embeddings with active inference principles.
     
     This shows how the nested structure works:
     1. Fine-scale image patches (H3 res 12-13)
@@ -162,7 +162,7 @@ def hierarchical_active_inference_example():
         use_registers=True
     )
     
-    # Simulate processing an image
+    # Simulate processing embeddings an image
     logger.info("Demonstrating hierarchical encoding...")
     
     # Create dummy image (would be real PDOK image in practice)
@@ -197,7 +197,7 @@ def main():
     print("PDOK Aerial Imagery Processing with DINOv3")
     print("=" * 80)
     
-    # Example 1: Standalone processing
+    # Example 1: Standalone processing embeddings
     print("\n1. Processing PDOK aerial imagery...")
     aerial_embeddings = process_aerial_imagery_standalone()
     print(f"   ✓ Generated embeddings for {len(aerial_embeddings)} hexagons")

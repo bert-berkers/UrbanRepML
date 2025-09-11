@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Quick progress checker for current SRAI processing
+Quick progress checker for current SRAI processing embeddings
 """
 
 import time

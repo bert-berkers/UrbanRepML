@@ -10,7 +10,7 @@ gee:
 
 # TIFF Processing settings
 processing:
-  # Subtile size for memory-efficient processing
+  # Subtile size for memory-efficient processing embeddings
   subtile_size: 256
   
   # Minimum pixels required per hexagon to include it
