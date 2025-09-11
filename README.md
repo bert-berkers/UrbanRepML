@@ -1,6 +1,6 @@
 # UrbanRepML [under heavy construction]
 
-For philosophical background see https://www.youtube.com/watch?v=UYD8CR_Xorg&ab_channel=ActiveInferenceInstitute
+For philosophical background and preliminary results of fused spatial U-NET embeddings see https://www.youtube.com/watch?v=UYD8CR_Xorg&ab_channel=ActiveInferenceInstitute
 
 **High-Quality Urban Embeddings through Manageable Late-Fusion**
 
