@@ -1,4 +1,6 @@
-# UrbanRepML
+# UrbanRepML [under heavy construction]
+
+For philosophical background see https://www.youtube.com/watch?v=UYD8CR_Xorg&ab_channel=ActiveInferenceInstitute
 
 **High-Quality Urban Embeddings through Manageable Late-Fusion**
 
