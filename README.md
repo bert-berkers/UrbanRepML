@@ -17,7 +17,7 @@ Learn dense urban representations by processing modalities one at a time, then f
 
 ## 🎯 Core Goal
 
-Create high-quality urban embeddings capable of reconstructing urban environments. The ultimate aim is to enable aerial image generation from learned representations, that way we can paint new developments :). We focus on manageable development through late-fusion because handling multiple parallel datasets is hard.
+Create high-quality urban embeddings capable of reconstructing urban environments. The ultimate aim is to enable aerial image generation from learned representations, that way we can paint new developments with embeddings as our paint and hexagonally indiced regions as our canvas. We focus on manageable development through late-fusion because handling multiple parallel datasets is hard.
 
 ## 🌍 Study Areas
 
