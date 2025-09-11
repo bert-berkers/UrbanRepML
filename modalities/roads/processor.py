@@ -1,33 +1,29 @@
 """
 Roads Network Modality Processor
 
-Processes OpenStreetMap road network data into H3 hexagon embeddings using SRAI.
-Extracts network topology, connectivity metrics, and road type distributions.
+Processes OpenStreetMap road network data into H3 hexagon embeddings using SRAI's Highway2VecEmbedder.
 """
 
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Union
 import warnings
 
 import pandas as pd
 import geopandas as gpd
-import numpy as np
-from shapely.geometry import Point, LineString, Polygon
-import h3
-from tqdm.auto import tqdm
 
 # SRAI imports
-from srai.loaders import OSMWayLoader, OSMPbfLoader, OSMOnlineLoader
+from srai.loaders import OSMPbfLoader, OSMOnlineLoader
 from srai.regionalizers import H3Regionalizer
 from srai.joiners import IntersectionJoiner
 
-# Network analysis
-import networkx as nx
-import osmnx as ox
-
-# Import base class
-from ..base import ModalityProcessor
+# Import Highway2VecEmbedder
+try:
+    from srai.embedders import Highway2VecEmbedder
+    HIGHWAY2VEC_AVAILABLE = True
+except ImportError:
+    HIGHWAY2VEC_AVAILABLE = False
+    logging.warning("Highway2VecEmbedder not available. Install with: pip install srai[torch]")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
@@ -38,356 +34,400 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
 
+class ModalityProcessor:
+    """Base class for modality processors."""
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+
+    def save_embeddings(self, embeddings_df: pd.DataFrame, output_dir: str, filename: str) -> str:
+        """Save embeddings to parquet file."""
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        output_path = Path(output_dir) / filename
+        embeddings_df.to_parquet(output_path)
+        return str(output_path)
+
+
+# Default road types to consider
+DEFAULT_ROAD_TYPES = [
+    'motorway', 'motorway_link', 'trunk', 'trunk_link', 
+    'primary', 'primary_link', 'secondary', 'secondary_link',
+    'tertiary', 'tertiary_link', 'unclassified', 'residential',
+    'living_street', 'service', 'road'
+]
+
+
 class RoadsProcessor(ModalityProcessor):
-    """Process road network data into H3 hexagon embeddings."""
-    
-    # Road type hierarchy for classification
-    ROAD_HIERARCHY = {
-        'motorway': 1.0,
-        'motorway_link': 0.9,
-        'trunk': 0.85,
-        'trunk_link': 0.8,
-        'primary': 0.75,
-        'primary_link': 0.7,
-        'secondary': 0.65,
-        'secondary_link': 0.6,
-        'tertiary': 0.55,
-        'tertiary_link': 0.5,
-        'unclassified': 0.4,
-        'residential': 0.35,
-        'living_street': 0.3,
-        'service': 0.25,
-        'pedestrian': 0.2,
-        'track': 0.15,
-        'footway': 0.1,
-        'cycleway': 0.1,
-        'path': 0.05
-    }
-    
+    """Process road network data into H3 hexagon embeddings using Highway2Vec."""
+
     def __init__(self, config: Dict[str, Any]):
         """Initialize roads processor with configuration."""
         super().__init__(config)
+        
+        if not HIGHWAY2VEC_AVAILABLE:
+            raise RuntimeError("RoadsProcessor requires Highway2VecEmbedder. Install with: pip install srai[torch]")
+        
         self.validate_config()
         
-        # Set up data source
+        # Data configuration
         self.data_source = config.get('data_source', 'osm_online')
         self.pbf_path = config.get('pbf_path', None)
-        self.road_types = config.get('road_types', list(self.ROAD_HIERARCHY.keys()))
-        self.compute_network_metrics = config.get('compute_network_metrics', True)
-        self.chunk_size = config.get('chunk_size', 1000)
-        self.max_workers = config.get('max_workers', 4)
+        self.road_types = config.get('road_types', DEFAULT_ROAD_TYPES)
         
-        logger.info(f"Initialized RoadsProcessor with data source: {self.data_source}")
-    
+        # Highway2Vec parameters from config section
+        highway2vec_config = config.get('highway2vec', {})
+        self.embedding_size = highway2vec_config.get('embedding_size', config.get('embedding_size', 30))
+        self.hidden_size = highway2vec_config.get('hidden_size', config.get('hidden_size', 64))
+        self.highway2vec_epochs = highway2vec_config.get('epochs', config.get('highway2vec_epochs', 25))
+        self.highway2vec_batch_size = highway2vec_config.get('batch_size', config.get('highway2vec_batch_size', 128))
+        
+        # Intermediate data saving
+        self.save_intermediate = config.get('save_intermediate', False)
+        self.intermediate_dir = Path(config.get('intermediate_dir', 'data/processed/intermediate/roads'))
+        
+        logger.info(f"Initialized RoadsProcessor with Highway2Vec (embedding_size={self.embedding_size})")
+        logger.info(f"Highway2Vec epochs: {self.highway2vec_epochs}, batch_size: {self.highway2vec_batch_size}")
+        if self.save_intermediate:
+            logger.info(f"Intermediate data will be saved to: {self.intermediate_dir}")
+
     def validate_config(self):
         """Validate configuration parameters."""
-        required = ['output_dir']
-        for param in required:
-            if param not in self.config:
-                raise ValueError(f"Missing required config parameter: {param}")
-        
-        # Validate data source
         if self.config.get('data_source') == 'pbf' and not self.config.get('pbf_path'):
             raise ValueError("PBF data source requires 'pbf_path' in config")
-    
-    def load_data(self, study_area: Union[str, gpd.GeoDataFrame]) -> gpd.GeoDataFrame:
+
+    def load_data(self, area_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """Load road network data for the study area."""
         logger.info(f"Loading road network data using {self.data_source}")
         
-        # Convert study area to GeoDataFrame if needed
-        if isinstance(study_area, str):
-            # Assume it's a file path
-            area_gdf = gpd.read_file(study_area)
-        else:
-            area_gdf = study_area
-        
-        # Ensure WGS84 projection
+        # Ensure WGS84
         if area_gdf.crs != 'EPSG:4326':
             area_gdf = area_gdf.to_crs('EPSG:4326')
         
-        # Load roads based on data source
-        if self.data_source == 'pbf' and self.pbf_path:
-            roads_gdf = self._load_from_pbf(area_gdf)
+        # Define tags for OSM loading
+        tags = {'highway': self.road_types}
+        
+        # Load roads
+        if self.data_source == 'pbf':
+            loader = OSMPbfLoader()
+            roads_gdf = loader.load(self.pbf_path, tags=tags, area=area_gdf)
         else:
-            roads_gdf = self._load_from_osm_online(area_gdf)
+            loader = OSMOnlineLoader()
+            roads_gdf = loader.load(area_gdf, tags=tags)
+        
+        # Filter to line geometries only
+        if not roads_gdf.empty:
+            initial_count = len(roads_gdf)
+            roads_gdf = roads_gdf[roads_gdf.geometry.type.isin(['LineString', 'MultiLineString'])]
+            if len(roads_gdf) < initial_count:
+                logger.info(f"Filtered {initial_count - len(roads_gdf)} non-linear geometries")
         
         logger.info(f"Loaded {len(roads_gdf)} road segments")
         return roads_gdf
-    
-    def _load_from_pbf(self, area_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-        """Load roads from PBF file."""
-        loader = OSMPbfLoader()
+
+    def highway2vec(self, roads_gdf: gpd.GeoDataFrame, area_gdf_or_regions: gpd.GeoDataFrame, 
+                   h3_resolution: int, study_area_name: str = "unnamed") -> pd.DataFrame:
+        """Train Highway2Vec model and generate road network embeddings using GPU."""
+        logger.info(f"Starting Highway2Vec training for H3 resolution {h3_resolution}")
+        logger.info(f"Road segments: {len(roads_gdf):,}")
         
-        # Create highway tags filter
-        tags = {'highway': self.road_types}
+        # Check if we're passed regions directly or need to create them
+        if 'geometry' in area_gdf_or_regions.columns and len(area_gdf_or_regions) > 1000:
+            # This looks like pre-computed regions
+            logger.info("Using pre-computed H3 regions...")
+            regions_gdf = area_gdf_or_regions
+            logger.info(f"Using {len(regions_gdf):,} pre-computed H3 regions")
+            
+            # For intermediate data, we need to create a joint_gdf
+            # This is a simplified version - in real use, joint_gdf should be loaded too
+            logger.info("Creating spatial join for Highway2Vec (this may take time)...")
+            from srai.joiners import IntersectionJoiner
+            joiner = IntersectionJoiner()
+            joint_gdf = joiner.transform(regions=regions_gdf, features=roads_gdf)
+            logger.info(f"Created {len(joint_gdf):,} road-region pairs")
+            
+        else:
+            # Standard workflow - create regions from boundary
+            area_gdf = area_gdf_or_regions
+            
+            # 1. H3 Regionalization
+            logger.info("Step 1: Creating H3 hexagonal regions...")
+            regionalizer = H3Regionalizer(resolution=h3_resolution)
+            regions_gdf = regionalizer.transform(area_gdf)
+            logger.info(f"Created {len(regions_gdf):,} H3 regions at resolution {h3_resolution}")
+            
+            # 2. Spatial Joining
+            logger.info("Step 2: Spatially joining roads to H3 regions...")
+            joiner = IntersectionJoiner()
+            joint_gdf = joiner.transform(regions=regions_gdf, features=roads_gdf)
+            road_region_matches = len(joint_gdf)
+            logger.info(f"Joined {road_region_matches:,} road-region pairs")
+            
+            # Save intermediate data if requested
+            if self.save_intermediate:
+                self._save_intermediate_data(roads_gdf, regions_gdf, joint_gdf, h3_resolution, study_area_name)
         
-        # Load from PBF
-        roads_gdf = loader.load(
-            self.pbf_path,
-            tags=tags,
-            area=area_gdf
+        # 3. Prepare features for Highway2Vec
+        logger.info("Step 3: Preparing features for Highway2Vec training...")
+        
+        # Highway2Vec works with the spatial relationships, not individual road features
+        # We need to create a feature matrix from the roads data
+        features_for_training = self._prepare_highway2vec_features(roads_gdf, regions_gdf, joint_gdf)
+        logger.info(f"Prepared features shape: {features_for_training.shape}")
+        
+        # 4. Highway2Vec Training
+        logger.info("Step 4: Training Highway2Vec autoencoder...")
+        logger.info(f"Model architecture: {self.hidden_size} -> {self.embedding_size} dimensions")
+        logger.info("Initializing Highway2Vec (using RTX 3090 if available)...")
+        
+        # Initialize Highway2Vec embedder
+        embedder = Highway2VecEmbedder(
+            hidden_size=self.hidden_size,
+            embedding_size=self.embedding_size
         )
         
-        return roads_gdf
-    
-    def _load_from_osm_online(self, area_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-        """Load roads from OSM online API."""
-        loader = OSMWayLoader(
-            way_type='highway',
-            osm_way_filter={'highway': self.road_types}
-        )
-        
-        # Load from OSM API
-        roads_gdf = loader.load(area_gdf)
-        
-        # Filter to study area if needed
-        if not roads_gdf.empty:
-            roads_gdf = gpd.sjoin(
-                roads_gdf,
-                area_gdf,
-                how='inner',
-                predicate='intersects'
-            )
-        
-        return roads_gdf
-    
-    def process_to_h3(self, data: gpd.GeoDataFrame, h3_resolution: int) -> pd.DataFrame:
-        """Process road network into H3 hexagon embeddings."""
-        logger.info(f"Processing roads to H3 resolution {h3_resolution}")
-        
-        # Create H3 hexagons for the area
-        bounds = data.total_bounds
-        area_polygon = Polygon([
-            (bounds[0], bounds[1]),
-            (bounds[2], bounds[1]),
-            (bounds[2], bounds[3]),
-            (bounds[0], bounds[3])
-        ])
-        area_gdf = gpd.GeoDataFrame([1], geometry=[area_polygon], crs='EPSG:4326')
-        
-        # Generate H3 hexagons
-        regionalizer = H3Regionalizer(resolution=h3_resolution)
-        hexagons_gdf = regionalizer.transform(area_gdf)
-        
-        logger.info(f"Created {len(hexagons_gdf)} H3 hexagons")
-        
-        # Calculate road features per hexagon
-        embeddings = self._calculate_road_embeddings(data, hexagons_gdf, h3_resolution)
-        
-        return embeddings
-    
-    def _calculate_road_embeddings(self, roads_gdf: gpd.GeoDataFrame, 
-                                  hexagons_gdf: gpd.GeoDataFrame,
-                                  h3_resolution: int) -> pd.DataFrame:
-        """Calculate road network embeddings for each hexagon."""
-        logger.info("Calculating road embeddings per hexagon")
-        
-        # Spatial join roads with hexagons
-        joiner = IntersectionJoiner()
-        joined_gdf = joiner.transform(hexagons_gdf, roads_gdf)
-        
-        # Initialize embedding DataFrame
-        embeddings_list = []
-        
-        # Process each hexagon
-        for hex_id in tqdm(hexagons_gdf.index, desc="Processing hexagons"):
-            hex_roads = joined_gdf[joined_gdf.index == hex_id]
-            
-            if hex_roads.empty:
-                # No roads in this hexagon
-                embedding = self._get_empty_embedding(hex_id)
-            else:
-                embedding = self._calculate_hex_embedding(hex_id, hex_roads)
-            
-            embeddings_list.append(embedding)
-        
-        # Combine all embeddings
-        embeddings_df = pd.DataFrame(embeddings_list)
-        embeddings_df['h3_resolution'] = h3_resolution
-        
-        # Add network metrics if requested
-        if self.compute_network_metrics:
-            logger.info("Computing network-wide metrics")
-            network_metrics = self._compute_network_metrics(roads_gdf, hexagons_gdf)
-            embeddings_df = embeddings_df.merge(
-                network_metrics,
-                on='h3_index',
-                how='left'
-            )
-        
-        return embeddings_df
-    
-    def _calculate_hex_embedding(self, hex_id: str, hex_roads: gpd.GeoDataFrame) -> Dict:
-        """Calculate embedding for a single hexagon."""
-        embedding = {'h3_index': hex_id}
-        
-        # Road type distribution
-        for road_type, importance in self.ROAD_HIERARCHY.items():
-            type_roads = hex_roads[hex_roads.get('highway', '') == road_type]
-            if not type_roads.empty:
-                # Calculate total length
-                type_length = type_roads.geometry.length.sum()
-                embedding[f'road_{road_type}_length'] = type_length
-                embedding[f'road_{road_type}_count'] = len(type_roads)
-            else:
-                embedding[f'road_{road_type}_length'] = 0
-                embedding[f'road_{road_type}_count'] = 0
-        
-        # Overall statistics
-        embedding['total_road_length'] = hex_roads.geometry.length.sum()
-        embedding['road_count'] = len(hex_roads)
-        embedding['road_density'] = embedding['total_road_length'] / h3.cell_area(hex_id, 'km^2')
-        
-        # Road hierarchy score (weighted by importance)
-        hierarchy_score = 0
-        total_length = 0
-        for _, road in hex_roads.iterrows():
-            road_type = road.get('highway', 'unclassified')
-            importance = self.ROAD_HIERARCHY.get(road_type, 0.1)
-            length = road.geometry.length
-            hierarchy_score += importance * length
-            total_length += length
-        
-        embedding['road_hierarchy_score'] = hierarchy_score / total_length if total_length > 0 else 0
-        
-        # Connectivity metrics
-        unique_intersections = set()
-        for geom in hex_roads.geometry:
-            if hasattr(geom, 'coords'):
-                coords = list(geom.coords)
-                unique_intersections.add(coords[0])  # Start point
-                unique_intersections.add(coords[-1])  # End point
-        
-        embedding['intersection_count'] = len(unique_intersections)
-        embedding['connectivity_index'] = len(unique_intersections) / (len(hex_roads) + 1) if len(hex_roads) > 0 else 0
-        
-        return embedding
-    
-    def _get_empty_embedding(self, hex_id: str) -> Dict:
-        """Get empty embedding for hexagon with no roads."""
-        embedding = {'h3_index': hex_id}
-        
-        # Initialize all road type features to 0
-        for road_type in self.ROAD_HIERARCHY.keys():
-            embedding[f'road_{road_type}_length'] = 0
-            embedding[f'road_{road_type}_count'] = 0
-        
-        # Overall statistics
-        embedding['total_road_length'] = 0
-        embedding['road_count'] = 0
-        embedding['road_density'] = 0
-        embedding['road_hierarchy_score'] = 0
-        embedding['intersection_count'] = 0
-        embedding['connectivity_index'] = 0
-        
-        return embedding
-    
-    def _compute_network_metrics(self, roads_gdf: gpd.GeoDataFrame, 
-                                hexagons_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
-        """Compute network-level metrics using graph analysis."""
+        # Train and generate embeddings with GPU acceleration
         try:
-            # Build network graph
-            logger.info("Building road network graph")
+            logger.info("Training autoencoder on road network patterns...")
+            embeddings_gdf = embedder.fit_transform(
+                regions_gdf=regions_gdf,
+                features_gdf=features_for_training,
+                joint_gdf=joint_gdf,
+                trainer_kwargs={
+                    'accelerator': 'auto',  # Use GPU if available
+                    'devices': 1,
+                    'max_epochs': self.highway2vec_epochs,  # GPU-optimized epochs
+                    'enable_progress_bar': True
+                },
+                dataloader_kwargs={
+                    'batch_size': self.highway2vec_batch_size
+                }
+            )
             
-            # Create nodes from road endpoints
-            nodes = []
-            edges = []
+            logger.info("Highway2Vec training completed successfully!")
+            logger.info(f"Generated embeddings for {len(embeddings_gdf):,} hexagons")
             
-            for idx, road in roads_gdf.iterrows():
-                if hasattr(road.geometry, 'coords'):
-                    coords = list(road.geometry.coords)
-                    start = coords[0]
-                    end = coords[-1]
-                    
-                    nodes.extend([start, end])
-                    edges.append((start, end, {
-                        'weight': road.geometry.length,
-                        'highway': road.get('highway', 'unclassified')
-                    }))
+            # Convert to DataFrame format
+            embeddings_df = pd.DataFrame(embeddings_gdf.drop(columns='geometry', errors='ignore'))
             
-            # Create graph
-            G = nx.Graph()
-            G.add_nodes_from(set(nodes))
-            G.add_edges_from(edges)
-            
-            logger.info(f"Network graph has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
-            
-            # Calculate centrality metrics for nodes
-            if G.number_of_nodes() > 0:
-                degree_centrality = nx.degree_centrality(G)
+            # Format output for consistency
+            if embeddings_df.index.name == 'region_id':
+                embeddings_df.index.name = 'h3_index'
+            elif embeddings_df.index.name is None:
+                embeddings_df.index.name = 'h3_index'
                 
-                # Limited betweenness centrality (sample for performance)
-                if G.number_of_nodes() > 100:
-                    k = min(100, G.number_of_nodes())
-                    betweenness_centrality = nx.betweenness_centrality(G, k=k)
-                else:
-                    betweenness_centrality = nx.betweenness_centrality(G)
-                
-                # Assign metrics to hexagons
-                hex_metrics = []
-                for hex_id in hexagons_gdf.index:
-                    hex_geom = hexagons_gdf.loc[hex_id, 'geometry']
-                    
-                    # Find nodes within hexagon
-                    hex_degree = []
-                    hex_betweenness = []
-                    
-                    for node in G.nodes():
-                        point = Point(node)
-                        if hex_geom.contains(point):
-                            hex_degree.append(degree_centrality.get(node, 0))
-                            hex_betweenness.append(betweenness_centrality.get(node, 0))
-                    
-                    hex_metrics.append({
-                        'h3_index': hex_id,
-                        'avg_degree_centrality': np.mean(hex_degree) if hex_degree else 0,
-                        'max_degree_centrality': np.max(hex_degree) if hex_degree else 0,
-                        'avg_betweenness_centrality': np.mean(hex_betweenness) if hex_betweenness else 0,
-                        'max_betweenness_centrality': np.max(hex_betweenness) if hex_betweenness else 0
-                    })
-                
-                return pd.DataFrame(hex_metrics)
+            embeddings_df['h3_resolution'] = h3_resolution
+            embeddings_df.index = embeddings_df.index.astype(str)
+            
+            # Log embedding statistics
+            embedding_cols = [col for col in embeddings_df.columns 
+                            if col not in ['h3_resolution', 'h3_index']]
+            if embedding_cols:
+                sample_values = embeddings_df[embedding_cols].iloc[0].values
+                logger.info(f"Embedding dimensions: {len(embedding_cols)}")
+                logger.info(f"Sample embedding values: {sample_values[:5]}...") 
+            
+            return embeddings_df.reset_index()
             
         except Exception as e:
-            logger.warning(f"Could not compute network metrics: {e}")
-        
-        # Return empty metrics if computation fails
-        return pd.DataFrame({
-            'h3_index': hexagons_gdf.index,
-            'avg_degree_centrality': 0,
-            'max_degree_centrality': 0,
-            'avg_betweenness_centrality': 0,
-            'max_betweenness_centrality': 0
-        })
+            logger.error(f"Highway2Vec training failed: {e}")
+            if "CUDA" in str(e) or "GPU" in str(e) or "torch" in str(e).lower():
+                logger.info("GPU training failed. Suggestions:")
+                logger.info("  - Check CUDA installation: nvidia-smi")
+                logger.info("  - Check PyTorch GPU: python -c 'import torch; print(torch.cuda.is_available())'")
+                logger.info("  - Fallback to CPU: set CUDA_VISIBLE_DEVICES=''")
+            raise
     
-    def run_pipeline(self, study_area: Union[str, gpd.GeoDataFrame], 
+    def _prepare_highway2vec_features(self, roads_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
+                                     joint_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """Prepare numerical features for Highway2Vec training."""
+        logger.info("Preparing numerical features from roads data...")
+        
+        # Extract highway types and create numerical encodings
+        highway_types = roads_gdf['highway'].value_counts()
+        logger.info(f"Found {len(highway_types)} highway types: {list(highway_types.head().index)}")
+        
+        # Create a copy of roads_gdf for feature engineering
+        features_gdf = roads_gdf.copy()
+        
+        # 1. One-hot encode highway types (limited to most common to avoid too many features)
+        top_highway_types = highway_types.head(10).index  # Top 10 most common types
+        for highway_type in top_highway_types:
+            features_gdf[f'highway_{highway_type}'] = (features_gdf['highway'] == highway_type).astype(int)
+        
+        # 2. Calculate geometric features
+        if features_gdf.crs != 'EPSG:4326':
+            features_gdf = features_gdf.to_crs('EPSG:4326')
+            
+        # Road length (in degrees, will be normalized anyway)
+        features_gdf['road_length'] = features_gdf.geometry.length
+        
+        # Road complexity (number of coordinates)
+        features_gdf['road_complexity'] = features_gdf.geometry.apply(
+            lambda geom: len(geom.coords) if hasattr(geom, 'coords') else 1
+        )
+        
+        # 3. Keep only numerical columns for Highway2Vec
+        numerical_cols = [col for col in features_gdf.columns 
+                         if col.startswith('highway_') or col in ['road_length', 'road_complexity']]
+        
+        features_numerical = features_gdf[numerical_cols + ['geometry']].copy()
+        
+        # 4. Fill any remaining NaN values
+        for col in numerical_cols:
+            features_numerical[col] = features_numerical[col].fillna(0).astype(float)
+        
+        logger.info(f"Created {len(numerical_cols)} numerical features: {numerical_cols[:5]}...")
+        logger.info(f"Feature matrix shape: {features_numerical.shape}")
+        
+        return features_numerical
+    
+    def _train_highway2vec_with_data(self, roads_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
+                                   joint_gdf: gpd.GeoDataFrame, h3_resolution: int, study_area_name: str) -> pd.DataFrame:
+        """Train Highway2Vec with pre-loaded intermediate data."""
+        logger.info(f"Training Highway2Vec with pre-loaded data for H3 resolution {h3_resolution}")
+        logger.info(f"Roads: {len(roads_gdf):,}, Regions: {len(regions_gdf):,}, Joints: {len(joint_gdf):,}")
+        
+        # Prepare features for Highway2Vec
+        logger.info("Preparing features for Highway2Vec training...")
+        features_for_training = self._prepare_highway2vec_features(roads_gdf, regions_gdf, joint_gdf)
+        logger.info(f"Prepared features shape: {features_for_training.shape}")
+        
+        # Highway2Vec Training
+        logger.info("Training Highway2Vec autoencoder...")
+        logger.info(f"Model architecture: {self.hidden_size} -> {self.embedding_size} dimensions")
+        logger.info("Initializing Highway2Vec (using RTX 3090 if available)...")
+        
+        # Get batch size from config (default to 128 if not specified)
+        batch_size = getattr(self, 'highway2vec_batch_size', 128)
+        logger.info(f"Using batch size: {batch_size} for Highway2Vec training")
+        
+        # Initialize Highway2Vec embedder
+        from srai.embedders import Highway2VecEmbedder
+        embedder = Highway2VecEmbedder(
+            hidden_size=self.hidden_size,
+            embedding_size=self.embedding_size
+        )
+        
+        # Train and generate embeddings with GPU acceleration
+        try:
+            logger.info("Training autoencoder on road network patterns...")
+            
+            embeddings_gdf = embedder.fit_transform(
+                regions_gdf=regions_gdf,
+                features_gdf=features_for_training,
+                joint_gdf=joint_gdf,
+                trainer_kwargs={
+                    'accelerator': 'auto',  # Use GPU if available
+                    'devices': 1,
+                    'max_epochs': self.highway2vec_epochs,  # GPU-optimized epochs
+                    'enable_progress_bar': True
+                },
+                dataloader_kwargs={
+                    'batch_size': self.highway2vec_batch_size
+                }
+            )
+            
+            logger.info("Highway2Vec training completed successfully!")
+            logger.info(f"Generated embeddings for {len(embeddings_gdf):,} hexagons")
+            
+            # Convert to DataFrame format
+            embeddings_df = pd.DataFrame(embeddings_gdf.drop(columns='geometry', errors='ignore'))
+            
+            # Format output for consistency
+            if embeddings_df.index.name == 'region_id':
+                embeddings_df.index.name = 'h3_index'
+            elif embeddings_df.index.name is None:
+                embeddings_df.index.name = 'h3_index'
+                
+            embeddings_df['h3_resolution'] = h3_resolution
+            embeddings_df.index = embeddings_df.index.astype(str)
+            
+            # Log embedding statistics
+            embedding_cols = [col for col in embeddings_df.columns 
+                            if col not in ['h3_resolution', 'h3_index']]
+            if embedding_cols:
+                sample_values = embeddings_df[embedding_cols].iloc[0].values
+                logger.info(f"Embedding dimensions: {len(embedding_cols)}")
+                logger.info(f"Sample embedding values: {sample_values[:5]}...") 
+            
+            return embeddings_df.reset_index()
+            
+        except Exception as e:
+            logger.error(f"Highway2Vec training failed: {e}")
+            if "CUDA" in str(e) or "GPU" in str(e) or "torch" in str(e).lower():
+                logger.info("GPU training failed. Suggestions:")
+                logger.info("  - Check CUDA installation: nvidia-smi")
+                logger.info("  - Check PyTorch GPU: python -c 'import torch; print(torch.cuda.is_available())'")
+                logger.info("  - Fallback to CPU: set CUDA_VISIBLE_DEVICES=''")
+            raise
+    
+    def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
+                               joint_gdf: gpd.GeoDataFrame, h3_resolution: int, study_area_name: str):
+        """Save intermediate SRAI data for debugging and analysis."""
+        logger.info("Saving intermediate data...")
+        
+        # Create directories
+        features_dir = self.intermediate_dir / 'features_gdf'
+        regions_dir = self.intermediate_dir / 'regions_gdf'
+        joint_dir = self.intermediate_dir / 'joint_gdf'
+        
+        for dir_path in [features_dir, regions_dir, joint_dir]:
+            dir_path.mkdir(parents=True, exist_ok=True)
+        
+        # Generate filenames with study area and resolution
+        base_name = f"{study_area_name}_res{h3_resolution}"
+        
+        # Save features (roads)
+        features_path = features_dir / f"{base_name}_features.parquet"
+        features_gdf.to_parquet(features_path)
+        logger.info(f"Saved features_gdf to {features_path}")
+        
+        # Save regions (H3 hexagons)
+        regions_path = regions_dir / f"{base_name}_regions.parquet"
+        regions_gdf.to_parquet(regions_path)
+        logger.info(f"Saved regions_gdf to {regions_path}")
+        
+        # Save joint (spatial join results)
+        joint_path = joint_dir / f"{base_name}_joint.parquet"
+        joint_gdf.to_parquet(joint_path)
+        logger.info(f"Saved joint_gdf to {joint_path}")
+        
+        logger.info(f"Intermediate data saved for {study_area_name} at resolution {h3_resolution}")
+
+    def run_pipeline(self, study_area: Union[str, gpd.GeoDataFrame],
                     h3_resolution: int,
-                    output_dir: str = None) -> str:
-        """Execute complete road processing pipeline."""
+                    output_dir: str = None,
+                    study_area_name: str = None) -> str:
+        """Execute complete road processing embeddings pipeline."""
         logger.info(f"Starting roads pipeline for resolution {h3_resolution}")
         
         # Use configured output dir if not specified
         if output_dir is None:
             output_dir = self.config.get('output_dir', 'data/processed/embeddings/roads')
         
-        # Load road data
-        roads_gdf = self.load_data(study_area)
+        # Load study area
+        if isinstance(study_area, str):
+            area_gdf = gpd.read_file(study_area)
+            if study_area_name is None:
+                study_area_name = Path(study_area).stem
+        else:
+            area_gdf = study_area
+            if study_area_name is None:
+                study_area_name = "unnamed"
         
+        # Load road data
+        roads_gdf = self.load_data(area_gdf)
         if roads_gdf.empty:
             logger.warning("No road data found for study area")
             return None
         
-        # Process to H3
-        embeddings_df = self.process_to_h3(roads_gdf, h3_resolution)
+        # Train Highway2Vec and generate embeddings
+        embeddings_df = self.highway2vec(roads_gdf, area_gdf, h3_resolution, study_area_name)
         
         # Save embeddings
-        output_path = self.save_embeddings(
-            embeddings_df, 
-            output_dir,
-            filename=f"roads_embeddings_res{h3_resolution}.parquet"
-        )
+        output_filename = f"roads_embeddings_res{h3_resolution}.parquet"
+        output_path = self.save_embeddings(embeddings_df, output_dir, output_filename)
         
         logger.info(f"Roads embeddings saved to {output_path}")
-        logger.info(f"Processed {len(embeddings_df)} hexagons with {embeddings_df.shape[1]} features")
+        logger.info(f"Completed! Processed {len(embeddings_df):,} hexagons with {self.embedding_size}D Highway2Vec embeddings")
         
         return output_path

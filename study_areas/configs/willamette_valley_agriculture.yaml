@@ -50,7 +50,7 @@ resolution_rules:
     condition: "FSI_24 >= 0.2 and building_volume > 1000"
     resolution: 10
     priority: 100
-    description: "Intensive specialty crop areas with processing/storage infrastructure"
+    description: "Intensive specialty crop areas with processing embeddings/storage infrastructure"
     
   - name: mixed_farming_systems
     condition: "FSI_24 >= 0.1 and FSI_24 < 0.2"

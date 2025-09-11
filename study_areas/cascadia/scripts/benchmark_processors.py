@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Performance benchmark comparing rasterio vs rioxarray processors.
-Measures speed, memory usage, and output quality for AlphaEarth processing.
+Measures speed, memory usage, and output quality for AlphaEarth processing embeddings.
 """
 
 import numpy as np
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class ProcessorBenchmark:
-    """Benchmark different AlphaEarth processing approaches."""
+    """Benchmark different AlphaEarth processing embeddings approaches."""
     
     def __init__(self, config: dict):
         """Initialize benchmark with configuration."""
@@ -61,7 +61,7 @@ class ProcessorBenchmark:
         
         # Update config to use only test files
         test_config = self.config.copy()
-        test_config['processing']['batch_size'] = len(test_files)
+        test_config['processing embeddings']['batch_size'] = len(test_files)
         
         # Initialize processor
         processor = AlphaEarthToH3Converter(test_config)
@@ -117,7 +117,7 @@ class ProcessorBenchmark:
         
         # Update config to use only test files
         test_config = self.config.copy()
-        test_config['processing']['batch_size'] = len(test_files)
+        test_config['processing embeddings']['batch_size'] = len(test_files)
         
         # Add rioxarray config if not present
         if 'rioxarray' not in test_config:
@@ -178,7 +178,7 @@ class ProcessorBenchmark:
         
         # Update config to use only test files
         test_config = self.config.copy()
-        test_config['processing']['batch_size'] = len(test_files)
+        test_config['processing embeddings']['batch_size'] = len(test_files)
         
         # Add SRAI config if not present
         if 'srai' not in test_config:

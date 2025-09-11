@@ -12,7 +12,7 @@ This package contains processors for different urban data modalities:
 - Buildings: Building footprint embeddings
 - StreetView: Street-level imagery embeddings
 
-Each modality follows a standardized interface for processing raw data
+Each modality follows a standardized interface for processing embeddings raw data
 into H3 hexagon-based embeddings.
 """
 
@@ -54,7 +54,7 @@ class ModalityProcessor(ABC):
     
     def run_pipeline(self, study_area: str, h3_resolution: int, 
                     output_dir: Path, force_download: bool = False) -> Path:
-        """Run complete processing pipeline."""
+        """Run complete processing embeddings pipeline."""
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         

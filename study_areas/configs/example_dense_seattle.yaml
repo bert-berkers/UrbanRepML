@@ -66,7 +66,7 @@ density_filtering:
 
 # Computational Constraints
 max_memory_gb: 16.0
-max_hexagons_per_chunk: 50000  # Smaller chunks for dense urban processing
+max_hexagons_per_chunk: 50000  # Smaller chunks for dense urban processing embeddings
 enable_chunking: true
 
 # Quality Thresholds

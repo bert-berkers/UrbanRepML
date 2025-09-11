@@ -47,7 +47,7 @@ class UrbanEmbeddingPipeline:
         # Check and create threshold variant if needed
         self._create_threshold_variant()
 
-        # Initialize components AFTER potential threshold processing
+        # Initialize components AFTER potential threshold processing embeddings
         self._init_components()
 
     def _setup_directories(self):
@@ -76,7 +76,7 @@ class UrbanEmbeddingPipeline:
         """Initialize pipeline components with updated configurations."""
         logger.info("Initializing components...")
 
-        # Extract configuration for feature processing
+        # Extract configuration for feature processing embeddings
         pca_config = self.config['feature_processing']['pca']
         min_components = pca_config.get('min_components', {})
         max_components = pca_config.get('max_components', None)
@@ -194,11 +194,11 @@ class UrbanEmbeddingPipeline:
                 else:
                     if 'fsi_threshold' in self.config:
                         logger.warning(f"FSI threshold variant (FSI >= {threshold}) does not exist at {variant_dir} or {exp_data_dir}")
-                        logger.warning("Please run the modular preprocessing scripts to create the variant")
+                        logger.warning("Please run the modular preprocessing auxiliary data scripts to create the variant")
                         raise FileNotFoundError(f"FSI variant directory not found: {variant_dir}")
                     else:
                         logger.warning(f"Threshold variant ({threshold}%) does not exist at {variant_dir} or {exp_data_dir}")
-                        logger.warning("Threshold preprocessing not implemented for percentage thresholds")
+                        logger.warning("Threshold preprocessing auxiliary data not implemented for percentage thresholds")
                         raise FileNotFoundError(f"Threshold variant directory not found: {variant_dir}")
             else:
                 logger.info(f"Using existing threshold variant: {variant_name}")
@@ -351,7 +351,7 @@ class UrbanEmbeddingPipeline:
                 self.config['city_name']
             )
 
-            # Log feature dimensions after processing
+            # Log feature dimensions after processing embeddings
             for name, feat in features.items():
                 logger.info(f"Processed {name} features shape: {feat.shape}")
 

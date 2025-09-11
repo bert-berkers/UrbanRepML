@@ -30,8 +30,8 @@ class AlphaEarthToH3Converter:
         self.h3_resolution = config['data']['h3_resolution']
         self.source_dir = Path(config['data']['source_dir'])
         self.pattern = config['data']['pattern']
-        self.batch_size = config['processing']['batch_size']
-        self.min_pixels = config['processing']['min_pixels_per_hex']
+        self.batch_size = config['processing embeddings']['batch_size']
+        self.min_pixels = config['processing embeddings']['min_pixels_per_hex']
         
         # Setup logging
         logging.basicConfig(
@@ -108,7 +108,7 @@ class AlphaEarthToH3Converter:
                 lats = np.linspace(bounds.top, bounds.bottom, height)
                 
                 # Process in chunks to manage memory - adjust for resolution
-                chunk_size = self.config['processing'].get('chunk_size', 150)
+                chunk_size = self.config['processing embeddings'].get('chunk_size', 150)
                 total_chunks = ((height // chunk_size) + 1) * ((width // chunk_size) + 1)
                 chunk_count = 0
                 
@@ -293,7 +293,7 @@ def main():
         config = yaml.safe_load(f)
     
     # Update H3 resolution from config
-    config['data']['h3_resolution'] = config['processing']['h3_resolution']
+    config['data']['h3_resolution'] = config['processing embeddings']['h3_resolution']
     
     # Initialize converter
     converter = AlphaEarthToH3Converter(config)

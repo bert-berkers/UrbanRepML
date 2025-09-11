@@ -1,7 +1,8 @@
 # ==========================================
 # UrbanRepML Project .gitignore
 # ==========================================
-# Multi-Modal Urban Representation Learning
+# High-Quality Urban Embeddings via Late-Fusion
+# Uses SRAI for all H3 operations
 # ==========================================
 
 # ==========================================
@@ -90,7 +91,7 @@ lightning_logs/
 *.orc
 
 # ==========================================
-# Project-Specific Data Directories
+# Study Area Data Organization
 # ==========================================
 # Raw data downloads
 data/raw/
@@ -98,44 +99,57 @@ data/preprocessed [TODO SORT & CLEAN UP]/
 data/temporal/
 data/cache/
 
-# Large processed embeddings
-data/processed/embeddings/*/
-!data/processed/embeddings/README.md
+# Study area embeddings and results
+data/study_areas/*/embeddings/
+data/study_areas/*/urban_embedding/
+data/study_areas/*/plots/
+
+# Keep study area structure documentation
+!data/study_areas/*/README.md
+!data/study_areas/*/area_gdf/README.md
+!data/study_areas/*/regions_gdf/README.md
 
 # AlphaEarth specific
 data/embeddings/aerial_alphaearth/embeddings_AlphaEarth/processed/
 data/embeddings/aerial_alphaearth/embeddings_AlphaEarth/*.parquet
 
-# Keep directory structure documentation
-!data/*/README.md
-!data/*/*/README.md
+# ==========================================
+# Removed Components (No Longer Used)
+# ==========================================
+# Bridge integration (removed - focus on embeddings)
+bridge/
+modalities/buildings/
+modalities/streetview/
+modalities/landuse/
+modalities/semantic_segmentation/
 
 # ==========================================
-# Experiment Outputs
+# Logs and Temporary Files
 # ==========================================
-experiments/*/data/
-experiments/*/plots/
-experiments/*/results/
-experiments/*/logs/
-experiments/*/*.html
-experiments/*/*.json
-# Keep experiment configs and scripts
-!experiments/*/config.yaml
-!experiments/*/run_*.py
+*.log
+*.logs
+log/
+logs/
+urban_embedding.log
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+.~*
+tmp/
+temp/
+cache/
 
-# Results and visualizations
-results/
-plots/
-figures/
-outputs/
-*.png
-*.jpg
-*.jpeg
-*.pdf
-*.svg
-# Keep documentation images
-!docs/images/*
-!README_images/*
+# ==========================================
+# Documentation Cleanup
+# ==========================================
+# Temporary documentation
+*_analysis_*.md
+*_conv*.md
+REPO_ANALYSIS*.md
+*_old.md
+*_backup.md
 
 # ==========================================
 # IDE and Editor Files
@@ -145,22 +159,7 @@ outputs/
 *.code-workspace
 
 # PyCharm
-.idea/workspace.xml
-.idea/tasks.xml
-.idea/dictionaries
-.idea/vcs.xml
-.idea/jsLibraryMappings.xml
-.idea/datasources.xml
-.idea/dataSources.ids
-.idea/sqlDataSources.xml
-.idea/dynamic.xml
-.idea/uiDesigner.xml
-.idea/gradle.xml
-.idea/libraries
-.idea/mongoSettings.xml
-*.iws
-/out/
-.idea_modules/
+.idea/
 
 # Vim
 *.swp
@@ -219,6 +218,7 @@ $RECYCLE.BIN/
 *.msm
 *.msp
 *.lnk
+NUL
 
 # Linux
 .directory
@@ -271,23 +271,6 @@ site/
 .mkdocs/
 
 # ==========================================
-# Logs and Temporary Files
-# ==========================================
-*.log
-*.logs
-log/
-logs/
-*.tmp
-*.temp
-*.bak
-*.backup
-*.old
-.~*
-tmp/
-temp/
-cache/
-
-# ==========================================
 # Configuration and Secrets
 # ==========================================
 .env
@@ -326,14 +309,24 @@ yarn-error.log*
 !schema/*.sql
 
 # ==========================================
-# Miscellaneous
+# Results and Visualizations
 # ==========================================
-# Batch files and shell scripts (keep essential ones)
-*.bat
-!scripts/setup.bat
-!scripts/run.bat
+results/
+plots/
+figures/
+outputs/
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+# Keep documentation images
+!docs/images/*
+!README_images/*
 
-# Archive files
+# ==========================================
+# Archive Files
+# ==========================================
 *.zip
 *.tar
 *.tar.gz
@@ -342,7 +335,9 @@ yarn-error.log*
 # Keep documentation archives
 !docs/*.zip
 
-# Compiled source
+# ==========================================
+# Compiled Source
+# ==========================================
 *.com
 *.class
 *.dll
@@ -350,10 +345,11 @@ yarn-error.log*
 *.o
 *.so
 
+# ==========================================
 # LaTeX
+# ==========================================
 *.aux
 *.lof
-*.log
 *.lot
 *.fls
 *.out
@@ -379,20 +375,34 @@ yarn-error.log*
 !Makefile
 !LICENSE
 !README.md
-!CONTRIBUTING.md
-!CHANGELOG.md
-!AUTHORS.md
-!CITATION.cff
+!ARCHITECTURE.md
+!CLAUDE.md
 
-# Keep test data
+# Keep test data structure
 !tests/fixtures/
 !tests/data/
 # But exclude large test files
 tests/data/*.tif
 tests/data/*.parquet
 
-# Keep documentation source files
-!docs/source/
+# Keep accessibility script examples
+!scripts/accessibility/
+!scripts/accessibility/*.py
+
+# Keep study area configs
+!study_areas/configs/
+!study_areas/configs/*.yaml
+
+# ==========================================
+# SRAI and Spatial Data
+# ==========================================
+# SRAI cache files
+.srai_cache/
+srai_cache/
+
+# H3 index caches (these should be regenerated via SRAI)
+*.h3_cache
+h3_*.cache
 
 # ==========================================
 # End of .gitignore

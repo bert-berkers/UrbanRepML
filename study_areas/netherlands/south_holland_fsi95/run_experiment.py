@@ -147,7 +147,7 @@ def main():
     print("="*60)
     print(f"Coverage: Top {100-FSI_PERCENTILE}% densest urban areas")
     print("Graph Type: Accessibility-based multi-modal networks")
-    print("Architecture: UrbanUNet with multi-scale processing")
+    print("Architecture: UrbanUNet with multi-scale processing embeddings")
     print(f"Configuration Preset: {PRESET}")
     print("="*60)
     

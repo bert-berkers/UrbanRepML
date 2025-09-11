@@ -12,7 +12,7 @@ import sys
 
 
 class ModularProgressMonitor:
-    """Monitor and report on modular processing progress"""
+    """Monitor and report on modular processing embeddings progress"""
     
     def __init__(self):
         self.checkpoint_file = Path("data/checkpoints/modular_progress.json")

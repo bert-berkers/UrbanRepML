@@ -39,7 +39,7 @@ class ModalityProcessor(ABC):
     @abstractmethod
     def run_pipeline(self, study_area: str, h3_resolution: int, 
                     output_dir: str) -> str:
-        """Run complete processing pipeline."""
+        """Run complete processing embeddings pipeline."""
         pass
     
     def save_embeddings(self, embeddings_df: pd.DataFrame, output_dir: str, 

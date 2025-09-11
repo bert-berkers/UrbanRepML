@@ -44,7 +44,7 @@ data:
     east: -123.8
 
 processing:
-  # Modular processing parameters
+  # Modular processing embeddings parameters
   subtile_size: 256  # Process TIFF in 256x256 pixel chunks
   subtiles_per_batch: 10  # Process 10 subtiles before checkpointing
   aggregation_method: "mean"  # How to aggregate pixels to H3
@@ -61,7 +61,7 @@ processing:
   
   # Memory management
   use_sparse: false  # Keep dense for 64-dim data
-  chunk_size: 256  # Subtile size for modular processing
+  chunk_size: 256  # Subtile size for modular processing embeddings
   memory_cleanup_interval: 5  # Run gc.collect() every N tiles
   
   # Checkpointing
@@ -118,7 +118,7 @@ output:
   plots_dir: "plots"
   cache_dir: "data/cache"
   
-  # Modular processing outputs
+  # Modular processing embeddings outputs
   modular_dir: "data/h3_2021_res8_coastal_forests"
   intermediate_dir: "data/intermediate"  # Store subtile results
   archive_dir: "data/archive"  # For completed runs
@@ -129,7 +129,7 @@ output:
   progress_log: "logs/progress.json"  # JSON progress tracking
   
 performance:
-  # Parallel processing
+  # Parallel processing embeddings
   n_jobs: -1  # Use all cores
   
   # Caching
@@ -145,7 +145,7 @@ performance:
 rioxarray:
   # Memory management
   chunk_size_mb: 100  # Target chunk size in MB
-  use_parallel: true  # Enable parallel processing
+  use_parallel: true  # Enable parallel processing embeddings
   optimize_chunks: true  # Optimize chunk sizes automatically
   
   # Performance tuning
@@ -198,7 +198,7 @@ hardware:
   gpu_chunk_size: 2048  # Doubled chunk size for better GPU utilization
   
   # Memory management
-  prefetch_tiles: 5  # Increased prefetch for full dataset processing
+  prefetch_tiles: 5  # Increased prefetch for full dataset processing embeddings
   memory_pool_gb: 16  # System memory pool
   pinned_memory: true  # Use pinned memory for faster GPU transfers
   
@@ -211,6 +211,6 @@ hardware:
   use_mixed_precision: true  # Enable FP16 for 2x memory efficiency
   tf32_enabled: true  # Use TensorFloat-32 on RTX 3090
   
-  # Enhanced processing for boundary gap elimination
-  enable_boundary_optimization: true  # Use enhanced boundary processing
+  # Enhanced processing embeddings for boundary gap elimination
+  enable_boundary_optimization: true  # Use enhanced boundary processing embeddings
   spatial_smoothing_enabled: true     # Apply spatial smoothing in stitching

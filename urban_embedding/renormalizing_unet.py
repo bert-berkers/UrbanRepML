@@ -405,7 +405,7 @@ class RenormalizingUrbanUNet(nn.Module):
                 edge_weights: Dict[int, torch.Tensor],
                 mappings: Dict[Tuple[int, int], torch.Tensor]) -> Tuple[Dict[int, torch.Tensor], Dict[str, torch.Tensor]]:
         """
-        Forward pass with renormalizing hierarchical processing.
+        Forward pass with renormalizing hierarchical processing embeddings.
         
         Args:
             features_dict: Input features per modality

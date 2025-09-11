@@ -1,0 +1,31 @@
+{
+  "processing_date": "2025-08-30T13:07:27.114067",
+  "processing_duration_seconds": 754.3706250190735,
+  "hexagon_count": 2769174,
+  "h3_resolution": 10,
+  "year": 2022,
+  "region": "netherlands",
+  "coverage_area_km2": 35999.261999999995,
+  "embedding_dimensions": 64,
+  "file_size_mb": 1225.8163986206055,
+  "source_tiles": 99,
+  "coordinate_system": "EPSG:4326",
+  "processor_version": "AlphaEarthProcessor v1.0",
+  "configuration": {
+    "subtile_size": 256,
+    "min_pixels_per_hex": 3,
+    "max_workers": 10
+  },
+  "embedding_statistics": {
+    "min_value": -0.44993582367897034,
+    "max_value": 0.47980576753616333,
+    "mean_value": -0.007441017135753567,
+    "std_value": 0.06448813884039903
+  },
+  "pixel_statistics": {
+    "min_pixels": 3,
+    "max_pixels": 135,
+    "mean_pixels": 127.15665610033895,
+    "total_pixels": 352118906
+  }
+}

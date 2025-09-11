@@ -1,42 +1,133 @@
-# CLAUDE.md - Developer Instructions
+# CLAUDE.md - Developer Instructions & Principles
 
 Instructions for Claude Code and developers working with the UrbanRepML project.
 
-## 🏗️ Project Architecture
+## ⚠️ CRITICAL: WE USE SRAI, NOT H3 DIRECTLY
 
-### Core Components
+**This project uses SRAI (Spatial Representations for AI) for ALL H3 hexagon operations.**
+- NEVER use h3-py directly
+- Always use SRAI's H3Regionalizer
+- SRAI provides H3 functionality plus additional spatial analysis tools
+- This applies EVERYWHERE in the codebase
+
+## 🎯 Core Development Principles
+
+1. **HONEST COMPLEXITY**: Development is hard. Wrangling parallel datasets during training is challenging. Late-fusion makes it manageable.
+
+2. **ONE THING AT A TIME**: Focus on individual modalities before fusion. It's easier to develop when you tackle one component at a time.
+
+3. **DENSE WEB OVER OFFSHOOTS**: Every component must connect meaningfully to the core pipeline. No isolated features.
+
+4. **STUDY-AREA BASED**: All work is organized by study areas. Each area is self-contained with its own data.
+
+5. **DATA-CODE SEPARATION**: Absolute boundary between data/ and code directories. Never mix.
+
+6. **SRAI EVERYWHERE**: Use SRAI for all spatial operations, H3 tessellation, and neighborhood analysis.
+
+7. **THINK BEFORE ADDING**: Deeply consider how new code integrates with existing architecture before adding it.
+
+## 🌍 Study Area Organization
+
+All processing is study-area based. Each study area contains:
 
 ```
-modalities/          # Data processing pipelines (one per data source)
-├── alphaearth/     # Satellite imagery → H3 embeddings
-├── poi/            # Points of interest → categorical embeddings
-├── gtfs/           # Transit data → accessibility features
-├── roads/          # OSM networks → graph embeddings
-├── buildings/      # Footprints → density metrics
-└── streetview/     # Street imagery → visual features
-
-data/               # ALL data storage (no data in code directories)
-├── raw/            # Original downloads
-├── processed/      # H3 hexagon embeddings + networks
-└── cache/          # Temporary processing files
-
-urban_embedding/    # ML pipeline (Python scripts only)
-├── pipeline.py     # Multi-modal fusion + training
-├── model.py        # UrbanUNet GNN architecture
-└── analytics.py    # Clustering + visualization
-
-study_areas/        # Geospatial research areas
-├── configs/        # YAML boundary definitions
-├── cascadia/       # Coastal forest study
-└── netherlands/    # Urban density studies
+data/study_areas/{area_name}/
+├── area_gdf/           # Study area boundary
+├── regions_gdf/        # H3 tessellation (via SRAI!)
+├── embeddings/         # Per-modality embeddings
+│   ├── alphaearth/
+│   ├── poi/
+│   ├── roads/
+│   └── gtfs/
+├── urban_embedding/    # Fused results
+└── plots/             # Visualizations
 ```
 
-## 🔧 Development Practices
+Primary study areas:
+- **netherlands**: Complete coverage for training volume (primary)
+- **cascadia**: Coastal urban-forest interface
+- **south_holland**: Dense urban subset
+- Others as configured in `study_areas/configs/`
 
-### Environment Setup
+## 🏗️ Two-Stage Architecture
+
+### Why Late-Fusion?
+
+**Honest answer**: Because development is hard and handling multiple parallel datasets during training is challenging. Late-fusion lets us:
+1. Develop one modality at a time
+2. Debug issues in isolation
+3. Prototype without breaking everything
+
+### Stage 1: Individual Modality Encoders
+
+Process each modality independently into H3-indexed embeddings:
+
+```python
+from srai.regionalizers import H3Regionalizer  # NOT import h3!
+from modalities.alphaearth import AlphaEarthProcessor
+
+# Always use SRAI for H3 operations
+regionalizer = H3Regionalizer(resolution=9)
+regions_gdf = regionalizer.transform(area_gdf)
+
+# Process modality
+processor = AlphaEarthProcessor(config)
+embeddings = processor.process_to_h3(data, regions_gdf)
+```
+
+**Core Modalities:**
+- **AlphaEarth**: Pre-computed Google Earth Engine embeddings (PRIMARY)
+- **POI**: OpenStreetMap points → categorical density features
+- **Roads**: OSM network topology → connectivity metrics  
+- **GTFS**: Transit stops → accessibility potential
+- **Aerial Imagery**: PDOK Netherlands → DINOv3 (if needed)
+
+### Stage 2: Urban Embedding Fusion (U-Net)
+
+Graph Convolutional U-Net with accessibility constraints:
+
+```python
+from urban_embedding.pipeline import UrbanEmbeddingPipeline
+from urban_embedding.graph_construction import AccessibilityGraphConstructor
+
+# Accessibility-based graph pruning
+graph_constructor = AccessibilityGraphConstructor(
+    use_floodfill=True,
+    gravity_weighting=True,
+    percentile_pruning=0.95  # Keep top 5% of edges
+)
+
+# Late fusion pipeline
+pipeline = UrbanEmbeddingPipeline(config)
+urban_embeddings = pipeline.run(
+    modality_embeddings,
+    spatial_graph=graph_constructor.build()
+)
+```
+
+## 📊 Accessibility Graph Pipeline
+
+Accessibility graphs guide the fusion network through spatial constraints:
+
+1. **Floodfill Travel Time**: Calculate travel times with local cutoff (few minutes)
+2. **Gravity Weighting**: Weight by building density (attraction)
+3. **Percentile Pruning**: Keep only top percentile of edge strengths
+4. **Multi-Resolution**: Different pruning thresholds per H3 level (5-11)
+
+```python
+# ALWAYS use SRAI for neighborhoods
+from srai.neighbourhoods import H3Neighbourhood
+
+neighbourhood = H3Neighbourhood()
+neighbors = neighbourhood.get_neighbours(regions_gdf)
+```
+
+## 🔧 Development Workflow
+
+### Setup
 
 ```bash
-# Clone and setup
+# Clone repository
 git clone https://github.com/bertberkers/UrbanRepML.git
 cd UrbanRepML
 
@@ -44,354 +135,114 @@ cd UrbanRepML
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# Install in development mode
+# Install with SRAI
 pip install -e .
-
-# Install all optional dependencies
-pip install -e ".[dev,viz,ml]"
+pip install srai[all]  # Critical: SRAI with all components
 ```
 
-### Development Commands
-
-```bash
-# Run tests
-python -m pytest tests/ -v
-
-# Format code (before committing)
-black urban_embedding/ modalities/ --line-length 100
-
-# Lint code
-flake8 urban_embedding/ modalities/ --max-line-length 100
-
-# Type checking
-mypy urban_embedding/ modalities/ --ignore-missing-imports
-
-# Generate documentation
-sphinx-build -b html docs/source docs/build
-```
-
-## 📁 Data Management
-
-### File Locations
-
-**ALWAYS store data in these locations:**
-- **Raw data**: `data/raw/{modality}/`
-- **Processed embeddings**: `data/processed/embeddings/{modality}/`
-- **OSM networks**: `data/processed/networks/`
-- **H3 regions**: `data/processed/h3_regions/`
-- **Temporary files**: `data/cache/`
-
-**NEVER store data in:**
-- `urban_embedding/` (scripts only)
-- `modalities/` (processing code only)
-- Project root directory
-- Inside study area code directories
-
-### Processing Large Datasets
+### Processing New Study Area
 
 ```python
-# Use chunked processing for large files
-from modalities.alphaearth import AlphaEarthProcessor
-
-processor = AlphaEarthProcessor(config={
-    'chunk_size': 1000,  # Process 1000 hexagons at a time
-    'max_workers': 10,   # Parallel processing threads
-    'memory_limit': '8GB'  # Set memory constraints
-})
-
-# Process with progress tracking
-with tqdm(total=total_tiles) as pbar:
-    processor.run_pipeline(
-        progress_callback=lambda x: pbar.update(1)
-    )
-```
-
-## 🧩 Implementing New Modalities
-
-### 1. Create Modality Structure
-
-```python
-# modalities/new_modality/__init__.py
-from .processor import NewModalityProcessor
-
-__all__ = ['NewModalityProcessor']
-```
-
-### 2. Implement ModalityProcessor Interface
-
-```python
-# modalities/new_modality/processor.py
-from modalities.base import ModalityProcessor
-import pandas as pd
-import geopandas as gpd
-
-class NewModalityProcessor(ModalityProcessor):
-    """Process new data type into H3 embeddings."""
-    
-    def __init__(self, config: dict):
-        super().__init__(config)
-        self.validate_config()
-    
-    def validate_config(self):
-        """Validate required configuration parameters."""
-        required = ['source_dir', 'output_dir']
-        for param in required:
-            if param not in self.config:
-                raise ValueError(f"Missing required config: {param}")
-    
-    def load_data(self, study_area: str) -> gpd.GeoDataFrame:
-        """Load raw data for study area."""
-        # Implementation here
-        pass
-    
-    def process_to_h3(self, data: gpd.GeoDataFrame, 
-                     h3_resolution: int) -> pd.DataFrame:
-        """Convert data to H3 hexagon embeddings."""
-        # Implementation here
-        pass
-    
-    def run_pipeline(self, study_area: str, 
-                    h3_resolution: int,
-                    output_dir: str) -> str:
-        """Execute complete processing pipeline."""
-        data = self.load_data(study_area)
-        embeddings = self.process_to_h3(data, h3_resolution)
-        output_path = self.save_embeddings(embeddings, output_dir)
-        return output_path
-```
-
-### 3. Add Configuration
-
-```yaml
-# modalities/new_modality/config.yaml
-default:
-  chunk_size: 1000
-  max_workers: 10
-  
-data_sources:
-  primary: "https://data-source.com/api"
-  fallback: "local/cache"
-
-processing:
-  normalize: true
-  aggregation: "mean"
-  missing_value_strategy: "interpolate"
-```
-
-## 🌍 Study Area Management
-
-### Creating New Study Areas
-
-```python
-# study_areas/tools/create_study_area.py
+from srai.regionalizers import H3Regionalizer  # ALWAYS SRAI!
 from study_areas.tools import StudyAreaManager
 
+# Define study area
 manager = StudyAreaManager()
+area_gdf = manager.load_area('netherlands')
 
-# Define study area with multiple boundaries
-manager.create_study_area(
-    name='pacific_northwest',
-    boundaries={
-        'main': (-125.0, 42.0, -117.0, 49.0),
-        'urban_cores': [
-            ('seattle', (-122.5, 47.4, -122.2, 47.8)),
-            ('portland', (-122.8, 45.4, -122.5, 45.6))
-        ]
-    },
-    h3_resolutions=[8, 9, 10],
-    description='Pacific Northwest urban-forest interface'
-)
-```
+# Create H3 regions with SRAI
+regionalizer = H3Regionalizer(resolution=9)
+regions_gdf = regionalizer.transform(area_gdf)
 
-### Study Area Configuration
-
-```yaml
-# study_areas/configs/pacific_northwest.yaml
-name: pacific_northwest
-bioregion: temperate_rainforest
-boundaries:
-  bbox: [-125.0, 42.0, -117.0, 49.0]
-  filter: "longitude < -121"  # West of Cascade crest
-
-h3_resolutions:
-  regional: 8
-  local: 9
-  detailed: 10
-
-modalities:
-  alphaearth:
-    enabled: true
-    years: [2021, 2023, 2024]
-  poi:
-    enabled: true
-    categories: ['natural', 'amenity', 'landuse']
-  gtfs:
-    enabled: false  # Rural areas lack transit
-```
-
-## 🐛 Debugging & Troubleshooting
-
-### Common Issues
-
-1. **Memory errors with large rasters**
-```python
-# Use windowed reading
-import rasterio
-from rasterio.windows import Window
-
-with rasterio.open('large_file.tif') as src:
-    for window in src.block_windows():
-        data = src.read(window=window)
-        # Process chunk
-```
-
-2. **H3 resolution mismatches**
-```python
-# Always validate H3 cells
-import h3
-
-def validate_h3_cells(cells):
-    return all(h3.h3_is_valid(cell) for cell in cells)
-```
-
-3. **Coordinate system issues**
-```python
-# Always work in WGS84 for H3
-gdf = gdf.to_crs('EPSG:4326')
-```
-
-### Performance Optimization
-
-```python
-# Use multiprocessing for CPU-bound tasks
-from multiprocessing import Pool
-from functools import partial
-
-def process_tile(tile_path, config):
-    # Processing logic
-    pass
-
-with Pool(processes=10) as pool:
-    process_func = partial(process_tile, config=config)
-    results = pool.map(process_func, tile_paths)
-```
-
-## 🔄 Git Workflow
-
-### Branch Strategy
-- `main`: Stable releases
-- `develop`: Active development
-- `feature/*`: New features
-- `fix/*`: Bug fixes
-- `experiment/*`: Research branches
-
-### Commit Messages
-```bash
-# Format: <type>(<scope>): <subject>
-feat(alphaearth): add multi-temporal processing
-fix(h3): correct resolution conversion bug
-docs(readme): update installation instructions
-refactor(pipeline): simplify data loading
-test(poi): add integration tests
+# Save for consistent use
+regions_gdf.to_parquet('data/study_areas/netherlands/regions_gdf/h3_res9.parquet')
 ```
 
 ## 📝 Code Style Guidelines
 
-### Python Style
-- Follow PEP 8 with 100 char line limit
-- Use type hints for all functions
-- Docstrings in Google style
-- No inline comments unless critical
+### SRAI Usage Examples
 
-### Example Function
 ```python
-def process_h3_embeddings(
-    data: pd.DataFrame,
-    h3_resolution: int,
-    aggregation: str = 'mean'
-) -> pd.DataFrame:
-    """Process data into H3 hexagon embeddings.
+# ✅ CORRECT: Using SRAI
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+from srai.embedders import Hex2VecEmbedder
+
+regionalizer = H3Regionalizer(resolution=9)
+regions = regionalizer.transform(area_gdf)
+
+# ❌ WRONG: Direct H3
+import h3  # NO!
+h3.geo_to_h3(lat, lon, 9)  # NO!
+```
+
+### Function Documentation
+
+```python
+def process_study_area(
+    area_name: str,
+    h3_resolution: int = 9,
+    use_srai: bool = True  # Always True!
+) -> gpd.GeoDataFrame:
+    """Process study area into H3 embeddings using SRAI.
     
     Args:
-        data: Input dataframe with geometry column
-        h3_resolution: H3 resolution level (0-15)
-        aggregation: Aggregation method for multiple points
+        area_name: Name of study area (e.g., 'netherlands')
+        h3_resolution: H3 resolution level (5-11)
+        use_srai: Must always be True - we use SRAI!
         
     Returns:
-        DataFrame with H3 index and aggregated features
+        GeoDataFrame with H3 regions from SRAI
         
-    Raises:
-        ValueError: If h3_resolution is out of valid range
+    Note:
+        Always uses SRAI's H3Regionalizer, never h3-py directly
     """
-    if not 0 <= h3_resolution <= 15:
-        raise ValueError(f"Invalid H3 resolution: {h3_resolution}")
-    
-    # Processing implementation
-    return processed_data
 ```
 
-## 🚀 Deployment
+## 🚀 Key Commands
 
-### Docker Support
-```dockerfile
-# Dockerfile
-FROM python:3.9-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-RUN pip install -e .
-
-CMD ["python", "-m", "urban_embedding"]
-```
-
-### Environment Variables
 ```bash
-# .env.example
-URBANREPML_DATA_DIR=/data
-URBANREPML_CACHE_DIR=/tmp/urbanrepml
-URBANREPML_LOG_LEVEL=INFO
-WANDB_API_KEY=your_key_here
-H3_RESOLUTION_DEFAULT=9
-MAX_WORKERS=10
+# Process modalities for study area
+python -m modalities.alphaearth --study-area netherlands --use-srai
+
+# Run fusion pipeline
+python -m urban_embedding.pipeline --study-area netherlands --modalities alphaearth,poi,roads
+
+# Generate accessibility graphs
+python scripts/accessibility/generate_graphs.py --study-area netherlands --use-srai
+
+# Analyze results
+python -m urban_embedding.analytics --study-area netherlands
 ```
 
-## 📊 Monitoring & Logging
+## ⚠️ Common Pitfalls
 
-```python
-import logging
-from urban_embedding.utils import setup_logging
+1. **Using h3-py directly** → Always use SRAI's H3Regionalizer
+2. **Mixing data and code** → Keep strict separation
+3. **Processing without study area** → Everything is study-area based
+4. **Ignoring SRAI capabilities** → SRAI has built-in embedders and analysis tools
+5. **Over-engineering** → Keep it simple, late-fusion is about manageability
 
-# Setup project-wide logging
-logger = setup_logging(
-    level='INFO',
-    log_file='urban_embedding.log'
-)
+## 📊 Performance Considerations
 
-# Use in modules
-logger.info(f"Processing {len(data)} records")
-logger.warning(f"Missing data for H3 cells: {missing_cells}")
-logger.error(f"Failed to process: {error}")
-```
+- **Memory**: SRAI operations can be memory-intensive for large areas
+- **Chunking**: Process large study areas in tiles
+- **Caching**: Save intermediate SRAI results (regions_gdf)
+- **Parallel**: Use SRAI's built-in parallel processing where available
 
-## 🔗 Useful Resources
+## 🔗 Essential Resources
 
-- **H3 Documentation**: https://h3geo.org/
-- **SRAI Framework**: https://github.com/kraina-ai/srai
+- **SRAI Documentation**: https://srai.readthedocs.io/
+- **SRAI GitHub**: https://github.com/kraina-ai/srai
+- **H3 via SRAI**: https://srai.readthedocs.io/en/stable/user_guide/regionalizers/h3.html
 - **PyTorch Geometric**: https://pytorch-geometric.readthedocs.io/
-- **GeoPandas**: https://geopandas.org/
-- **Rasterio**: https://rasterio.readthedocs.io/
 
-## 📌 Important Notes
+## 📌 Remember
 
-- **AlphaEarth TIFFs**: ~3GB each (968 files for Cascadia study area)
-- **Processing**: Uses multiprocessing (adjust `max_workers` in configs)
-- **H3 Operations**: Use SRAI library (not raw h3-py) for advanced operations
-- **Coordinates**: Always use WGS84 (EPSG:4326) for H3 operations
-- **Memory**: Critical for large study areas - use chunking and windowing
-- **Testing**: Always test with small subset before full processing
+- **SRAI for ALL spatial operations** - This cannot be emphasized enough
+- **Study areas organize everything** - Data, embeddings, results
+- **Late-fusion for manageability** - One thing at a time
+- **Honest about complexity** - Development is hard, that's why we chose this approach
 
 ---
 
