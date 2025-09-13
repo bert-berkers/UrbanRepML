@@ -14,7 +14,10 @@ import numpy as np
 from PIL import Image
 import geopandas as gpd
 from shapely.geometry import box, Polygon
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 import logging
 
 logger = logging.getLogger(__name__)

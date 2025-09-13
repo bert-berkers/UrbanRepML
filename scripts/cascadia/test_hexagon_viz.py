@@ -7,7 +7,10 @@ Test visualization to ensure hexagons are visible on the map.
 import numpy as np
 import pandas as pd
 import folium
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 from pathlib import Path
 import logging
 

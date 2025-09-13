@@ -15,9 +15,18 @@ class ModularProgressMonitor:
     """Monitor and report on modular processing embeddings progress"""
     
     def __init__(self):
+        import os
+        from dotenv import load_dotenv
+        
+        # Load environment variables
+        load_dotenv('keys/.env')
+        
         self.checkpoint_file = Path("data/checkpoints/modular_progress.json")
         self.output_dir = Path("data/h3_2021_res8_modular")
-        self.source_dir = Path("G:/My Drive/AlphaEarth_Cascadia")
+        
+        # Get path from environment or use default
+        cascadia_path = os.getenv('ALPHAEARTH_CASCADIA_PATH', 'G:/My Drive/AlphaEarth_Cascadia/')
+        self.source_dir = Path(cascadia_path)
         self.pattern = "Cascadia_AlphaEarth_2021_*.tif"
         
     def load_checkpoint(self):

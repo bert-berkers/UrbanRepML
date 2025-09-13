@@ -75,7 +75,10 @@ def verify_outputs(output_paths):
                 
                 # Verify it's a valid H3 index
                 if sample_h3:
-                    import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
                     try:
                         resolution = h3.h3_get_resolution(sample_h3)
                         logger.info(f"  H3 resolution: {resolution}")

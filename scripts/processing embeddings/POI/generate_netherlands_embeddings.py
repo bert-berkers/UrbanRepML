@@ -49,7 +49,10 @@ def check_alphaearth_compatibility():
     logger.info(f"AlphaEarth H3 cells: {alphaearth_df['h3_index'].nunique()}")
     
     # Check H3 resolution
-    import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
     sample_indices = alphaearth_df['h3_index'].head(3).tolist()
     resolutions = [h3.get_resolution(idx) for idx in sample_indices]
     logger.info(f"AlphaEarth H3 resolutions: {resolutions}")

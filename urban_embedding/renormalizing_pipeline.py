@@ -365,7 +365,10 @@ class RenormalizingUrbanPipeline(UrbanEmbeddingPipeline):
             base_gdf = base_regions_by_res[10]
             bounds = base_gdf.total_bounds  # [minx, miny, maxx, maxy]
             
-            import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
             from shapely.geometry import Polygon
             
             # Generate H3 cells for missing resolutions

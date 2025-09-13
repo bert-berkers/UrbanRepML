@@ -24,7 +24,10 @@ import geopandas as gpd
 import networkx as nx
 import osmnx as ox
 import pickle
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 from tqdm import tqdm
 
 # Add project root to path
