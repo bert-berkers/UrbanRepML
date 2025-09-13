@@ -1,4 +1,6 @@
-# UrbanRepML
+# UrbanRepML [under heavy construction]
+
+For philosophical background and preliminary results of fused spatial U-NET embeddings see https://www.youtube.com/watch?v=UYD8CR_Xorg&ab_channel=ActiveInferenceInstitute
 
 **High-Quality Urban Embeddings through Manageable Late-Fusion**
 
@@ -17,7 +19,7 @@ Learn dense urban representations by processing modalities one at a time, then f
 
 ## 🎯 Core Goal
 
-Create high-quality urban embeddings capable of reconstructing urban environments. The ultimate aim is to enable aerial image generation from learned representations. We focus on manageable development through late-fusion because handling multiple parallel datasets is hard (we're honest about this).
+Create high-quality urban embeddings capable of reconstructing urban environments. The ultimate aim is to enable aerial image generation from learned representations, that way we can paint new developments with embeddings as our paint and hexagonally indiced regions as our canvas. We focus on manageable development through late-fusion because handling multiple parallel datasets is hard.
 
 ## 🌍 Study Areas
 
