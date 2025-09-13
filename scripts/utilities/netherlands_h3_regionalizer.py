@@ -47,7 +47,15 @@ def get_netherlands_boundary():
 
 def verify_alphaearth_coverage():
     """Check the spatial extent of AlphaEarth TIFFs"""
-    tiff_dir = Path('G:/My Drive/AlphaEarth_Netherlands')
+    import os
+    from dotenv import load_dotenv
+    
+    # Load environment variables
+    load_dotenv('keys/.env')
+    
+    # Get path from environment or use default
+    tiff_path = os.getenv('ALPHAEARTH_NETHERLANDS_PATH', 'G:/My Drive/AlphaEarth_Netherlands/')
+    tiff_dir = Path(tiff_path)
     
     if not tiff_dir.exists():
         print("Warning: AlphaEarth directory not found")

@@ -14,7 +14,11 @@ from datetime import datetime
 import time
 import json
 import warnings
+from dotenv import load_dotenv
 warnings.filterwarnings('ignore')
+
+# Load environment variables
+load_dotenv('keys/.env')
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -71,7 +75,7 @@ def process_alphaearth_res10_2022(logger):
     
     # Configuration for resolution 10
     config = {
-        'source_dir': 'G:/My Drive/AlphaEarth_Netherlands/',
+        'source_dir': os.getenv('ALPHAEARTH_NETHERLANDS_PATH', 'G:/My Drive/AlphaEarth_Netherlands/'),  # Use env var
         'subtile_size': 256,  # Smaller for finer resolution
         'min_pixels_per_hex': 3,  # Lower threshold for res 10
         'max_workers': 10,
@@ -228,7 +232,10 @@ def validate_output(gdf, logger):
     logger.info("VALIDATING OUTPUT DATA")
     
     # Check H3 index validity
-    import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
     h3_indices = gdf['h3_index'] if 'h3_index' in gdf.columns else gdf.index
     
     if hasattr(h3_indices, 'tolist'):
@@ -348,7 +355,7 @@ def update_processing_log(hexagon_count, duration, validation_passed, logger):
 **Configuration**:
 ```python
 {{
-    'source_dir': 'G:/My Drive/AlphaEarth_Netherlands/',
+    'source_dir': '[From ALPHAEARTH_NETHERLANDS_PATH env var]',
     'subtile_size': 256,
     'min_pixels_per_hex': 3,
     'max_workers': 10,

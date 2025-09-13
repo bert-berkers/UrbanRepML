@@ -34,7 +34,10 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point, Polygon, box
 from shapely.ops import unary_union
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)

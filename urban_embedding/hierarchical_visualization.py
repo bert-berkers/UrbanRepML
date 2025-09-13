@@ -19,7 +19,10 @@ import seaborn as sns
 from typing import Dict, List, Tuple, Optional
 import logging
 from pathlib import Path
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from scipy.spatial.distance import pdist, squareform

@@ -10,7 +10,10 @@ import geopandas as gpd
 import torch
 from torch.utils.data import Dataset, DataLoader
 from typing import Dict, List, Tuple, Optional, Union
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 from pathlib import Path
 from dataclasses import dataclass
 import pickle

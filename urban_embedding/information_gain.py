@@ -17,7 +17,10 @@ from scipy.stats import entropy as scipy_entropy
 from scipy.spatial.distance import pdist, squareform
 from sklearn.metrics import mutual_info_score
 from sklearn.feature_selection import mutual_info_regression
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 import warnings
 warnings.filterwarnings('ignore')
 

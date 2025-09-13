@@ -6,7 +6,10 @@ from tqdm import tqdm
 from pathlib import Path
 import geopandas as gpd
 import pandas as pd
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 import json
 from datetime import datetime
 from dataclasses import dataclass

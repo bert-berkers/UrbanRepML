@@ -8,7 +8,10 @@ from sklearn.decomposition import PCA
 from typing import Dict, Optional, List, Tuple, Union, Any
 import torch
 import torch.nn.functional as F
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 from dataclasses import dataclass
 
 import logging

@@ -16,7 +16,10 @@ from dataclasses import dataclass
 import logging
 from scipy.special import digamma, gammaln
 from scipy.stats import entropy
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 
 logger = logging.getLogger(__name__)
 

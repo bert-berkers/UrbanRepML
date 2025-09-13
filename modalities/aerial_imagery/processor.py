@@ -15,7 +15,10 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point, Polygon
-import h3
+# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+from srai.regionalizers import H3Regionalizer
+from srai.neighbourhoods import H3Neighbourhood
+# Note: SRAI provides H3 functionality with additional spatial analysis tools
 import torch
 from tqdm import tqdm
 import logging

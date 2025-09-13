@@ -19,7 +19,11 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
 import warnings
+from dotenv import load_dotenv
 warnings.filterwarnings('ignore')
+
+# Load environment variables
+load_dotenv('keys/.env')
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -46,7 +50,7 @@ def process_alphaearth_2022():
     
     # Configuration
     config = {
-        'source_dir': 'G:/My Drive/AlphaEarth_Netherlands/',
+        'source_dir': os.getenv('ALPHAEARTH_NETHERLANDS_PATH', 'G:/My Drive/AlphaEarth_Netherlands/'),  # Use env var
         'subtile_size': 512,
         'min_pixels_per_hex': 5,
         'max_workers': 10
