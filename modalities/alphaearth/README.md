@@ -59,8 +59,16 @@ Edit `config.yaml` to customize:
 
 ### 1. Export from Earth Engine
 ```bash
-# Authenticate once
-earthengine authenticate --project=boreal-union-296021
+# 1. Add your Google Earth Engine Project ID to `keys/.env`
+#    (create the file if it doesn't exist).
+#    The file should look like this:
+#    GEE_PROJECT_ID="your-project-id"
+#
+# 2. Source the environment variables from the file:
+source keys/.env
+#
+# 3. Authenticate with Earth Engine using the environment variable:
+earthengine authenticate --project=$GEE_PROJECT_ID
 
 # Export region
 python query_gee.py --region "Del Norte" --year 2023
@@ -121,8 +129,10 @@ pip install ee rioxarray srai geopandas scipy h3 pyyaml
 
 ### Earth Engine Authentication
 ```bash
-# If authentication fails
-earthengine authenticate --project=YOUR_PROJECT_ID
+# If authentication fails, ensure you have set GEE_PROJECT_ID in `keys/.env`,
+# sourced the file, and then run the authentication command again.
+source keys/.env
+earthengine authenticate --project=$GEE_PROJECT_ID
 ```
 
 ### Memory Issues

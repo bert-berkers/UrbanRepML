@@ -273,6 +273,9 @@ site/
 # ==========================================
 # Configuration and Secrets
 # ==========================================
+# Directory for local environment variables and credentials
+keys/
+
 .env
 .env.*
 !.env.example
