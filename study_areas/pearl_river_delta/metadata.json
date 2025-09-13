@@ -1,0 +1,15 @@
+{
+  "study_area": "pearl_river_delta",
+  "h3_resolution": 8,
+  "total_hexagons": 62581,
+  "boundary_bounds": [
+    112.5,
+    21.5,
+    114.5,
+    23.5
+  ],
+  "area_km2": 48544.73999999999,
+  "crs": "EPSG:4326",
+  "created_with": "SRAI H3Regionalizer",
+  "note": "All H3 operations use SRAI per CLAUDE.md - never h3 directly"
+}

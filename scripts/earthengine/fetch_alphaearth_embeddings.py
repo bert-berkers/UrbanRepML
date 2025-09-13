@@ -5,6 +5,18 @@ This script authenticates with Earth Engine using a service account,
 loads a study area boundary, and exports the corresponding AlphaEarth
 imagery to Google Drive as a GeoTIFF.
 
+⚠️  INTEGRATION NOTE: This script exports a single large GeoTIFF per study area.
+    For better integration with the existing AlphaEarth processing pipeline that
+    expects tiled inputs, consider using:
+    
+    fetch_alphaearth_embeddings_tiled.py
+    
+    The tiled version provides:
+    - Automatic tiling for large study areas
+    - Naming conventions that match existing processors  
+    - Tile boundary metadata for seamless stitching
+    - Better integration with H3 processing pipeline
+
 Prerequisites:
 1.  A Google Cloud project with Earth Engine API enabled.
 2.  A service account with appropriate permissions.
