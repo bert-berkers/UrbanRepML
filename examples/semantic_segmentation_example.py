@@ -24,9 +24,9 @@ import torch
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from modalities.semantic_segmentation import SemanticSegmentationProcessor, SegmentationClasses
-from modalities.semantic_segmentation.fusion_network import ConditioningConfig
-from urban_embedding.pipeline import UrbanEmbeddingPipeline
+from stage1_modalities.semantic_segmentation import SemanticSegmentationProcessor, SegmentationClasses
+from stage1_modalities.semantic_segmentation.fusion_network import ConditioningConfig
+from stage2_fusion.pipeline import UrbanEmbeddingPipeline
 
 # Setup logging
 logging.basicConfig(
@@ -171,7 +171,7 @@ def demonstrate_conditioning_mechanism():
         attention_heads=8
     )
     
-    from modalities.semantic_segmentation.fusion_network import AlphaEarthConditionedUNet
+    from stage1_modalities.semantic_segmentation.fusion_network import AlphaEarthConditionedUNet
     
     # Create model
     model = AlphaEarthConditionedUNet(config, image_size=512)
@@ -292,7 +292,7 @@ def integrate_with_urban_embedding_pipeline():
     # Configuration for multi-modal pipeline
     config = {
         'study_area': 'rotterdam_aerial',
-        'modalities': [
+        'stage1_modalities': [
             'alphaearth',
             'aerial_imagery', 
             'semantic_segmentation',
@@ -358,7 +358,7 @@ def main():
     print("\n4. Multi-Modal Pipeline Integration")
     print("-" * 40)
     pipeline_config = integrate_with_urban_embedding_pipeline()
-    print(f"   * Configured {len(pipeline_config['modalities'])} modality pipeline")
+    print(f"   * Configured {len(pipeline_config['stage1_modalities'])} modality pipeline")
     
     # Example 5: Full Netherlands processing_modalities (commented out - would take hours)
     print("\n5. Full Netherlands Processing")

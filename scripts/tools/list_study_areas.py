@@ -26,7 +26,7 @@ from tabulate import tabulate
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
-from urban_embedding.study_area_filter import StudyAreaConfig
+from stage2_fusion.study_area_filter import StudyAreaConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -20,7 +20,7 @@ Create high-quality urban embeddings capable of reconstructing urban environment
 
 ## Architecture
 
-**Two-stage late-fusion pipeline:**
+**Three-stage pipeline:**
 
 ### Stage 1: Individual Modality Encoders
 - **AlphaEarth**: Google Earth Engine embeddings (primary, working)
@@ -33,6 +33,11 @@ Create high-quality urban embeddings capable of reconstructing urban environment
 - **ConeLatticeUNet**: Cone-based hierarchical U-Net (res5→res10, most promising)
 - **AccessibilityUNet**: Planned — Hanssen's gravity model variant
 
+### Stage 3: Analysis & Visualization
+- **UrbanEmbeddingAnalyzer**: Cluster visualization and statistics
+- **HierarchicalClusterAnalyzer**: Multi-scale clustering across H3 resolutions
+- **HierarchicalLandscapeVisualizer**: Beautiful multi-resolution plots
+
 ## Quick Start
 
 ```bash
@@ -44,7 +49,7 @@ uv sync --extra dev  # Include dev tools
 
 ```python
 from srai.regionalizers import H3Regionalizer  # NOT import h3!
-from modalities.alphaearth import AlphaEarthProcessor
+from stage1_modalities.alphaearth import AlphaEarthProcessor
 
 regionalizer = H3Regionalizer(resolution=9)
 regions_gdf = regionalizer.transform(area_gdf)
@@ -61,17 +66,19 @@ All work is organized by study areas:
 data/study_areas/{area_name}/
 ├── area_gdf/           # Study area boundary
 ├── regions_gdf/        # H3 regions via SRAI
-├── embeddings/         # Per-modality embeddings
-├── urban_embedding/    # Fused results
-└── plots/              # Visualizations
+├── embeddings/         # Per-modality embeddings (Stage 1)
+├── urban_embedding/    # Fused results (Stage 2)
+├── analysis/           # Cluster assignments (Stage 3)
+└── plots/              # Visualizations (Stage 3)
 ```
 
 ## Project Structure
 
 ```
 UrbanRepML/
-├── modalities/          # Stage 1: Individual encoders
-├── urban_embedding/     # Stage 2: Fusion pipeline & models
+├── stage1_modalities/   # Stage 1: Individual encoders
+├── stage2_fusion/       # Stage 2: Fusion pipeline & models
+├── stage3_analysis/     # Stage 3: Analysis & visualization
 ├── study_areas/         # Area configurations
 ├── scripts/             # Processing & training scripts
 ├── data/                # Study-area organized data

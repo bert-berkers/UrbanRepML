@@ -43,7 +43,7 @@ Primary study areas:
 - **cascadia**: Coastal urban-forest interface
 - **south_holland**: Dense urban subset
 
-## Two-Stage Architecture
+## Three-Stage Architecture
 
 ### Stage 1: Individual Modality Encoders
 
@@ -51,7 +51,7 @@ Process each modality independently into H3-indexed embeddings:
 
 ```python
 from srai.regionalizers import H3Regionalizer  # NOT import h3!
-from modalities.alphaearth import AlphaEarthProcessor
+from stage1_modalities.alphaearth import AlphaEarthProcessor
 
 regionalizer = H3Regionalizer(resolution=9)
 regions_gdf = regionalizer.transform(area_gdf)
@@ -69,13 +69,20 @@ embeddings = processor.process_to_h3(data, regions_gdf)
 
 ### Stage 2: Urban Embedding Fusion
 
-Three model architectures (all in `urban_embedding/models/`):
+Three model architectures (all in `stage2_fusion/models/`):
 
 1. **UrbanUNet** (`urban_unet.py`): The OG that worked. Full study area processing with lateral accessibility graph. Multi-resolution U-Net (res 8-10) with ModalityFusion, SharedSparseMapping, symmetric 3-level encoder-decoder with skip connections, and per-resolution output heads.
 
 2. **ConeLatticeUNet** (`cone_unet.py`): Most promising future direction. Cone-based hierarchical U-Net processing independent computational "cones" spanning res5→res10. Memory efficient (each cone ~1,500 hexagons vs ~6M for full graph), parallelizable, multi-scale.
 
 3. **AccessibilityUNet** (`accessibility_unet.py`): Planned — accessibility-weighted variant using Hanssen's gravity model.
+
+### Stage 3: Analysis & Visualization
+
+Post-training analysis and clustering (all in `stage3_analysis/`):
+- **UrbanEmbeddingAnalyzer** (`analytics.py`): Cluster visualization and statistics
+- **HierarchicalClusterAnalyzer** (`hierarchical_cluster_analysis.py`): Multi-scale clustering across H3 resolutions
+- **HierarchicalLandscapeVisualizer** (`hierarchical_visualization.py`): Beautiful multi-resolution plots
 
 ## Accessibility Graph Pipeline
 
@@ -129,7 +136,7 @@ uv sync --extra dev  # Include dev tools
 - 92% memory reduction with on-demand loading
 
 ```python
-from urban_embedding.data.hierarchical_cone_masking import (
+from stage2_fusion.data.hierarchical_cone_masking import (
     HierarchicalConeMaskingSystem,
     LazyConeBatcher
 )
@@ -161,17 +168,20 @@ Eliminates tile boundary discontinuities by consistently averaging embeddings fo
 ## Key Commands
 
 ```bash
-# Process modalities for study area
-python -m modalities.alphaearth --study-area netherlands --use-srai
+# Stage 1: Process modalities for study area
+python -m stage1_modalities.alphaearth --study-area netherlands --use-srai
 
-# Run fusion pipeline
-python -m urban_embedding.pipeline --study-area netherlands --modalities alphaearth,poi,roads
+# Stage 2: Run fusion pipeline
+python -m stage2_fusion.pipeline --study-area netherlands --modalities alphaearth,poi,roads
 
 # Generate accessibility graphs
 python scripts/accessibility/generate_graphs.py --study-area netherlands --use-srai
 
 # Train cone-based model
 python scripts/netherlands/train_lattice_unet_res10_cones.py
+
+# Stage 3: Analyze and visualize embeddings
+python -m stage3_analysis.analytics --study-area netherlands
 ```
 
 ## Common Pitfalls
