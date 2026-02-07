@@ -74,7 +74,7 @@ class DINOv3Encoder:
         self.model = self._load_model()
         self.model.eval()
         
-        # Image preprocessing auxiliary data
+        # Image preprocessing_auxiliary_data
         self.transform = self._create_transform()
         
         # Feature dimensions
@@ -167,7 +167,7 @@ class DINOv3Encoder:
         return model.to(self.device)
     
     def _create_transform(self) -> transforms.Compose:
-        """Create preprocessing auxiliary data transform for images."""
+        """Create preprocessing_auxiliary_data transform for images."""
         return transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((518, 518)),  # DINOv3 uses 518x518 for better performance
@@ -220,7 +220,7 @@ class DINOv3Encoder:
         
         Args:
             images: List of RGB images
-            batch_size: Batch size for processing embeddings
+            batch_size: Batch size for processing_modalities
             
         Returns:
             List of EncodingResults

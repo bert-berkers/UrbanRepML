@@ -23,12 +23,14 @@ import concurrent.futures
 from tqdm.auto import tqdm
 
 # H3 and Projection imports
-# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
+# Using SRAI as primary interface (per CLAUDE.md)
+# Note: h3 is a dependency of SRAI and needed for geometry conversions
+import h3  # SRAI dependency - used for hex geometry
 from srai.regionalizers import H3Regionalizer
 from srai.neighbourhoods import H3Neighbourhood
-# Note: SRAI provides H3 functionality with additional spatial analysis tools
 from pyproj import Transformer
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, Point, box
+import rasterio
 
 # Import base class
 from ..  import ModalityProcessor
@@ -38,9 +40,9 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(m
 logger = logging.getLogger(__name__)
 
 
-def process_subtile(data: np.ndarray, transform, h3_resolution: int, min_pixels_per_hex: int,
+def process_subtile(data: np.ndarray, transform, tile_hexagons: gpd.GeoDataFrame, min_pixels_per_hex: int,
                     transformer: Transformer) -> Dict:
-    """Process a subtile: Coordinates -> CRS Transform -> H3 Indexing -> Aggregation."""
+    """Process a subtile: Coordinates -> CRS Transform -> Spatial Join with pre-defined hexagons -> Aggregation."""
     n_bands, height, width = data.shape
 
     if height == 0 or width == 0 or np.isnan(data).all():
@@ -59,32 +61,46 @@ def process_subtile(data: np.ndarray, transform, h3_resolution: int, min_pixels_
     # Transform coordinates to WGS84 (EPSG:4326)
     lons, lats = transformer.transform(xs, ys)
 
-    # Get H3 index for each pixel
-    h3_indices = [
-        h3.latlng_to_cell(lat, lon, h3_resolution)
-        for lat, lon in zip(lats, lons)
-    ]
+    # Create point geometries for pixels
+    from shapely.geometry import Point
+    pixel_points = [Point(lon, lat) for lon, lat in zip(lons, lats)]
 
     # Flatten data array: (bands, pixels) -> (pixels, bands)
     data_flat = data.reshape(n_bands, -1).T.astype(np.float32)
 
-    # Create DataFrame
-    df = pd.DataFrame(data_flat)
-    df['h3_index'] = h3_indices
+    # Create GeoDataFrame for pixels
+    pixels_gdf = gpd.GeoDataFrame(
+        data_flat,
+        geometry=pixel_points,
+        crs='EPSG:4326'
+    )
 
-    # Filter out nodata (NaNs) and invalid H3 indices
-    df = df.dropna()
-    df = df[df['h3_index'].notna()]
+    # Filter out nodata (NaNs)
+    pixels_gdf = pixels_gdf.dropna()
 
-    if df.empty:
+    if pixels_gdf.empty:
         return {}
 
+    # Spatial join pixels with hexagons
+    joined = gpd.sjoin(
+        pixels_gdf,
+        tile_hexagons[['geometry']],
+        how='inner',
+        predicate='within'
+    )
+
+    if joined.empty:
+        return {}
+
+    # Get h3_index from the join
+    joined['h3_index'] = joined.index_right
+
     # Aggregate by H3 index (Mean and Count)
-    grouped = df.groupby('h3_index')
-    embedding_cols = [col for col in df.columns if col != 'h3_index']
+    embedding_cols = [col for col in joined.columns if isinstance(col, int)]
+    grouped = joined.groupby('h3_index')[embedding_cols]
 
     # Calculate mean and count simultaneously
-    aggregations = grouped[embedding_cols].agg(['mean', 'count'])
+    aggregations = grouped.agg(['mean', 'count'])
 
     # Format results
     result = {}
@@ -104,13 +120,13 @@ def process_subtile(data: np.ndarray, transform, h3_resolution: int, min_pixels_
     return result
 
 
-def process_tile_worker(tiff_path: Path, h3_resolution: int, subtile_size: int, min_pixels_per_hex: int,
+def process_tile_worker(tiff_path: Path, tile_hexagons: gpd.GeoDataFrame, subtile_size: int, min_pixels_per_hex: int,
                         intermediate_dir: Path):
-    """Worker function to process a single TIFF tile."""
+    """Worker function to process a single TIFF tile with pre-defined hexagons."""
     tile_name = tiff_path.name
     tile_stem = tiff_path.stem
 
-    # Checkpoint: Check if intermediate result exists
+    # Checkpoint: Check if intermediate embeddings modalities result exists
     intermediate_file = intermediate_dir / f"{tile_stem}.json"
     if intermediate_file.exists():
         return True
@@ -142,9 +158,9 @@ def process_tile_worker(tiff_path: Path, h3_resolution: int, subtile_size: int, 
                     # Get the affine transform for the subtile
                     subtile_transform = subtile_ds.rio.transform()
 
-                    # Process subtile
+                    # Process subtile with pre-defined hexagons
                     subtile_results = process_subtile(
-                        subtile_data, subtile_transform, h3_resolution, min_pixels_per_hex, transformer
+                        subtile_data, subtile_transform, tile_hexagons, min_pixels_per_hex, transformer
                     )
 
                     # Merge results (Handle overlaps between subtiles)
@@ -170,14 +186,14 @@ def process_tile_worker(tiff_path: Path, h3_resolution: int, subtile_size: int, 
                                 'pixel_count': total_count
                             }
 
-            # Save intermediate result
+            # Save intermediate embeddings modalities result
             with open(intermediate_file, 'w') as f:
                 json.dump(tile_results, f)
 
             return True
 
     except Exception as e:
-        logger.error(f"Error processing embeddings tile {tile_name}: {e}", exc_info=True)
+        logger.error(f"Error processing_modalities tile {tile_name}: {e}", exc_info=True)
         if intermediate_file.exists():
             intermediate_file.unlink()
         return False
@@ -205,53 +221,87 @@ class AlphaEarthProcessor(ModalityProcessor):
             
         return source_path
     
-    def process(self, raw_data_path: Path, **kwargs) -> gpd.GeoDataFrame:
-        """Process AlphaEarth TIFFs to H3 hexagons."""
+    def process(self, raw_data_path: Path, regions_gdf: gpd.GeoDataFrame = None, **kwargs) -> gpd.GeoDataFrame:
+        """Process AlphaEarth TIFFs to H3 hexagons using pre-defined study area regions."""
         year_filter = kwargs.get('year_filter', '2021')
         h3_resolution = kwargs.get('h3_resolution', 8)
-        
+
         # Get TIFF files
         tiff_files = self.get_tiff_files(raw_data_path, year_filter)
-        
+
         if not tiff_files:
             raise ValueError(f"No TIFF files found in {raw_data_path} with year filter {year_filter}")
-        
-        # Create intermediate directory in new structure
-        intermediate_base = Path('data/processed/intermediate/alphaearth')
-        intermediate_base.mkdir(parents=True, exist_ok=True)
-        
-        # Create study-specific intermediate directory
-        study_name = raw_data_path.parent.name  # e.g., 'cascadia_2021'
-        intermediate_dir = intermediate_base / study_name
-        intermediate_dir.mkdir(exist_ok=True)
+
+        # Check if intermediate_dir was passed as a parameter
+        if 'intermediate_dir' in self.config and self.config['intermediate_dir']:
+            # Use the provided intermediate directory
+            intermediate_dir = Path(self.config['intermediate_dir'])
+            intermediate_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            # Create intermediate embeddings modalities directory in new structure
+            intermediate_base = Path('data/study_areas/default/embeddings/intermediate/alphaearth')
+            intermediate_base.mkdir(parents=True, exist_ok=True)
+
+            # Create study-specific intermediate embeddings modalities directory
+            study_name = raw_data_path.parent.name  # e.g., 'cascadia_2021'
+            intermediate_dir = intermediate_base / study_name
+            intermediate_dir.mkdir(exist_ok=True)
         
         logger.info(f"Processing {len(tiff_files)} TIFF files with {self.max_workers} workers")
-        
-        # Process tiles in parallel
-        with concurrent.futures.ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-            future_to_tile = {
-                executor.submit(
-                    process_tile_worker,
-                    tiff_path,
-                    h3_resolution,
-                    self.subtile_size,
-                    self.min_pixels_per_hex,
-                    intermediate_dir
-                ): tiff_path for tiff_path in tiff_files
-            }
 
-            for future in tqdm(concurrent.futures.as_completed(future_to_tile), 
-                             total=len(tiff_files), desc="Processing Tiles"):
-                try:
-                    success = future.result()
-                    if not success:
-                        tiff_path = future_to_tile[future]
-                        logger.warning(f"Processing failed for: {tiff_path.name}")
-                except Exception as exc:
-                    tiff_path = future_to_tile[future]
-                    logger.error(f'{tiff_path.name} generated an exception: {exc}')
+        # If regions_gdf provided, use it for all tiles
+        if regions_gdf is not None:
+            # Ensure h3_index column exists
+            if 'h3_index' not in regions_gdf.columns:
+                regions_gdf = regions_gdf.reset_index().rename(columns={'index': 'h3_index'})
+            regions_gdf = regions_gdf.set_index('h3_index')
 
-        # Merge all intermediate results
+            # Process each tile with its intersecting hexagons
+            from shapely.geometry import box
+            import rasterio
+
+            results = []
+            for tiff_path in tiff_files:
+                # Get tile bounds
+                with rasterio.open(tiff_path) as src:
+                    bounds = src.bounds
+                    crs = src.crs
+
+                # Transform bounds to WGS84 if needed
+                if crs.to_epsg() != 4326:
+                    from pyproj import Transformer
+                    transformer = Transformer.from_crs(crs, 'EPSG:4326', always_xy=True)
+                    lons, lats = transformer.transform(
+                        [bounds.left, bounds.right, bounds.left, bounds.right],
+                        [bounds.bottom, bounds.bottom, bounds.top, bounds.top]
+                    )
+                    wgs84_bounds = (min(lons), min(lats), max(lons), max(lats))
+                else:
+                    wgs84_bounds = (bounds.left, bounds.bottom, bounds.right, bounds.top)
+
+                # Get hexagons that intersect with tile
+                bbox = box(*wgs84_bounds)
+                tile_hexagons = regions_gdf[regions_gdf.intersects(bbox)].copy()
+
+                if len(tile_hexagons) > 0:
+                    # Process this tile with its hexagons
+                    success = process_tile_worker(
+                        tiff_path,
+                        tile_hexagons,
+                        self.subtile_size,
+                        self.min_pixels_per_hex,
+                        intermediate_dir
+                    )
+                    if success:
+                        results.append(tiff_path)
+                else:
+                    logger.warning(f"No hexagons found for tile {tiff_path.name}")
+        else:
+            # Fall back to original processing without pre-defined regions
+            logger.warning("No regions_gdf provided, cannot process without study area regions")
+            raise ValueError("regions_gdf is required for processing AlphaEarth data")
+
+        # Merge all intermediate embeddings modalities results
         return self.merge_intermediate_results(intermediate_dir)
     
     def get_tiff_files(self, source_dir: Path, year_filter: Optional[str] = None) -> List[Path]:
@@ -268,14 +318,14 @@ class AlphaEarthProcessor(ModalityProcessor):
         return sorted(all_tiff_files)
     
     def merge_intermediate_results(self, intermediate_dir: Path) -> gpd.GeoDataFrame:
-        """Merge intermediate JSON results into a GeoDataFrame."""
-        logger.info("Merging intermediate results...")
+        """Merge intermediate embeddings modalities JSON results into a GeoDataFrame."""
+        logger.info("Merging intermediate embeddings modalities results...")
         
         intermediate_files = list(intermediate_dir.glob("*.json"))
         if not intermediate_files:
-            raise ValueError("No intermediate files found for merging")
+            raise ValueError("No intermediate embeddings modalities files found for merging")
         
-        logger.info(f"Loading and combining {len(intermediate_files)} intermediate files...")
+        logger.info(f"Loading and combining {len(intermediate_files)} intermediate embeddings modalities files...")
         
         # Combine all results with overlap handling
         merged = {}
@@ -338,7 +388,7 @@ class AlphaEarthProcessor(ModalityProcessor):
         return gdf
     
     def to_h3(self, gdf: gpd.GeoDataFrame, resolution: int, **kwargs) -> pd.DataFrame:
-        """Convert to H3 format - already in H3 format from processing embeddings."""
+        """Convert to H3 format - already in H3 format from processing_modalities."""
         # AlphaEarth processor already outputs in H3 format
         return gdf.drop('geometry', axis=1)
     

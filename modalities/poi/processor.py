@@ -45,17 +45,7 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
 
-class ModalityProcessor:
-    """Base class for modality processors."""
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
-
-    def save_embeddings(self, embeddings_df: pd.DataFrame, output_dir: str, filename: str) -> str:
-        """Save embeddings to parquet file."""
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-        output_path = Path(output_dir) / filename
-        embeddings_df.to_parquet(output_path)
-        return str(output_path)
+from modalities.base import ModalityProcessor
 
 
 class POIProcessor(ModalityProcessor):
@@ -92,7 +82,7 @@ class POIProcessor(ModalityProcessor):
         
         # Intermediate data saving
         self.save_intermediate = config.get('save_intermediate', False)
-        self.intermediate_dir = Path(config.get('intermediate_dir', 'data/processed/intermediate/poi'))
+        self.intermediate_dir = Path(config.get('intermediate_dir', 'data/study_areas/default/embeddings/intermediate/poi'))
 
         logger.info(f"Initialized POIProcessor. Hex2Vec: {self.use_hex2vec}, GeoVex: {self.use_geovex}")
         logger.info(f"GPU settings - Hex2Vec epochs: {self.hex2vec_epochs}, GeoVex epochs: {self.geovex_epochs}, Batch size: {self.batch_size}")
@@ -155,7 +145,7 @@ class POIProcessor(ModalityProcessor):
         poi_region_matches = len(joint_gdf)
         logger.info(f"Joined {poi_region_matches:,} POI-region pairs")
         
-        # Save intermediate data if requested
+        # Save intermediate embeddings modalities data if requested
         if self.save_intermediate:
             self._save_intermediate_data(pois_gdf, regions_gdf, joint_gdf, h3_resolution, study_area_name)
 
@@ -268,8 +258,8 @@ class POIProcessor(ModalityProcessor):
 
     def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
                                joint_gdf: gpd.GeoDataFrame, h3_resolution: int, study_area_name: str):
-        """Save intermediate SRAI data for debugging and analysis."""
-        logger.info("Saving intermediate data...")
+        """Save intermediate embeddings modalities SRAI data for debugging and analysis."""
+        logger.info("Saving intermediate embeddings modalities data...")
         
         # Create directories
         features_dir = self.intermediate_dir / 'features_gdf'
@@ -338,12 +328,12 @@ class POIProcessor(ModalityProcessor):
                     h3_resolution: int,
                     output_dir: str = None,
                     study_area_name: str = None) -> str:
-        """Execute complete POI processing embeddings pipeline."""
+        """Execute complete POI processing_modalities pipeline."""
         logger.info(f"Starting POI pipeline for resolution {h3_resolution}")
 
         # Use configured output dir if not specified
         if output_dir is None:
-            output_dir = self.config.get('output_dir', 'data/processed/embeddings/poi')
+            output_dir = self.config.get('output_dir', 'data/study_areas/default/embeddings/poi')
 
         # Load study area
         if isinstance(study_area, str):

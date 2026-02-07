@@ -34,17 +34,7 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
 
-class ModalityProcessor:
-    """Base class for modality processors."""
-    def __init__(self, config: Dict[str, Any]):
-        self.config = config
-
-    def save_embeddings(self, embeddings_df: pd.DataFrame, output_dir: str, filename: str) -> str:
-        """Save embeddings to parquet file."""
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-        output_path = Path(output_dir) / filename
-        embeddings_df.to_parquet(output_path)
-        return str(output_path)
+from modalities.base import ModalityProcessor
 
 
 # Default road types to consider
@@ -82,7 +72,7 @@ class RoadsProcessor(ModalityProcessor):
         
         # Intermediate data saving
         self.save_intermediate = config.get('save_intermediate', False)
-        self.intermediate_dir = Path(config.get('intermediate_dir', 'data/processed/intermediate/roads'))
+        self.intermediate_dir = Path(config.get('intermediate_dir', 'data/study_areas/default/embeddings/intermediate/roads'))
         
         logger.info(f"Initialized RoadsProcessor with Highway2Vec (embedding_size={self.embedding_size})")
         logger.info(f"Highway2Vec epochs: {self.highway2vec_epochs}, batch_size: {self.highway2vec_batch_size}")
@@ -136,7 +126,7 @@ class RoadsProcessor(ModalityProcessor):
             regions_gdf = area_gdf_or_regions
             logger.info(f"Using {len(regions_gdf):,} pre-computed H3 regions")
             
-            # For intermediate data, we need to create a joint_gdf
+            # For intermediate embeddings modalities data, we need to create a joint_gdf
             # This is a simplified version - in real use, joint_gdf should be loaded too
             logger.info("Creating spatial join for Highway2Vec (this may take time)...")
             from srai.joiners import IntersectionJoiner
@@ -161,7 +151,7 @@ class RoadsProcessor(ModalityProcessor):
             road_region_matches = len(joint_gdf)
             logger.info(f"Joined {road_region_matches:,} road-region pairs")
             
-            # Save intermediate data if requested
+            # Save intermediate embeddings modalities data if requested
             if self.save_intermediate:
                 self._save_intermediate_data(roads_gdf, regions_gdf, joint_gdf, h3_resolution, study_area_name)
         
@@ -282,7 +272,7 @@ class RoadsProcessor(ModalityProcessor):
     
     def _train_highway2vec_with_data(self, roads_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
                                    joint_gdf: gpd.GeoDataFrame, h3_resolution: int, study_area_name: str) -> pd.DataFrame:
-        """Train Highway2Vec with pre-loaded intermediate data."""
+        """Train Highway2Vec with pre-loaded intermediate embeddings modalities data."""
         logger.info(f"Training Highway2Vec with pre-loaded data for H3 resolution {h3_resolution}")
         logger.info(f"Roads: {len(roads_gdf):,}, Regions: {len(regions_gdf):,}, Joints: {len(joint_gdf):,}")
         
@@ -362,8 +352,8 @@ class RoadsProcessor(ModalityProcessor):
     
     def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
                                joint_gdf: gpd.GeoDataFrame, h3_resolution: int, study_area_name: str):
-        """Save intermediate SRAI data for debugging and analysis."""
-        logger.info("Saving intermediate data...")
+        """Save intermediate embeddings modalities SRAI data for debugging and analysis."""
+        logger.info("Saving intermediate embeddings modalities data...")
         
         # Create directories
         features_dir = self.intermediate_dir / 'features_gdf'
@@ -397,12 +387,12 @@ class RoadsProcessor(ModalityProcessor):
                     h3_resolution: int,
                     output_dir: str = None,
                     study_area_name: str = None) -> str:
-        """Execute complete road processing embeddings pipeline."""
+        """Execute complete road processing_modalities pipeline."""
         logger.info(f"Starting roads pipeline for resolution {h3_resolution}")
         
         # Use configured output dir if not specified
         if output_dir is None:
-            output_dir = self.config.get('output_dir', 'data/processed/embeddings/roads')
+            output_dir = self.config.get('output_dir', 'data/study_areas/default/embeddings/roads')
         
         # Load study area
         if isinstance(study_area, str):

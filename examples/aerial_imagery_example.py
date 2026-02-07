@@ -36,7 +36,7 @@ def process_aerial_imagery_standalone():
     # Configuration
     config = {
         'study_area': 'south_holland',
-        'output_dir': 'data/processed/embeddings/aerial_imagery',
+        'output_dir': 'data/study_areas/default/embeddings/aerial_imagery',
         'pdok_year': '2023',
         'model_name': 'dinov3_rs_base',  # Remote sensing variant
         'target_h3_resolution': 10,
@@ -50,7 +50,7 @@ def process_aerial_imagery_standalone():
     processor = AerialImageryProcessor(config)
     
     # Run pipeline
-    logger.info("Starting aerial imagery processing embeddings for South Holland")
+    logger.info("Starting aerial imagery processing_modalities for South Holland")
     output_path = processor.run_pipeline(
         study_area='south_holland',
         h3_resolution=10,
@@ -80,7 +80,7 @@ def combine_with_alphaearth():
     logger.info("Processing PDOK aerial imagery...")
     aerial_config = {
         'study_area': 'south_holland',
-        'output_dir': 'data/processed/embeddings/aerial_imagery',
+        'output_dir': 'data/study_areas/default/embeddings/aerial_imagery',
         'pdok_year': 'current',
         'model_name': 'dinov3_rs_base',
         'target_h3_resolution': 10
@@ -99,7 +99,7 @@ def combine_with_alphaearth():
         logger.info("Processing AlphaEarth embeddings...")
         alphaearth_config = {
             'study_area': 'south_holland',
-            'output_dir': 'data/processed/embeddings/alphaearth',
+            'output_dir': 'data/study_areas/default/embeddings/alphaearth',
             'source_dir': 'path/to/alphaearth/tiles'  # Update this path
         }
         
@@ -111,7 +111,7 @@ def combine_with_alphaearth():
         )
         results['alphaearth'] = pd.read_parquet(alphaearth_path)
     except Exception as e:
-        logger.warning(f"AlphaEarth processing embeddings skipped: {e}")
+        logger.warning(f"AlphaEarth processing_modalities skipped: {e}")
     
     # Merge embeddings
     if len(results) > 1:
@@ -132,7 +132,7 @@ def combine_with_alphaearth():
         logger.info(f"Total dimensions: {len(merged.columns)}")
         
         # Save merged embeddings
-        output_path = Path('data/processed/embeddings/multi_source')
+        output_path = Path('data/study_areas/default/embeddings/multi_source')
         output_path.mkdir(parents=True, exist_ok=True)
         merged.to_parquet(output_path / 'aerial_alphaearth_merged.parquet')
         
@@ -143,7 +143,7 @@ def combine_with_alphaearth():
 
 def hierarchical_active_inference_example():
     """
-    Demonstrate hierarchical processing embeddings with active inference principles.
+    Demonstrate hierarchical processing_modalities with active inference principles.
     
     This shows how the nested structure works:
     1. Fine-scale image patches (H3 res 12-13)
@@ -162,7 +162,7 @@ def hierarchical_active_inference_example():
         use_registers=True
     )
     
-    # Simulate processing embeddings an image
+    # Simulate processing_modalities an image
     logger.info("Demonstrating hierarchical encoding...")
     
     # Create dummy image (would be real PDOK image in practice)
@@ -197,7 +197,7 @@ def main():
     print("PDOK Aerial Imagery Processing with DINOv3")
     print("=" * 80)
     
-    # Example 1: Standalone processing embeddings
+    # Example 1: Standalone processing_modalities
     print("\n1. Processing PDOK aerial imagery...")
     aerial_embeddings = process_aerial_imagery_standalone()
     print(f"   ✓ Generated embeddings for {len(aerial_embeddings)} hexagons")

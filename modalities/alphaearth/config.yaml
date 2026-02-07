@@ -2,7 +2,7 @@
 
 # Google Earth Engine settings
 gee:
-  project_id: "boreal-union-296021"
+  project_id: ${GEE_PROJECT_ID}  # Set via environment variable or keys/.env
   export_folder: "AlphaEarth_Export"
   collection: "GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL"
   tile_size: 3072  # pixels
@@ -10,7 +10,7 @@ gee:
 
 # TIFF Processing settings
 processing:
-  # Subtile size for memory-efficient processing embeddings
+  # Subtile size for memory-efficient processing_modalities
   subtile_size: 256
   
   # Minimum pixels required per hexagon to include it
@@ -42,7 +42,7 @@ h3:
 output:
   # Directory structure
   base_dir: "data/alphaearth_h3"
-  intermediate_dir: "intermediate"
+  intermediate_dir: "intermediate embeddings modalities"
   checkpoint_dir: "checkpoints"
   
   # File naming
