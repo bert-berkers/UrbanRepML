@@ -1,46 +1,43 @@
 # Netherlands Multi-Modal Urban Embedding Pipeline Configuration
-# This configuration brings together AlphaEarth, POI, and Roads modalities
 
 study_area:
   name: netherlands
-  h3_resolution: 10  # Primary resolution for all modalities
-  boundary_file: data/processed/h3_regions/netherlands/netherlands_boundary.geojson
+  h3_resolution: 10
+  boundary_file: data/study_areas/netherlands/area_gdf/netherlands_boundary.geojson
   description: "Netherlands multi-modal urban analysis at H3 resolution 10"
 
 modalities:
   alphaearth:
     enabled: true
-    source: data/processed/embeddings/alphaearth/alphaearth_embeddings_res10.parquet
-    features: 64  # 64-band AlphaEarth embeddings
+    source: data/study_areas/netherlands/embeddings/alphaearth/alphaearth_embeddings_res10.parquet
+    features: 64
     preprocessing:
       normalize: true
-      pca_components: 16  # Optional dimensionality reduction
+      pca_components: 16
     weight: 1.0
-    
+
   poi:
     enabled: true
-    source: data/processed/embeddings/poi/poi_embeddings_res10.parquet
-    features: 28  # Including diversity metrics
+    source: data/study_areas/netherlands/embeddings/poi/poi_embeddings_res10.parquet
+    features: 28
     feature_groups:
       counts: ["amenity_*", "shop_*", "leisure_*", "tourism_*", "office_*"]
       diversity: ["poi_shannon_entropy", "poi_simpson_diversity", "poi_richness", "poi_evenness"]
-      embeddings: ["hex2vec_*", "geovex_*"]  # If available
+      embeddings: ["hex2vec_*", "geovex_*"]
     preprocessing:
       normalize: true
-      scale_diversity: false  # Already normalized
+      scale_diversity: false
     weight: 1.0
-    
+
   roads:
     enabled: true
-    source: data/processed/embeddings/roads/roads_embeddings_res10.parquet
-    features: 30  # Highway2Vec embeddings
+    source: data/study_areas/netherlands/embeddings/roads/roads_embeddings_res10.parquet
+    features: 30
     preprocessing:
       normalize: true
     weight: 1.0
 
-# Feature processing embeddings configuration
 feature_processing:
-  # PCA configuration per modality
   pca:
     variance_threshold: 0.95
     min_components:
@@ -48,38 +45,31 @@ feature_processing:
       poi: 10
       roads: 10
     max_components: 50
-    
-  # Normalization strategy
   normalization:
-    method: "standard"  # or "minmax"
-    per_modality: true  # Normalize each modality separately before fusion
-    
-  # Feature fusion strategy
+    method: "standard"
+    per_modality: true
   fusion:
-    method: "concatenate"  # or "weighted_average", "attention"
+    method: "concatenate"
     normalize_weights: true
 
-# Graph construction for spatial relationships
 graph:
-  type: "hexagonal"  # H3 hexagonal lattice
+  type: "hexagonal"
   hexagonal:
-    neighbor_rings: 2  # Include 2 rings of neighbors
+    neighbor_rings: 2
     edge_weight: 1.0
     include_self_loops: false
-    
-  # Alternative: accessibility-based graph
   accessibility:
     modes: ["walk", "bike", "drive"]
     speeds:
-      walk: 5.0  # km/h
+      walk: 5.0
       bike: 15.0
       drive: 50.0
     max_travel_time:
-      walk: 15  # minutes
+      walk: 15
       bike: 15
       drive: 15
     search_radius:
-      walk: 2000  # meters
+      walk: 2000
       bike: 5000
       drive: 15000
     beta:
@@ -87,84 +77,65 @@ graph:
       bike: 0.05
       drive: 0.01
 
-# Model configuration
 model:
   architecture: "UrbanUNet"
   hidden_dim: 256
   num_layers: 3
   dropout: 0.1
   activation: "relu"
-  
-  # Training parameters
   training:
     batch_size: 32
     learning_rate: 0.001
     epochs: 100
     early_stopping_patience: 10
     validation_split: 0.2
-    
-  # Loss configuration
   loss:
     reconstruction_weight: 1.0
     contrastive_weight: 0.1
     spatial_weight: 0.1
 
-# Output configuration
 output:
-  base_dir: data/processed/results/netherlands
+  base_dir: data/study_areas/netherlands/urban_embedding/results
   save_intermediate: true
-  intermediate_dir: data/processed/intermediate
-  
-  # What to save
+  intermediate_dir: data/study_areas/netherlands/urban_embedding/intermediate
   save:
     embeddings: true
     reconstructions: true
     attention_maps: true
     cluster_assignments: true
-    
-  # Visualization
   visualization:
     generate_maps: true
     cmap: "viridis"
     dpi: 150
     figsize: [12, 10]
-    
-# Clustering configuration
+
 clustering:
   method: "kmeans"
   n_clusters: [5, 10, 15, 20]
   metric: "euclidean"
-  
-  # Hierarchical clustering for multi-scale analysis
   hierarchical:
     enabled: true
     linkage: "ward"
-    distance_threshold: null  # Determine automatically
-    
-# Evaluation metrics
+    distance_threshold: null
+
 evaluation:
   metrics:
     - silhouette_score
     - davies_bouldin_score
     - calinski_harabasz_score
     - reconstruction_error
-    
-  # Spatial coherence metrics
   spatial:
-    - moran_i  # Spatial autocorrelation
-    - geary_c  # Spatial clustering
-    
-# Logging and monitoring
+    - moran_i
+    - geary_c
+
 logging:
   level: INFO
   log_file: logs/netherlands_pipeline.log
-  
+
 monitoring:
   use_wandb: false
   wandb_project: "urban-rep-ml"
   wandb_entity: null
-  
-  # Track these metrics
   track:
     - loss
     - reconstruction_error

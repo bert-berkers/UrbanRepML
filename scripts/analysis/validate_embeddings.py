@@ -30,7 +30,7 @@ class EmbeddingValidator:
     def __init__(self, base_dir: str = "data/processed"):
         self.base_dir = Path(base_dir)
         self.embeddings_dir = self.base_dir / "embeddings"
-        self.intermediate_dir = self.base_dir / "intermediate"
+        self.intermediate_dir = self.base_dir / "intermediate embeddings modalities"
         
     def validate_modality(self, modality: str, resolution: int = 10) -> Dict:
         """Validate a single modality's embeddings."""
@@ -69,12 +69,12 @@ class EmbeddingValidator:
                 resolutions = [h3.get_resolution(idx) for idx in sample_indices]
                 results['stats']['h3_resolutions'] = list(set(resolutions))
         
-        # Check intermediate data
+        # Check intermediate embeddings modalities data
         intermediate_path = self.intermediate_dir / modality
         if intermediate_path.exists():
             results['intermediate_found'] = True
             
-            # Count intermediate files
+            # Count intermediate embeddings modalities files
             features_count = len(list((intermediate_path / 'features_gdf').glob('*.parquet'))) if (intermediate_path / 'features_gdf').exists() else 0
             regions_count = len(list((intermediate_path / 'regions_gdf').glob('*.parquet'))) if (intermediate_path / 'regions_gdf').exists() else 0
             joint_count = len(list((intermediate_path / 'joint_gdf').glob('*.parquet'))) if (intermediate_path / 'joint_gdf').exists() else 0
@@ -152,8 +152,8 @@ class EmbeddingValidator:
     
     def validate_intermediate_data(self, modality: str, study_area: str = "netherlands", 
                                   resolution: int = 10) -> Dict:
-        """Validate intermediate SRAI data for a modality."""
-        logger.info(f"Validating intermediate data for {modality}/{study_area} at resolution {resolution}")
+        """Validate intermediate embeddings modalities SRAI data for a modality."""
+        logger.info(f"Validating intermediate embeddings modalities data for {modality}/{study_area} at resolution {resolution}")
         
         results = {
             'modality': modality,
@@ -166,7 +166,7 @@ class EmbeddingValidator:
         base_name = f"{study_area}_res{resolution}"
         intermediate_path = self.intermediate_dir / modality
         
-        # Check each type of intermediate data
+        # Check each type of intermediate embeddings modalities data
         for data_type in ['features_gdf', 'regions_gdf', 'joint_gdf']:
             file_path = intermediate_path / data_type / f"{base_name}_{data_type.split('_')[0]}.parquet"
             
@@ -288,16 +288,16 @@ def main():
     validator = EmbeddingValidator()
     
     # Generate comprehensive report
-    validator.generate_report("data/processed/validation_report.txt")
+    validator.generate_report("data/study_areas/netherlands/validation_report.txt")
     
-    # Validate specific intermediate data
-    logger.info("\nValidating POI intermediate data...")
+    # Validate specific intermediate embeddings modalities data
+    logger.info("\nValidating POI intermediate embeddings modalities data...")
     poi_validation = validator.validate_intermediate_data("poi", "netherlands", 10)
-    logger.info(f"POI intermediate files found: {poi_validation['files_found']}")
+    logger.info(f"POI intermediate embeddings modalities files found: {poi_validation['files_found']}")
     
-    logger.info("\nValidating Roads intermediate data...")
+    logger.info("\nValidating Roads intermediate embeddings modalities data...")
     roads_validation = validator.validate_intermediate_data("roads", "netherlands", 10)
-    logger.info(f"Roads intermediate files found: {roads_validation['files_found']}")
+    logger.info(f"Roads intermediate embeddings modalities files found: {roads_validation['files_found']}")
 
 
 if __name__ == "__main__":

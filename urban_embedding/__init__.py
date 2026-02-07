@@ -1,27 +1,46 @@
-# Urban Embedding package for multi-modal urban representation learning
+"""
+Urban Embedding Package
+=======================
 
-from .pipeline import UrbanEmbeddingPipeline
-from .model import UrbanUNet, UrbanModelTrainer
-from .hierarchical_spatial_unet import HierarchicalUNet, SRAIHierarchicalEmbedding
-from .active_inference import ActiveInferenceModule, HierarchicalActiveInference
+Multi-modal urban representation learning with clean modular architecture.
 
-# Renormalizing architecture (new)
-from .renormalizing_unet import RenormalizingUrbanUNet, RenormalizingConfig, create_renormalizing_config
-from .renormalizing_trainer import RenormalizingModelTrainer
-from .renormalizing_pipeline import RenormalizingUrbanPipeline, create_renormalizing_config_preset
+NOTE: Most imports temporarily disabled to avoid cascading import errors.
+Import directly from submodules as needed.
+"""
+
+# Temporarily disabled to avoid cascading import errors
+# Users should import directly from submodules, e.g.:
+#   from urban_embedding.models.lattice_unet import LatticeUNet
+#   from urban_embedding.data.study_area_loader import StudyAreaLoader
 
 __all__ = [
+    # Pipeline
     'UrbanEmbeddingPipeline',
-    'UrbanUNet', 
-    'UrbanModelTrainer',
-    'HierarchicalUNet',
-    'SRAIHierarchicalEmbedding',
-    'ActiveInferenceModule',
-    'HierarchicalActiveInference',
-    'RenormalizingUrbanUNet',
-    'RenormalizingConfig',
-    'create_renormalizing_config',
-    'RenormalizingModelTrainer',
-    'RenormalizingUrbanPipeline',
-    'create_renormalizing_config_preset'
+
+    # Models
+    'BaseUNet', 'BaseUNetConfig',
+    'LatticeUNet', 'LatticeUNetConfig',
+    'UrbanUNet',
+    'HierarchicalSpatialUNet',
+    'RenormalizingUNet',
+
+    # Data
+    'StudyAreaLoader',
+    'MultiModalLoader',
+    'UrbanFeatureProcessor',
+    'SpatialBatch',
+    'StudyAreaFilter',
+
+    # Training
+    'UnifiedTrainer',
+    'EmbeddingExtractor',
+    'RenormalizingTrainer',
+    'RenormalizingPipeline',
+
+    # Graphs
+    'SpatialGraphConstructor',
+    'HexagonalLatticeConstructor',
+
+    # Analysis
+    'UrbanEmbeddingAnalyzer'
 ]

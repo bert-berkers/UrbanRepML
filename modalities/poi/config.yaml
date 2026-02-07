@@ -8,7 +8,7 @@ default:
   pbf_path: null
   
   # Output directory for embeddings
-  output_dir: data/processed/embeddings/poi
+  output_dir: data/study_areas/${STUDY_AREA}/embeddings/poi
   
   # Processing parameters
   chunk_size: 1000
@@ -232,7 +232,7 @@ performance:
   # Use multiprocessing for large areas
   use_multiprocessing: true
   
-  # Memory limit for processing embeddings (MB)
+  # Memory limit for processing_modalities (MB)
   memory_limit: 8192
   
   # Batch size for API requests
