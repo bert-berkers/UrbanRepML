@@ -1,0 +1,98 @@
+# AlphaEarth Processing Configuration
+
+# Google Earth Engine settings
+gee:
+  project_id: ${GEE_PROJECT_ID}  # Set via environment variable or keys/.env
+  export_folder: "AlphaEarth_Export"
+  collection: "GOOGLE/SATELLITE_EMBEDDING/V1/ANNUAL"
+  tile_size: 3072  # pixels
+  scale: 10  # meters
+
+# TIFF Processing settings
+processing:
+  # Subtile size for memory-efficient processing_modalities
+  subtile_size: 256
+  
+  # Minimum pixels required per hexagon to include it
+  min_pixels_per_hex: 5
+  
+  # Batch size for checkpointing
+  batch_size: 10
+  
+  # Boundary buffer for tile overlap handling
+  boundary_buffer_pixels: 32
+  
+  # Maximum memory usage (GB)
+  max_memory_gb: 4.0
+  
+  # Edge sampling density for better boundary coverage
+  edge_sampling_density: 2
+
+# H3 hexagon settings
+h3:
+  # Available resolutions and their characteristics:
+  # 7: ~5.16 km² per hex (regional analysis)
+  # 8: ~0.74 km² per hex (city-level analysis) 
+  # 9: ~0.11 km² per hex (neighborhood analysis)
+  # 10: ~0.015 km² per hex (block-level analysis)
+  default_resolution: 8
+  resolutions: [7, 8, 9, 10]
+
+# Output settings
+output:
+  # Directory structure
+  base_dir: "data/alphaearth_h3"
+  intermediate_dir: "intermediate embeddings stage1_modalities"
+  checkpoint_dir: "checkpoints"
+  
+  # File naming
+  file_prefix: "alphaearth_h3"
+  
+  # Logging
+  log_level: "INFO"
+  log_dir: "logs"
+
+# Study area definitions (optional)
+study_areas:
+  cascadia:
+    name: "Cascadia Bioregion"
+    bounds:
+      west: -124.7
+      south: 38.6
+      east: -117.3
+      north: 49.0
+    
+  del_norte:
+    name: "Del Norte County"
+    region_type: "county"
+    region_name: "Del Norte"
+    state: "California"
+    
+  netherlands:
+    name: "Netherlands"
+    region_type: "country"
+    region_name: "Netherlands"
+    
+  pacific_northwest:
+    name: "Pacific Northwest"
+    bounds:
+      west: -124.7
+      south: 42.0
+      east: -116.5
+      north: 49.0
+
+# Data source paths (examples)
+data_sources:
+  # Google Drive mount point (Windows)
+  gdrive_windows: "G:/My Drive"
+  
+  # Google Drive mount point (Linux/Mac)
+  gdrive_unix: "/content/drive/MyDrive"
+  
+  # Local data directory
+  local: "./data/tiffs"
+
+# AlphaEarth embedding dimensions
+embedding:
+  n_bands: 64
+  band_prefix: "A"  # Bands named A00-A63

@@ -26,7 +26,7 @@ from inquirer import questions
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
-from urban_embedding.study_area_filter import StudyAreaConfig, GeographicBounds, BioregionalContext, ResolutionRule
+from stage2_fusion.study_area_filter import StudyAreaConfig, GeographicBounds, BioregionalContext, ResolutionRule
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

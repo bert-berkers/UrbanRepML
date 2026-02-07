@@ -10,11 +10,11 @@ import sys
 import os
 from pathlib import Path
 
-# Add project root to path so we can import urban_embedding
+# Add project root to path so we can import stage2_fusion
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from urban_embedding import UrbanEmbeddingPipeline
+from stage2_fusion import UrbanEmbeddingPipeline
 import logging
 
 # ==============================================================================
@@ -133,7 +133,7 @@ logging.basicConfig(
     level=logging.INFO if not DEBUG_MODE else logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
     handlers=[
-        logging.FileHandler(project_root / 'urban_embedding.log'),
+        logging.FileHandler(project_root / 'stage2_fusion.log'),
         logging.StreamHandler()
     ]
 )

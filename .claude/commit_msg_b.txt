@@ -1,0 +1,7 @@
+chore: add project infrastructure and clean up cascadia archive data
+
+Add .claude/ agent definitions, specs/, .python-version, .mcp.json.
+Add remaining scripts and study area configs.
+Remove cascadia archive intermediates (superseded).
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>

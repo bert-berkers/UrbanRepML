@@ -5,7 +5,7 @@ This example demonstrates:
 1. Fetching RGB aerial images from PDOK (free Dutch aerial imagery)
 2. Encoding with DINOv3 (including remote sensing variant)
 3. Hierarchical aggregation to H3 hexagons
-4. Integration with other modalities (AlphaEarth)
+4. Integration with other stage1_modalities (AlphaEarth)
 """
 
 import sys
@@ -18,9 +18,9 @@ import numpy as np
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from modalities.aerial_imagery import AerialImageryProcessor
-from modalities.alphaearth import AlphaEarthProcessor
-from urban_embedding.pipeline import UrbanEmbeddingPipeline
+from stage1_modalities.aerial_imagery import AerialImageryProcessor
+from stage1_modalities.alphaearth import AlphaEarthProcessor
+from stage2_fusion.pipeline import UrbanEmbeddingPipeline
 
 # Setup logging
 logging.basicConfig(
@@ -152,7 +152,7 @@ def hierarchical_active_inference_example():
     4. Coarse-scale H3 embeddings (res 10)
     """
     
-    from modalities.aerial_imagery.dinov3_encoder import DINOv3Encoder
+    from stage1_modalities.aerial_imagery.dinov3_encoder import DINOv3Encoder
     import torch
     
     # Initialize encoder with hierarchical extraction

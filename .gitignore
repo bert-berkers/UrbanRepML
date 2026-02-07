@@ -50,6 +50,7 @@ pip-delete-this-directory.txt
 *.sav
 checkpoints/
 models/
+!stage2_fusion/models/
 saved_models/
 weights/
 
@@ -125,10 +126,10 @@ data/embeddings/aerial_alphaearth/embeddings_AlphaEarth/*.parquet
 # ==========================================
 # Bridge integration (removed - focus on embeddings)
 bridge/
-modalities/buildings/
-modalities/streetview/
-modalities/landuse/
-modalities/semantic_segmentation/
+stage1_modalities/buildings/
+stage1_modalities/streetview/
+stage1_modalities/landuse/
+stage1_modalities/semantic_segmentation/
 
 # ==========================================
 # Logs and Temporary Files
@@ -386,8 +387,8 @@ outputs/
 !CLAUDE.md
 
 # Keep test data structure
-!tests/fixtures/
-!tests/data/
+!stage3_analysis/fixtures/
+!stage3_analysis/data/
 # But exclude large test files
 tests/data/*.tif
 tests/data/*.parquet

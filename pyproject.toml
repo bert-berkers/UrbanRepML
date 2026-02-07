@@ -1,0 +1,143 @@
+[project]
+name = "urbanrepml"
+version = "0.1.0"
+description = "Multi-Modal Urban Representation Learning for Geospatial Intelligence"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10,<3.14"
+authors = [
+    { name = "Bert Berkers" },
+]
+keywords = [
+    "urban-analysis",
+    "geospatial",
+    "machine-learning",
+    "h3",
+    "graph-neural-networks",
+    "remote-sensing",
+    "poi",
+    "multi-modal",
+    "representation-learning",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    # PyTorch (CUDA 12.8 via [tool.uv.sources])
+    # Pinned <2.9 for PyG extension wheel compatibility (data.pyg.org)
+    "torch>=2.8.0,<2.9",
+    "torchvision>=0.23.0,<0.24",
+    "torchaudio>=2.8.0,<2.9",
+
+    # PyTorch Geometric + extensions (via find-links)
+    "torch-geometric>=2.6.0",
+    "torch-scatter>=2.1.0",
+    "torch-sparse>=0.6.18",
+    "torch-cluster>=1.6.0",
+    "torch-spline-conv>=1.2.0",
+
+    # Training
+    "pytorch-lightning>=2.5.0",
+
+    # Geospatial
+    "geopandas>=0.13.0",
+    "h3>=3.7.0",
+    "osmnx>=1.5.0",
+    "networkx>=3.0",
+    "pyproj>=3.5.0",
+    "shapely>=2.0.0",
+    "srai>=0.7.0",
+    "rioxarray>=0.15.0",
+    "rasterio>=1.3.0",
+
+    # Data processing
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "scikit-learn>=1.3.0",
+    "scipy>=1.10.0",
+
+    # Visualization
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "contextily>=1.3.0",
+
+    # Utilities
+    "python-dotenv>=0.21.0",
+    "tqdm>=4.65.0",
+    "pyyaml>=6.0",
+    "joblib>=1.3.0",
+    "pyarrow>=12.0.0",
+    "requests>=2.28.0",
+    "pillow>=9.0.0",
+    "psutil>=5.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "ipykernel>=6.0.0",
+]
+viz = [
+    "plotly>=5.14.0",
+    "folium>=0.14.0",
+]
+ml = [
+    "wandb>=0.15.0",
+    "tensorboard>=2.12.0",
+    "optuna>=3.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/bertberkers/UrbanRepML"
+"Bug Tracker" = "https://github.com/bertberkers/UrbanRepML/issues"
+"Source Code" = "https://github.com/bertberkers/UrbanRepML"
+
+# [project.scripts]
+# urbanrepml = "stage2_fusion.cli:main"  # Disabled — no CLI module yet
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "stage1_modalities",
+    "stage2_fusion",
+    "stage3_analysis",
+    "study_areas",
+]
+
+[tool.uv]
+find-links = ["https://data.pyg.org/whl/torch-2.8.0+cu128.html"]
+no-build-package = [
+    "torch-scatter",
+    "torch-sparse",
+    "torch-cluster",
+    "torch-spline-conv",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128" }]
+torchvision = [{ index = "pytorch-cu128" }]
+torchaudio = [{ index = "pytorch-cu128" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

@@ -1,0 +1,8 @@
+refactor: restructure into explicit 3-stage pipeline
+
+Rename modalities/ → stage1_modalities/, urban_embedding/ → stage2_fusion/.
+Create stage3_analysis/ from stage2_fusion/analysis/.
+Delete visualize_clusters_simple.py (superseded).
+Update all imports, pyproject.toml, CLAUDE.md, README.md.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
