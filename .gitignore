@@ -99,6 +99,13 @@ data/preprocessed [TODO SORT & CLEAN UP]/
 data/temporal/
 data/cache/
 
+# Legacy data directories (superseded by data/study_areas/)
+data/archive/processed/
+data/embeddings/
+data/archive/
+data/boundaries/
+data/cache/
+
 # Study area embeddings and results
 data/study_areas/*/embeddings/
 data/study_areas/*/urban_embedding/
@@ -237,7 +244,6 @@ env.bak/
 venv.bak/
 virtualenv/
 pipenv/
-.python-version
 .pyenv/
 
 # Conda
@@ -286,6 +292,7 @@ secrets.yaml
 config.local.yml
 config.local.yaml
 .claude/settings.local.json
+.claude/scratchpad/
 
 # ==========================================
 # Package Management
@@ -371,14 +378,11 @@ outputs/
 !config/example.*
 !.github/
 !.gitkeep
-!requirements*.txt
-!setup.py
-!setup.cfg
 !pyproject.toml
+!uv.lock
 !Makefile
 !LICENSE
 !README.md
-!ARCHITECTURE.md
 !CLAUDE.md
 
 # Keep test data structure
