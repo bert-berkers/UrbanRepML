@@ -3750,6 +3750,26 @@ wheels = [
 ]
 
 [[package]]
+name = "spatial-kfold"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "geopandas" },
+    { name = "matplotlib" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "pandas", version = "3.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "shapely" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/06/30/61ca2605f44c7ab288b56fc46770c79b0981fc0b98e703b66fffcc005298/spatial_kfold-0.0.4.tar.gz", hash = "sha256:2cc8af90095c2f445ecb7fe044557c2d362ee4932a7bae6ac72bab2e081e2667", size = 261307, upload-time = "2025-06-22T11:47:20.254Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/97/ef/cf3fe860c05f6b4f9da77bc8938525db87545c7e2a994363219db81f060d/spatial_kfold-0.0.4-py3-none-any.whl", hash = "sha256:9c1893efdf40c16e22d7808e828159685904c3fd332964c83c131b37fabebb81", size = 288345, upload-time = "2025-06-22T11:47:17.303Z" },
+]
+
+[[package]]
 name = "sqlalchemy"
 version = "2.0.46"
 source = { registry = "https://pypi.org/simple" }
@@ -4294,6 +4314,7 @@ dev = [
 ]
 ml = [
     { name = "optuna" },
+    { name = "spatial-kfold" },
     { name = "tensorboard" },
     { name = "wandb" },
 ]
@@ -4336,6 +4357,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.10.0" },
     { name = "seaborn", specifier = ">=0.12.0" },
     { name = "shapely", specifier = ">=2.0.0" },
+    { name = "spatial-kfold", marker = "extra == 'ml'", specifier = ">=0.0.3" },
     { name = "srai", specifier = ">=0.7.0" },
     { name = "tensorboard", marker = "extra == 'ml'", specifier = ">=2.12.0" },
     { name = "torch", specifier = ">=2.8.0,<2.9", index = "https://download.pytorch.org/whl/cu128" },
