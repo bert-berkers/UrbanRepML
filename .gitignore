@@ -112,6 +112,9 @@ data/study_areas/*/embeddings/
 data/study_areas/*/urban_embedding/
 data/study_areas/*/plots/
 
+# Exclude entire pearl_river_delta study area from repo
+data/study_areas/pearl_river_delta/
+
 # Keep study area structure documentation
 !data/study_areas/*/README.md
 !data/study_areas/*/area_gdf/README.md
