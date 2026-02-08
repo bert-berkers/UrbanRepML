@@ -33,7 +33,7 @@ from ..data.hierarchical_cone_masking import (
     LazyConeBatcher,  # NEW - loads individual files on-demand
     HierarchicalCone
 )
-from ..models.cone_unet import ConeLatticeUNet
+from ..models.cone_batching_unet import ConeBatchingUNet
 
 logger = logging.getLogger(__name__)
 
@@ -537,16 +537,16 @@ def example_usage():
     """Example of how to use the inference system."""
 
     # Load trained model
-    from ..models.cone_unet import ConeLatticeUNet, ConeUNetConfig
+    from ..models.cone_batching_unet import ConeBatchingUNet, ConeBatchingUNetConfig
 
-    model_config = ConeUNetConfig(
+    model_config = ConeBatchingUNetConfig(
         input_dim=64,
         output_dim=64,
         dropout=0.1,
         conv_type="gcn"
     )
 
-    model = ConeLatticeUNet(model_config)
+    model = ConeBatchingUNet(model_config)
 
     # Load checkpoint
     checkpoint_path = "data/study_areas/netherlands/results/lattice_unet_cones/checkpoints/best.pth"

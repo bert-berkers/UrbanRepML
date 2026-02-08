@@ -301,7 +301,7 @@ def integrate_with_urban_embedding_pipeline():
         ],
         'h3_resolution': 10,
         'model': {
-            'architecture': 'UrbanUNet',
+            'architecture': 'FullAreaUNet',
             'hidden_dim': 256,
             'num_layers': 4,
             'use_semantic_conditioning': True  # Key enhancement

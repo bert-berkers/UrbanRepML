@@ -73,9 +73,9 @@ embeddings = processor.process_to_h3(data, regions_gdf)
 
 Three model architectures (all in `stage2_fusion/models/`):
 
-1. **UrbanUNet** (`urban_unet.py`): The OG that worked. Full study area processing with lateral accessibility graph. Multi-resolution U-Net (res 8-10) with ModalityFusion, SharedSparseMapping, symmetric 3-level encoder-decoder with skip connections, and per-resolution output heads.
+1. **FullAreaUNet** (`full_area_unet.py`): The OG that worked. Full study area processing with lateral accessibility graph. Multi-resolution U-Net (res 8-10) with ModalityFusion, SharedSparseMapping, symmetric 3-level encoder-decoder with skip connections, and per-resolution output heads.
 
-2. **ConeLatticeUNet** (`cone_unet.py`): Most promising future direction. Cone-based hierarchical U-Net processing independent computational "cones" spanning res5→res10. Memory efficient (each cone ~1,500 hexagons vs ~6M for full graph), parallelizable, multi-scale.
+2. **ConeBatchingUNet** (`cone_batching_unet.py`): Most promising future direction. Cone-based hierarchical U-Net processing independent computational "cones" spanning res5→res10. Memory efficient (each cone ~1,500 hexagons vs ~6M for full graph), parallelizable, multi-scale.
 
 3. **AccessibilityUNet** (`accessibility_unet.py`): Planned — accessibility-weighted variant using Hanssen's gravity model.
 
@@ -138,9 +138,9 @@ uv sync --extra dev  # Include dev tools
 ## Cone-Based Training Memory Optimization
 
 **TRUE Lazy Loading** with individual cone files:
-- Each cone saved as separate `cone_{hex}.pkl` file (~144 MB each)
-- `LazyConeBatcher` loads only 32 files at a time (~4.5 GB vs ~60 GB for all cones)
-- 92% memory reduction with on-demand loading
+- Each cone saved as separate `cone_{hex}.pkl` file (~12-23 MB each)
+- `LazyConeBatcher` loads only 32 files at a time (~0.4-0.7 GB vs ~6-9 GB for all cones)
+- Significant memory reduction with on-demand loading
 
 ```python
 from stage2_fusion.data.hierarchical_cone_masking import (
@@ -233,4 +233,4 @@ This is not optional documentation — it is the coordination mechanism. Without
 
 ---
 
-*Last updated: February 2025*
+*Last updated: February 2026*

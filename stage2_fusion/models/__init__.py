@@ -5,15 +5,18 @@ Urban Embedding Models
 UNet architectures for urban spatial representation learning.
 
 Models:
-- BaseUNet: Abstract base class for all U-Net variants
+- FullAreaUNet: Full study area U-Net with lateral accessibility graph (OG that worked)
+- ConeBatchingUNet: Cone-based hierarchical U-Net (most promising future direction)
 - AccessibilityUNet: Accessibility-weighted U-Net (planned)
-- UrbanUNet: Full study area U-Net with lateral accessibility graph (OG that worked)
-- ConeLatticeUNet: Cone-based hierarchical U-Net (most promising future direction)
 """
 
-from .base import BaseUNet, BaseUNetConfig
+from .full_area_unet import FullAreaUNet
+from .cone_batching_unet import ConeBatchingUNet, ConeBatchingUNetConfig
+from .accessibility_unet import AccessibilityUNet
 
 __all__ = [
-    'BaseUNet',
-    'BaseUNetConfig',
+    'FullAreaUNet',
+    'ConeBatchingUNet',
+    'ConeBatchingUNetConfig',
+    'AccessibilityUNet',
 ]

@@ -6,7 +6,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from typing import Dict, Tuple, Optional
-import wandb
 from datetime import datetime
 from tqdm.auto import tqdm
 
@@ -144,7 +143,7 @@ class DecoderBlock(nn.Module):
         out = out + identity
         return F.normalize(out, p=2, dim=-1, eps=1e-8)
 
-class UrbanUNet(nn.Module):
+class FullAreaUNet(nn.Module):
     """Multi-resolution U-Net for urban representation learning."""
     def __init__(
             self,
@@ -290,7 +289,7 @@ class LossComputer:
             **{f'consistency_loss_{k[0]}_{k[1]}': v for k, v in consistency_losses.items()}
         }
 
-class UrbanModelTrainer:
+class FullAreaModelTrainer:
     """Trainer for the Urban U-Net model."""
 
     def __init__(
@@ -301,9 +300,9 @@ class UrbanModelTrainer:
             wandb_project: str = "urban-embedding",
             checkpoint_dir: Optional[Path] = None
     ):
-        logger.info("Initializing UrbanModelTrainer...")
+        logger.info("Initializing FullAreaModelTrainer...")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = UrbanUNet(**model_config, device=self.device)
+        self.model = FullAreaUNet(**model_config, device=self.device)
         self.model.to(self.device)
         logger.info(f"Model initialized on {self.device}")
 

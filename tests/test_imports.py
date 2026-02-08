@@ -37,17 +37,6 @@ class TestStage1Imports:
         from stage1_modalities.alphaearth.processor import AlphaEarthProcessor
         assert AlphaEarthProcessor is not None
 
-    @pytest.mark.xfail(
-        reason=(
-            "BUG: AlphaEarthProcessor does not implement the 4 abstract methods "
-            "from ModalityProcessor (validate_config, load_data, process_to_h3, "
-            "run_pipeline). It uses its own method names (process, to_h3, "
-            "create_embeddings) instead. Cannot instantiate until the ABC "
-            "contract is reconciled."
-        ),
-        raises=TypeError,
-        strict=True,
-    )
     def test_load_modality_processor_alphaearth(self):
         """Factory function returns an AlphaEarthProcessor instance."""
         from stage1_modalities import load_modality_processor
@@ -83,27 +72,17 @@ class TestStage1Imports:
 class TestStage2ModelImports:
     """Import smoke tests for stage2_fusion model classes."""
 
-    @pytest.mark.xfail(
-        reason=(
-            "BUG: urban_unet.py has 'import wandb' at module level, but wandb "
-            "is in the optional [ml] dependency group and not installed by "
-            "default. The import should be guarded or wandb moved to core deps."
-        ),
-        raises=ModuleNotFoundError,
-        strict=True,
-    )
-    def test_import_urban_unet(self):
-        from stage2_fusion.models.urban_unet import UrbanUNet
-        assert UrbanUNet is not None
+    def test_import_full_area_unet(self):
+        from stage2_fusion.models.full_area_unet import FullAreaUNet
+        assert FullAreaUNet is not None
 
-    def test_import_cone_lattice_unet(self):
-        from stage2_fusion.models.cone_unet import ConeLatticeUNet
-        assert ConeLatticeUNet is not None
+    def test_import_cone_batching_unet(self):
+        from stage2_fusion.models.cone_batching_unet import ConeBatchingUNet
+        assert ConeBatchingUNet is not None
 
-    def test_import_base_unet(self):
-        from stage2_fusion.models.base import BaseUNet, BaseUNetConfig
-        assert BaseUNet is not None
-        assert BaseUNetConfig is not None
+    def test_import_cone_batching_unet_config(self):
+        from stage2_fusion.models.cone_batching_unet import ConeBatchingUNetConfig
+        assert ConeBatchingUNetConfig is not None
 
 
 class TestStage2DataImports:

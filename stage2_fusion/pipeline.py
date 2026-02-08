@@ -3,7 +3,10 @@
 import logging
 from pathlib import Path
 import sys
-import wandb
+try:
+    import wandb
+except ImportError:
+    wandb = None
 import torch
 import pandas as pd
 import numpy as np
@@ -31,7 +34,7 @@ logger = logging.getLogger(__name__)
 from .data.feature_processing import UrbanFeatureProcessor
 from .graphs.graph_construction import SpatialGraphConstructor, EdgeFeatures
 from .graphs.hexagonal_graph_constructor import HexagonalLatticeConstructor
-from .models.urban_unet import UrbanUNet
+from .models.full_area_unet import FullAreaUNet, FullAreaModelTrainer
 from .analysis.analytics import UrbanEmbeddingAnalyzer
 # from .threshold_prep import ThresholdPreprocessor  # Using custom FSI filtering
 
@@ -406,7 +409,7 @@ class UrbanEmbeddingPipeline:
 
             # Initialize model trainer
             logger.info("Initializing model trainer...")
-            self.model_trainer = UrbanModelTrainer(
+            self.model_trainer = FullAreaModelTrainer(
                 model_config={
                     'feature_dims': self.feature_processor.feature_dims,
                     **self.config['model']

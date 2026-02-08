@@ -131,7 +131,7 @@ def main():
     print("="*70)
     print("Graph Type: Fully Connected Hexagonal Lattice")
     print("Coverage: Full South Holland Province (no FSI filtering)")
-    print("Architecture: UrbanUNet with regular convolutions")
+    print("Architecture: FullAreaUNet with regular convolutions")
     print(f"Configuration Preset: {PRESET}")
     print("="*70)
     

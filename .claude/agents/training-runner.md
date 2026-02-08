@@ -27,9 +27,9 @@ python -m stage2_fusion.pipeline --study-area netherlands --modalities alphaeart
 
 ## Memory Budget
 
-- Cone-based: ~4.5 GB per batch of 32 cones (LazyConeBatcher)
-- Full graph: ~60 GB+ (avoid unless necessary)
-- Each cone file: ~144 MB
+- Cone-based: ~0.4-0.7 GB per batch of 32 cones (LazyConeBatcher)
+- Full graph: ~6-9 GB total (avoid loading all at once)
+- Each cone file: ~12-23 MB
 
 ## Common Issues
 
