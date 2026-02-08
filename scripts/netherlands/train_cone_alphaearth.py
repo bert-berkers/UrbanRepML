@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 """
-Train Cone-Based LatticeUNet on Netherlands AlphaEarth Embeddings
+Train Cone-Based ConeLatticeUNet on Netherlands AlphaEarth Embeddings
 ==================================================================
 
 Validates the hierarchical cone approach for single-modality embedding learning.
 
 Uses:
 - ConeDataset: Optimized PyTorch dataset with hierarchical validation
-- LatticeUNet: Production U-Net model with graph convolutions
+- ConeLatticeUNet: Production U-Net model with graph convolutions
 
 Training Strategy:
 - Process ONE cone at a time (memory efficient)
@@ -38,7 +38,7 @@ sys.path.insert(0, str(project_root))
 
 # Import project modules
 from stage2_fusion.data.cone_dataset import ConeDataset, cone_collate_fn
-from stage2_fusion.models.lattice_unet import LatticeUNet, LatticeUNetConfig
+from stage2_fusion.models.cone_unet import ConeConeLatticeUNet, ConeUNetConfig
 
 # Setup logging
 logging.basicConfig(
@@ -162,14 +162,14 @@ class ConeAlphaEarthTrainer:
         )
 
         # Create model
-        logger.info("\nInitializing LatticeUNet...")
+        logger.info("\nInitializing ConeLatticeUNet...")
 
         # Get embedding dimension from first batch
         sample_batch = self.dataset[0]
         embedding_dim = sample_batch['features_res10'].shape[1]
         logger.info(f"Embedding dimension: {embedding_dim}")
 
-        config = LatticeUNetConfig(
+        config = ConeUNetConfig(
             input_dim=embedding_dim,
             hidden_dim=hidden_dim,
             output_dim=embedding_dim,  # Reconstruct to same dimension
@@ -184,7 +184,7 @@ class ConeAlphaEarthTrainer:
             consistency_weight=0.0  # Not using consistency loss for now
         )
 
-        self.model = LatticeUNet(config).to(self.device)
+        self.model = ConeLatticeUNet(config).to(self.device)
 
         num_params = sum(p.numel() for p in self.model.parameters())
         logger.info(f"Model parameters: {num_params:,}")

@@ -10,7 +10,7 @@ Import directly from submodules as needed.
 
 # Temporarily disabled to avoid cascading import errors
 # Users should import directly from submodules, e.g.:
-#   from stage2_fusion.models.lattice_unet import LatticeUNet
+#   from stage2_fusion.models.cone_unet import ConeLatticeUNet
 #   from stage2_fusion.data.study_area_loader import StudyAreaLoader
 
 __all__ = [
@@ -19,7 +19,7 @@ __all__ = [
 
     # Models
     'BaseUNet', 'BaseUNetConfig',
-    'LatticeUNet', 'LatticeUNetConfig',
+    'ConeLatticeUNet', 'ConeUNetConfig',
     'UrbanUNet',
     'HierarchicalSpatialUNet',
     'RenormalizingUNet',

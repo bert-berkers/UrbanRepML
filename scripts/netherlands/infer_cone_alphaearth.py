@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Inference Script for Cone-Based LatticeUNet
+Inference Script for Cone-Based ConeLatticeUNet
 ============================================
 
 Applies trained model to all cones and aggregates predictions with weighted averaging.
@@ -36,7 +36,7 @@ sys.path.insert(0, str(project_root))
 
 # Import project modules
 from stage2_fusion.data.cone_dataset import ConeDataset
-from stage2_fusion.models.lattice_unet import LatticeUNet
+from stage2_fusion.models.cone_unet import ConeConeLatticeUNet
 
 # Setup logging
 logging.basicConfig(
@@ -115,9 +115,9 @@ class ConeInferenceAggregator:
         logger.info(f"Embedding dimension: {embedding_dim}")
 
         # Recreate model (use same config as training)
-        from stage2_fusion.models.lattice_unet import LatticeUNetConfig
+        from stage2_fusion.models.cone_unet import ConeUNetConfig
 
-        config = LatticeUNetConfig(
+        config = ConeUNetConfig(
             input_dim=embedding_dim,
             hidden_dim=128,  # Should match training
             output_dim=embedding_dim,
@@ -130,7 +130,7 @@ class ConeInferenceAggregator:
             activation="gelu"
         )
 
-        self.model = LatticeUNet(config).to(self.device)
+        self.model = ConeLatticeUNet(config).to(self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.model.eval()
 
