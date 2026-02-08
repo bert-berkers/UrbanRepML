@@ -603,15 +603,10 @@ class ConeDataset(Dataset):
             src_idx = hex_to_local_idx[src_hex]
 
             # Use SRAI to get immediate neighbors (distance=1)
-            from srai.regionalizers import H3Regionalizer
-            import h3
+            from srai.neighbourhoods import H3Neighbourhood
 
-            # Get immediate neighbors (ring at distance 1, excluding self)
-            try:
-                neighbors = h3.grid_ring(src_hex, 1)
-            except:
-                # Fallback if grid_ring fails (rare edge cases)
-                neighbors = set(h3.grid_disk(src_hex, 1)) - {src_hex}
+            neighbourhood = H3Neighbourhood()
+            neighbors = neighbourhood.get_neighbours_at_distance(src_hex, 1)
 
             for tgt_hex in neighbors:
                 # Only add edge if target is in cone

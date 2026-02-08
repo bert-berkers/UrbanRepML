@@ -17,7 +17,7 @@ You consume Stage 2 output. You do not modify models or training pipelines.
 
 ## What You Consume
 
-- **Stage 2 embeddings**: `region_id`-indexed parquet files from `urban_embedding/` models
+- **Stage 2 embeddings**: `region_id`-indexed parquet files from `stage2_fusion/` models
   - Located in `data/study_areas/{area}/urban_embedding/` or `data/study_areas/{area}/embeddings/`
   - Always indexed by `region_id` (SRAI convention, never `h3_index`)
   - Columns are embedding dimensions (`emb_0`, `emb_1`, ... or `A00`, `A01`, ...)
@@ -37,21 +37,18 @@ You consume Stage 2 output. You do not modify models or training pipelines.
 ## Files You Own
 
 ### Core analysis library
-- `urban_embedding/analysis/analytics.py` -- `UrbanEmbeddingAnalyzer` class: save embeddings, plot clusters, compute cluster statistics
-- `urban_embedding/analysis/hierarchical_cluster_analysis.py` -- `HierarchicalClusterAnalyzer`: multi-resolution clustering with KMeans, GMM, hierarchical, DBSCAN; optimal cluster detection; feature importance; spatial coherence; cross-resolution consistency
-- `urban_embedding/analysis/hierarchical_visualization.py` -- `HierarchicalLandscapeVisualizer`: multi-resolution cluster plots, PCA/t-SNE projections, combined landscape views
-- `urban_embedding/analysis/__init__.py`
+- `stage3_analysis/analytics.py` -- `UrbanEmbeddingAnalyzer` class: save embeddings, plot clusters, compute cluster statistics
+- `stage3_analysis/hierarchical_cluster_analysis.py` -- `HierarchicalClusterAnalyzer`: multi-resolution clustering with KMeans, GMM, hierarchical, DBSCAN; optimal cluster detection; feature importance; spatial coherence; cross-resolution consistency
+- `stage3_analysis/hierarchical_visualization.py` -- `HierarchicalLandscapeVisualizer`: multi-resolution cluster plots, PCA/t-SNE projections, combined landscape views
+- `stage3_analysis/__init__.py`
 
 ### Visualization scripts
-- `scripts/visualization/visualize_res10_clusters_fast.py` -- Datashader-based fast rendering for res10
-- `scripts/visualization/visualize_res8_clusters_fast.py` -- Datashader-based fast rendering for res8
-- `scripts/visualization/visualize_hierarchical_embeddings_fast.py` -- Multi-resolution visualization
+- `scripts/archive/visualization/visualize_res10_clusters_fast.py` -- Datashader-based fast rendering for res10
+- `scripts/archive/visualization/visualize_res8_clusters_fast.py` -- Datashader-based fast rendering for res8
+- `scripts/archive/visualization/visualize_hierarchical_embeddings_fast.py` -- Multi-resolution visualization
 
 ### Analysis scripts
-- `scripts/analysis/validate_embeddings.py` -- `EmbeddingValidator`: cross-modality alignment, coverage stats
-
-### Future home (after restructure)
-All of the above will consolidate into `stage3_analysis/` per the three-stage restructure plan.
+- `stage3_analysis/validation.py` -- `EmbeddingValidator`: cross-modality alignment, coverage stats
 
 ## Analysis Techniques
 
@@ -81,7 +78,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 
 regions_gdf = gpd.read_parquet(f"data/study_areas/{area}/regions_gdf/regions.parquet")
-embeddings = pd.read_parquet(f"data/study_areas/{area}/stage2_fusion/embeddings.parquet")
+embeddings = pd.read_parquet(f"data/study_areas/{area}/urban_embedding/")
 
 # Join embeddings to geometry for plotting
 merged = regions_gdf.join(embeddings)
@@ -124,10 +121,11 @@ img = tf.shade(agg, cmap=palette['glasbey_category10'])
 - You analyze the output after training completes
 - Loss curves during training are training-runner's domain; post-training evaluation is yours
 
-## Scratchpad Protocol
+## Scratchpad Protocol (MANDATORY)
 
-Write to `.claude/scratchpad/stage3-analyst/YYYY-MM-DD.md` using today's date.
+You MUST write to `.claude/scratchpad/stage3-analyst/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
 **On start**: Read coordinator's and ego's scratchpads for context. Read own previous day's scratchpad for continuity.
 **During work**: Log analysis runs, clustering results, visualization decisions, metric summaries.
+**Cross-agent observations**: Note if stage2's embeddings have unexpected properties, if the librarian's data shape contracts don't match reality, or if visualization reveals issues with upstream processing.
 **On finish**: 2-3 line summary of analyses completed, key findings, and open questions.

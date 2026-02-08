@@ -23,10 +23,10 @@ The graph tracks **nodes** (code entities) and **edges** (relationships between 
 
 | Node Type | What You Track | Example |
 |-----------|---------------|---------|
-| **Module** | Path, purpose, public API | `modalities/alphaearth/processor.py` — AlphaEarth TIFF→H3 |
-| **Class** | Location, base class, key methods | `AlphaEarthProcessor(ModalityProcessor)` at `modalities/alphaearth/processor.py:42` |
-| **Function** | Location, signature, input→output shapes | `process_to_h3(data, regions_gdf) → DataFrame[region_id, emb_0..emb_255]` |
-| **Data artifact** | Path pattern, format, index type, shape | `data/study_areas/*/embeddings/alphaearth/*.parquet` — region_id index, 256 float cols |
+| **Module** | Path, purpose, public API | `stage1_modalities/alphaearth/processor.py` — AlphaEarth TIFF→H3 |
+| **Class** | Location, base class, key methods | `AlphaEarthProcessor(ModalityProcessor)` at `stage1_modalities/alphaearth/processor.py` |
+| **Function** | Location, signature, input→output shapes | `process(raw_data_path, regions_gdf) → GeoDataFrame[region_id, A00..A63]` |
+| **Data artifact** | Path pattern, format, index type, shape | `data/study_areas/*/embeddings/alphaearth/*.parquet` — h3_index column, 64 float cols |
 | **Config** | Path, key parameters, what reads it | `configs/netherlands_pipeline.yaml` — read by pipeline runner |
 | **Index contract** | Name, dtype, where enforced | `region_id` — str (H3 hex), enforced at SRAI regionalizer output |
 
@@ -34,7 +34,7 @@ The graph tracks **nodes** (code entities) and **edges** (relationships between 
 
 | Edge | Meaning | Example |
 |------|---------|---------|
-| `imports` | Module A imports from B | `urban_embedding.models.cone_unet` imports `srai.neighbourhoods` |
+| `imports` | Module A imports from B | `stage2_fusion.models.cone_unet` imports `srai.neighbourhoods` |
 | `inherits` | Class A extends B | `AlphaEarthProcessor` inherits `ModalityProcessor` |
 | `produces → consumes` | Output of A is input to B | AlphaEarth embeddings → UrbanUNet node features |
 | `shape_contract` | Expected tensor/DataFrame shape at boundary | `modality output: (N_hexagons, emb_dim)` → `fusion input: (N_nodes, feature_dim)` |
@@ -50,23 +50,23 @@ Last updated: YYYY-MM-DD
 
 ## Stage 1: Modality Encoders
 
-### modalities/alphaearth/
+### stage1_modalities/alphaearth/
 - `processor.py`
-  - `AlphaEarthProcessor(ModalityProcessor)` [:42]
-    - `.process_to_h3(data, regions_gdf)` → `DataFrame[region_id, emb_0..emb_N]`
-    - shape: (N_hexagons, 256) float32
+  - `AlphaEarthProcessor(ModalityProcessor)`
+    - `.process(raw_data_path, regions_gdf)` → `DataFrame[region_id, emb_0..emb_N]`
+    - shape: (N_hexagons, 64) float32
     - index: region_id (str, H3 hex)
   - imports: srai.regionalizers.H3Regionalizer, rioxarray, numpy
-  - produces → urban_embedding.pipeline (node features)
+  - produces → stage2_fusion.pipeline (node features)
 
-### modalities/poi/
+### stage1_modalities/poi/
 - ...
 
 ## Stage 2: Fusion Models
 
-### urban_embedding/models/
+### stage2_fusion/models/
 - `urban_unet.py`
-  - `UrbanUNet(torch.nn.Module)` [:30]
+  - `UrbanUNet(nn.Module)` [:147]
     - `.forward(data: torch_geometric.data.Data)` → `Tensor[N_nodes, out_dim]`
     - consumes: node features (N, F), edge_index (2, E), edge_attr (E,)
     - index: nodes ordered by region_id
@@ -92,7 +92,7 @@ Last updated: YYYY-MM-DD
 ## How You Work
 
 ### Building the Graph (first invocation or major update)
-1. Glob for all `.py` files in `modalities/`, `urban_embedding/`, `scripts/`, `study_areas/`
+1. Glob for all `.py` files in `stage1_modalities/`, `stage2_fusion/`, `stage3_analysis/`, `scripts/`
 2. Read each file, extract: classes, functions, signatures, imports, shape annotations/comments
 3. Trace data flow: what produces what, what consumes what
 4. Identify index contracts: where is `region_id` created, passed, expected
@@ -140,7 +140,9 @@ Periodically (or when asked), scan for:
 
 Process-oriented agents (`devops`, `training-runner`) generally don't need you — they operate on infrastructure, not code structure.
 
-## Scratchpad Protocol
+## Scratchpad Protocol (MANDATORY)
+
+You MUST write both artifacts before returning. This is not optional — it is the coordination mechanism between sessions.
 
 **Persistent graph**: `.claude/scratchpad/librarian/codebase_graph.md` — updated incrementally, not daily.
 
@@ -148,4 +150,5 @@ Process-oriented agents (`devops`, `training-runner`) generally don't need you �
 
 **On start**: Read `codebase_graph.md` for current state. Read coordinator's scratchpad for what's being worked on (to know what might have changed).
 **During work**: Update `codebase_graph.md` as you discover changes. Log findings in daily scratchpad.
+**Cross-agent observations**: Note what you found useful, confusing, or inconsistent in other agents' scratchpads. If a specialist's code changes contradict the graph, flag it. If you see naming inconsistencies introduced by other agents, log them.
 **On finish**: 2-3 line summary of graph updates and any inconsistencies flagged.

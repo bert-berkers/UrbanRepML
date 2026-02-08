@@ -256,8 +256,7 @@ class HierarchicalConeMaskingSystem:
         k_rings: int
     ) -> Set[str]:
         """
-        Get k-ring neighbors. Uses h3.grid_disk for efficiency.
-        (SRAI's neighbourhood wraps h3 anyway, so direct usage is fine for single-hex ops)
+        Get k-ring neighbors using SRAI's H3Neighbourhood.
 
         Args:
             hex_id: Center hexagon
@@ -266,13 +265,10 @@ class HierarchicalConeMaskingSystem:
         Returns:
             Set of neighbor hexagon IDs (excluding center)
         """
-        import h3
+        from srai.neighbourhoods import H3Neighbourhood
 
-        # Use h3.grid_disk which is what SRAI uses internally
-        # For batch operations on GeoDataFrames, use SRAI
-        # For single hex k-ring lookups, h3 is more efficient
-        all_hexes = set(h3.grid_disk(hex_id, k_rings))
-        return all_hexes - {hex_id}  # Exclude center
+        neighbourhood = H3Neighbourhood()
+        return neighbourhood.get_neighbours_up_to_distance(hex_id, k_rings)
 
     def create_cone(
         self,
@@ -295,7 +291,7 @@ class HierarchicalConeMaskingSystem:
         if self.parent_to_children is None:
             raise RuntimeError("Parent lookup table not initialized. Call create_all_cones() first.")
 
-        # Get parent's neighbors (single h3.grid_disk call)
+        # Get parent's neighbors via SRAI H3Neighbourhood
         parent_neighbors = self.get_neighbors_at_distance(
             parent_hex,
             self.neighbor_rings

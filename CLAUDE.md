@@ -2,13 +2,15 @@
 
 Instructions for Claude Code and developers working with the UrbanRepML project.
 
-## CRITICAL: WE USE SRAI, NOT H3 DIRECTLY
+## CRITICAL: SRAI-First, h3-py for Hierarchy Only
 
-**This project uses SRAI (Spatial Representations for AI) for ALL H3 hexagon operations.**
-- NEVER use h3-py directly
-- Always use SRAI's H3Regionalizer
-- SRAI provides H3 functionality plus additional spatial analysis tools
-- This applies EVERYWHERE in the codebase
+**This project uses SRAI (Spatial Representations for AI) as the primary spatial interface.**
+- Use SRAI for: tessellation, neighborhoods, regionalization, spatial joins
+- **Exception**: `h3` is acceptable for parent-child hierarchy operations that SRAI does not wrap:
+  - `h3.cell_to_parent()`, `h3.cell_to_children()`, `h3.cell_to_center_child()`
+  - `h3.get_resolution()`, `h3.cell_to_local_ij()` and similar introspection
+- NEVER use h3 for tessellation or neighborhood queries — SRAI handles those
+- Always index by `region_id` (SRAI convention), never `h3_index`
 
 ## Core Development Principles
 
@@ -17,7 +19,7 @@ Instructions for Claude Code and developers working with the UrbanRepML project.
 3. **DENSE WEB OVER OFFSHOOTS**: Every component must connect meaningfully to the core pipeline.
 4. **STUDY-AREA BASED**: All work is organized by study areas. Each area is self-contained.
 5. **DATA-CODE SEPARATION**: Absolute boundary between data/ and code directories. Never mix.
-6. **SRAI EVERYWHERE**: Use SRAI for all spatial operations, H3 tessellation, and neighborhood analysis.
+6. **SRAI-FIRST**: Use SRAI for tessellation, neighborhoods, and regionalization. h3-py is OK for parent-child hierarchy traversal only.
 7. **THINK BEFORE ADDING**: Deeply consider how new code integrates with existing architecture.
 8. **ANTI-CLUTTER**: Keep documentation minimal and focused.
 
@@ -113,6 +115,11 @@ uv sync --extra dev  # Include dev tools
 - **DO NOT** rename to `h3_index` — adapt scripts to use `region_id`
 - H3Regionalizer creates: `GeoDataFrame` with `region_id` as index containing H3 hex strings
 
+### Stage Boundary Convention
+- **Stage 1 parquet outputs** use `h3_index` as column name for backwards compatibility with existing saved data
+- **Stage 2+** uses `region_id` internally (SRAI convention)
+- The `MultiModalLoader` bridges this by normalizing column names at the stage1→stage2 boundary
+
 ### TIFF Processing Architecture
 ```
 1. Pre-regionalize study area (SRAI H3Regionalizer)
@@ -184,9 +191,34 @@ python scripts/netherlands/train_lattice_unet_res10_cones.py
 python -m stage3_analysis.analytics --study-area netherlands
 ```
 
+## Multi-Agent Workflow
+
+**The main conversation agent (Claude Code) MUST delegate specialist work, not do it inline.**
+
+### Delegation Rules
+1. **Single-domain, small tasks** (one file edit, quick grep): direct action is fine
+2. **Multi-step or multi-domain work**: spawn the **coordinator** agent, which orchestrates specialists
+3. **Never do specialist work yourself** — if it touches spatial ops, model code, training, analysis, or testing, delegate to the matching specialist agent via the Task tool
+4. **Each specialist writes its own scratchpad** — this is mandatory, not optional. The scratchpad is the agent's proof of work and its message to future sessions
+
+### Stigmergic Logging (MANDATORY)
+Every agent that does work MUST write a dated scratchpad entry (`.claude/scratchpad/{agent}/YYYY-MM-DD.md`) containing:
+- **What I did**: actions taken, files modified, decisions made
+- **Cross-agent observations**: what I read from other agents' scratchpads, what was useful, what confused me, what I disagree with or would do differently
+- **Unresolved**: open questions, things that need follow-up
+
+This is not optional documentation — it is the coordination mechanism. Without scratchpad entries, the next session starts blind.
+
+### Why This Matters
+- Scratchpads are how agents communicate across sessions (stigmergy)
+- The coordinator reads all scratchpads to prioritize work
+- The ego agent monitors scratchpads for process health
+- The librarian's codebase graph is the shared map everyone orients from
+- Cross-agent observations catch disagreements, confusion, and integration issues early
+
 ## Common Pitfalls
 
-1. **Using h3-py directly** → Always use SRAI's H3Regionalizer
+1. **Using h3-py for tessellation/neighborhoods** → Use SRAI for those. h3-py is OK only for hierarchy traversal (cell_to_parent, cell_to_children, etc.)
 2. **Mixing data and code** → Keep strict separation
 3. **Processing without study area** → Everything is study-area based
 4. **Ignoring SRAI capabilities** → SRAI has built-in embedders and analysis tools

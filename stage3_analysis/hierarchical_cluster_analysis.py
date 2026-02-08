@@ -31,7 +31,7 @@ import logging
 from pathlib import Path
 from srai.regionalizers import H3Regionalizer
 from srai.neighbourhoods import H3Neighbourhood
-# Low-level H3 cell primitives (grid_disk, cell_to_parent) not wrapped by SRAI
+# Low-level H3 hierarchy traversal (cell_to_parent) not wrapped by SRAI
 import h3 as _h3
 import warnings
 warnings.filterwarnings('ignore')
@@ -486,9 +486,9 @@ class HierarchicalClusterAnalyzer:
             neighbor_connections = 0
             total_possible_connections = 0
 
+            neighbourhood = H3Neighbourhood()
             for cell in cluster_cells:
-                neighbors = set(_h3.grid_disk(cell, 1))
-                neighbors.discard(cell)
+                neighbors = neighbourhood.get_neighbours(cell)
 
                 cell_neighbors_in_cluster = len(neighbors.intersection(set(cluster_cells)))
                 neighbor_connections += cell_neighbors_in_cluster

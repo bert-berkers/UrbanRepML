@@ -26,8 +26,8 @@ regionalizer = H3Regionalizer(resolution=9)
 regions_gdf = regionalizer.transform(area_gdf)
 
 processor = AlphaEarthProcessor(config)
-embeddings = processor.process_to_h3(data, regions_gdf)
-# Output: DataFrame indexed by region_id with embedding columns
+embeddings = processor.process(raw_data_path, regions_gdf)
+# Output: GeoDataFrame indexed by h3_index with A00..A63 columns
 ```
 
 ## Key Architecture Patterns
@@ -35,7 +35,7 @@ embeddings = processor.process_to_h3(data, regions_gdf)
 ### ModalityProcessor ABC
 All processors follow the same abstract base class pattern:
 - `__init__(config)` — load configuration
-- `process_to_h3(data, regions_gdf)` — transform raw data → region_id-indexed embeddings
+- Base class defines `process_to_h3(data, h3_resolution)`. AlphaEarthProcessor overrides with `process(raw_data_path, regions_gdf)` — transform raw data → H3-indexed embeddings
 - Output is always a DataFrame/GeoDataFrame with `region_id` index
 
 ### TIFF Processing Pipeline
@@ -63,7 +63,7 @@ Consistently average embeddings for ALL hexagons (including single-tile ones) to
 
 1. **SRAI for all spatial ops** — never `import h3`
 2. **`region_id` index** — never rename
-3. **Data-code separation** — processor code in `modalities/`, data in `data/study_areas/`
+3. **Data-code separation** — processor code in `stage1_modalities/`, data in `data/study_areas/`
 4. **Study-area based** — every processor operates within a study area context
 5. **One modality at a time** — focus on getting one encoder right before the next
 
@@ -79,10 +79,11 @@ data/study_areas/{area_name}/
     └── gtfs/           # Transit accessibility
 ```
 
-## Scratchpad Protocol
+## Scratchpad Protocol (MANDATORY)
 
-Write to `.claude/scratchpad/stage1-modality-encoder/YYYY-MM-DD.md` using today's date.
+You MUST write to `.claude/scratchpad/modality-encoder/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
 **On start**: Read coordinator's and ego's scratchpads for context. Read own previous day's scratchpad for continuity.
 **During work**: Log processing runs, data quality issues, modality-specific decisions.
+**Cross-agent observations**: Note if the librarian's graph has wrong data shapes for your outputs, if stage2-fusion-architect expects different formats than you produce, or if srai-spatial's work affected your processing pipeline.
 **On finish**: 2-3 line summary of what was accomplished and what's unresolved.

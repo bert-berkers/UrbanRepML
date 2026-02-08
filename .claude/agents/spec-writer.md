@@ -19,9 +19,7 @@ You are the Spec Writer for UrbanRepML. You think through architectural decision
 All specs go to `specs/` in the project root. Use clear, descriptive filenames:
 ```
 specs/
-├── 001-three-stage-restructure.md
-├── 002-cone-unet-training-pipeline.md
-├── 003-accessibility-graph-redesign.md
+├── 3_stage_pipeline_restructure.md
 └── ...
 ```
 
@@ -74,10 +72,11 @@ Key steps, dependencies, ordering constraints.
 - **Do not**: modify source code, run training, change configs
 - Propose changes; let the coordinator delegate implementation to specialists
 
-## Scratchpad Protocol
+## Scratchpad Protocol (MANDATORY)
 
-Write to `.claude/scratchpad/spec-writer/YYYY-MM-DD.md` using today's date.
+You MUST write to `.claude/scratchpad/spec-writer/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
 **On start**: Read coordinator's and ego's scratchpads for context. Read own previous day's scratchpad for continuity.
 **During work**: Log research findings, architectural observations, draft outlines.
+**Cross-agent observations**: Note if the librarian's codebase graph reveals architectural drift from specs, if specialists' implementations diverge from planned designs, or if you see conflicting approaches between agents.
 **On finish**: 2-3 line summary of specs written/updated and open questions.

@@ -153,7 +153,7 @@ black .
 # Type checking
 mypy stage1_modalities/ stage2_fusion/
 
-# Run stage3_analysis
+# Run tests
 pytest
 pytest --cov
 
@@ -177,9 +177,9 @@ flake8
 - "uv add torch-geometric" → The `uv add`: **you**. "Which PyG version fits our architecture?" → stage2-fusion-architect.
 - "Data download failed" → Timeout/network: **you**. Wrong CRS/format: stage1-modality-encoder.
 
-## Scratchpad Protocol
+## Scratchpad Protocol (MANDATORY)
 
-Write to `.claude/scratchpad/devops/YYYY-MM-DD.md` using today's date.
+You MUST write to `.claude/scratchpad/devops/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
 Keep entries lightweight — log infrastructure state changes, not analysis:
 - "Upgraded torch from 2.8.0 to 2.8.1, uv lock regenerated"
@@ -187,4 +187,5 @@ Keep entries lightweight — log infrastructure state changes, not analysis:
 - "Started TensorBoard on :6006 for lightning_logs/"
 
 **On start**: Read coordinator's scratchpad for pending infra tasks.
+**Cross-agent observations**: Note if other agents' work introduced dependency issues, if training-runner's GPU needs conflict with available resources, or if environment state doesn't match what others expect.
 **On finish**: 2-3 line summary of environment changes made.
