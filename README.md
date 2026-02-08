@@ -26,11 +26,10 @@ Each modality is processed independently into H3-indexed embeddings (resolution 
 
 ### Stage 2: Fusion (`stage2_fusion/`)
 
-Three multi-resolution U-Net architectures fuse modality embeddings using H3 hierarchy and spatial graphs:
+Two multi-resolution U-Net architectures fuse modality embeddings using H3 hierarchy and spatial graphs:
 
 - **FullAreaUNet** — processes entire study area with lateral accessibility graph. Multi-resolution encoder-decoder (res 8-10) with skip connections.
 - **ConeBatchingUNet** — hierarchical cones (res 5→10), each ~1,500 hexagons. Memory-efficient and parallelizable. Most promising direction.
-- **AccessibilityUNet** — planned variant using Hanssen's gravity model for accessibility-weighted fusion.
 
 ### Stage 3: Analysis (`stage3_analysis/`)
 
