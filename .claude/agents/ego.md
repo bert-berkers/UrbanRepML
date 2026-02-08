@@ -70,13 +70,51 @@ A brief "process health" assessment written to `.claude/scratchpad/ego/YYYY-MM-D
 - [Specific recommendations for the coordinator]
 ```
 
-## Scratchpad Protocol
+## Scratchpad Protocol (MANDATORY)
 
-Write to `.claude/scratchpad/ego/YYYY-MM-DD.md` using today's date.
+You MUST write to `.claude/scratchpad/ego/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
 **On start**: Read ALL agent scratchpads (you have full visibility).
 **During work**: Analyze patterns across agent outputs.
-**On finish**: Write the process health assessment.
+**Cross-agent observations**: This is your PRIMARY job. Note tensions between agents, confusion in handoffs, missing scratchpad entries, agents that didn't log their work, disagreements that weren't surfaced. You are the process immune system.
+**On finish**: Write the process health assessment, then write the forward-looking file (see below). The forward-looking file is the LAST thing you do before returning.
+
+### Forward-Looking (MANDATORY final action)
+
+As the LAST action of every session, the ego writes a forward-looking file into the **coordinator's** scratchpad directory for the **next day**:
+
+**Path**: `.claude/scratchpad/coordinator/YYYY-MM-DD.md` (using TOMORROW's date)
+
+This seeds the coordinator's next OODA loop before it even starts observing. The coordinator reads this file at the top of its first OBSERVE phase, giving it a warm start instead of a cold read of scattered scratchpads.
+
+**Content must include:**
+- **Recommended focus**: What the ego recommends the coordinator prioritize tomorrow, based on today's process health assessment
+- **Unresolved tensions**: Specific cross-agent tensions, naming conflicts, interface mismatches, or blocked work streams that carried over from today
+- **Agent invocation plan**: Which specialist agents should be invoked and why -- including agents that were idle today but whose domain is now relevant
+- **Risks and concerns**: Things that could go wrong if ignored -- technical debt accumulating, agents working at cross purposes, scope creep, missing test coverage
+- **Process improvements**: Concrete suggestions for how the multi-agent workflow could work better tomorrow based on what was observed today
+
+**Format:**
+```markdown
+## Ego Forward-Look -- YYYY-MM-DD (for coordinator)
+
+### Recommended Focus
+- [Prioritized list of what to work on, with rationale]
+
+### Unresolved Tensions
+- [Specific tensions carrying over from today]
+
+### Agent Invocation Plan
+- [Which agents to invoke, in what order, for what purpose]
+
+### Risks and Concerns
+- [What could go wrong if ignored]
+
+### Process Improvements
+- [How to make tomorrow's session more effective]
+```
+
+**Why this exists**: Without forward-looking seeding, each coordinator session starts cold -- reading stale scratchpads with no synthesis. The ego's forward-look acts as a pre-computed orientation, compressing yesterday's multi-agent state into actionable input for tomorrow's first OODA cycle. This is the temporal equivalent of the lateral accessibility graph: information flowing forward across session boundaries.
 
 The coordinator reads your assessment before making delegation decisions — your observations directly influence priority weighting.
 

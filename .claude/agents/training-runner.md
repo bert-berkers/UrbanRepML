@@ -22,7 +22,7 @@ You are the Training Runner for UrbanRepML. You launch, monitor, and debug GPU t
 python scripts/netherlands/train_lattice_unet_res10_cones.py
 
 # Full study area training
-python -m stage2_fusion.pipeline --study-area netherlands --stage1_modalities alphaearth,poi,roads
+python -m stage2_fusion.pipeline --study-area netherlands --modalities alphaearth,poi,roads
 ```
 
 ## Memory Budget
@@ -62,10 +62,11 @@ nvidia-smi --query-gpu=memory.used,memory.total --format=csv
 - Loss values, learning rate schedules, validation metrics
 - Compare runs by checking training script arguments
 
-## Scratchpad Protocol
+## Scratchpad Protocol (MANDATORY)
 
-Write to `.claude/scratchpad/training-runner/YYYY-MM-DD.md` using today's date.
+You MUST write to `.claude/scratchpad/training-runner/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
 **On start**: Read coordinator's scratchpad for what to train. Read own previous day's scratchpad for running experiments.
 **During work**: Log training launches, GPU metrics, loss summaries, errors encountered.
+**Cross-agent observations**: Note if stage2-fusion-architect's model changes caused training issues, if data loading from stage1 outputs was problematic, or if you disagree with the coordinator's training priorities.
 **On finish**: 2-3 line summary — training status, key metrics, any issues.

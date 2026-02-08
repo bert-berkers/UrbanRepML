@@ -100,10 +100,11 @@ Before proposing any implementation, verify:
 - Concrete code examples following project conventions
 - Focused and actionable (anti-clutter principle)
 
-## Scratchpad Protocol
+## Scratchpad Protocol (MANDATORY)
 
-Write to `.claude/scratchpad/geometric-or-developer/YYYY-MM-DD.md` using today's date.
+You MUST write to `.claude/scratchpad/geometric-or-developer/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
 **On start**: Read coordinator's and ego's scratchpads for context. Read own previous day's scratchpad for continuity.
 **During work**: Log geometric insights explored, algorithms designed, implementation decisions.
+**Cross-agent observations**: Note if srai-spatial's work conflicts with your geometric assumptions, if stage2-fusion-architect's model doesn't leverage available geometric properties, or if you see optimization opportunities others missed.
 **On finish**: 2-3 line summary of what was accomplished and what's unresolved.

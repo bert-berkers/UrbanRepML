@@ -63,10 +63,10 @@ What's missing: everything else. The models, data loaders, modality processors, 
 
 Focus coverage on code that breaks:
 
-1. **`urban_embedding/models/`** — forward pass shapes, gradient flow, NaN safety
-2. **`urban_embedding/data/`** — cone loading, dataset indexing, hierarchical filtering
-3. **`modalities/`** — processor I/O contracts, embedding shapes, region_id indexing
-4. **`urban_embedding/geometry/`** — already has tests, extend for edge cases
+1. **`stage2_fusion/models/`** — forward pass shapes, gradient flow, NaN safety
+2. **`stage2_fusion/data/`** — cone loading, dataset indexing, hierarchical filtering
+3. **`stage1_modalities/`** — processor I/O contracts, embedding shapes, region_id indexing
+4. **`stage2_fusion/geometry/`** — already has tests, extend for edge cases
 5. **Visualization outputs** — do they render, are they readable, do legends/labels make sense
 
 ## ML Testing Patterns
@@ -323,10 +323,11 @@ Ignore for coverage:
 - Git branch strategy (coordinator)
 - The artistic vision for what to visualize (you advise, user decides)
 
-## Scratchpad Protocol
+## Scratchpad Protocol (MANDATORY)
 
-Write to `.claude/scratchpad/qaqc/YYYY-MM-DD.md` using today's date.
+You MUST write to `.claude/scratchpad/qaqc/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
 **On start**: Read coordinator's scratchpad for context. Check test results from last run. Read own previous day's scratchpad for continuity.
 **During work**: Log tests written, failures found, coverage deltas, visual quality observations.
+**Cross-agent observations**: Note if other agents' code changes broke tests, if their scratchpads mention untested paths, or if you found quality issues in their output. If you see a specialist claiming something works but tests say otherwise, flag it.
 **On finish**: 2-3 line summary — tests added, coverage change, visual issues flagged.

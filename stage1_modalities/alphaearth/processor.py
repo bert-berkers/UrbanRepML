@@ -24,8 +24,6 @@ from tqdm.auto import tqdm
 
 # H3 and Projection imports
 # Using SRAI as primary interface (per CLAUDE.md)
-# Note: h3 is a dependency of SRAI and needed for geometry conversions
-import h3  # SRAI dependency - used for hex geometry
 from srai.regionalizers import H3Regionalizer
 from srai.neighbourhoods import H3Neighbourhood
 from pyproj import Transformer
@@ -352,39 +350,39 @@ class AlphaEarthProcessor(ModalityProcessor):
         
         # Average overlapping hexagons
         final_data = []
-        
+        h3_indices = []
+
         for h3_index_str, data in tqdm(merged.items(), desc="Calculating Weighted Averages"):
             embeddings = data['embeddings']
             pixel_counts = np.array(data['pixel_counts'])
-            
+
             if len(embeddings) > 1:
                 # Multiple tiles contributed: calculate weighted average
                 weights = pixel_counts / pixel_counts.sum()
                 final_embedding = np.average(embeddings, weights=weights, axis=0)
             else:
                 final_embedding = embeddings[0]
-            
+
             # Create record
             record = {'h3_index': h3_index_str}
-            
+
             # Add embedding dimensions
             for i, value in enumerate(final_embedding):
                 record[f'A{i:02d}'] = value
-            
+
             record['pixel_count'] = pixel_counts.sum()
             record['tile_count'] = len(embeddings)
-            
-            # Add H3 geometry
-            boundary = h3.cell_to_boundary(h3_index_str)
-            boundary_lonlat = [(lng, lat) for lat, lng in boundary]
-            record['geometry'] = Polygon(boundary_lonlat)
-            
+
             final_data.append(record)
-        
-        # Create GeoDataFrame
-        gdf = gpd.GeoDataFrame(final_data, geometry='geometry', crs="EPSG:4326")
+            h3_indices.append(h3_index_str)
+
+        # Create GeoDataFrame with SRAI-generated geometries
+        from srai.h3 import h3_to_geoseries
+        geometries = h3_to_geoseries(h3_indices)
+
+        gdf = gpd.GeoDataFrame(final_data, geometry=geometries.values, crs="EPSG:4326")
         logger.info(f"Final dataset generated: {len(gdf)} hexagons")
-        
+
         return gdf
     
     def to_h3(self, gdf: gpd.GeoDataFrame, resolution: int, **kwargs) -> pd.DataFrame:
