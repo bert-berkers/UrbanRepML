@@ -193,13 +193,14 @@ python -m stage3_analysis.analytics --study-area netherlands
 
 ## Multi-Agent Workflow
 
-**The main conversation agent (Claude Code) MUST delegate specialist work, not do it inline.**
+### Coordination Protocol
+The main agent IS the coordinator. It talks to the user AND orchestrates specialist agents.
+For project work, the main agent runs OODA (observe-orient-decide-act), delegates to
+specialist agents via the Task tool, and maintains `.claude/scratchpad/coordinator/`.
+The `/coordinate` skill activates this mode with a structured protocol reminder.
 
-### Delegation Rules
-1. **Single-domain, small tasks** (one file edit, quick grep): direct action is fine
-2. **Multi-step or multi-domain work**: spawn the **coordinator** agent, which orchestrates specialists
-3. **Never do specialist work yourself** — if it touches spatial ops, model code, training, analysis, or testing, delegate to the matching specialist agent via the Task tool
-4. **Each specialist writes its own scratchpad** — this is mandatory, not optional. The scratchpad is the agent's proof of work and its message to future sessions
+The main agent NEVER spawns a separate coordinator sub-agent — that indirection is removed.
+Exception: trivial non-project tasks (explain a concept, quick question) don't need OODA.
 
 ### Stigmergic Logging (MANDATORY)
 Every agent that does work MUST write a dated scratchpad entry (`.claude/scratchpad/{agent}/YYYY-MM-DD.md`) containing:

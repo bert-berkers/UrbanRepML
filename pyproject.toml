@@ -101,6 +101,7 @@ ml = [
     "wandb>=0.15.0",
     "tensorboard>=2.12.0",
     "optuna>=3.1.0",
+    "spatial-kfold>=0.0.3",
 ]
 
 [project.urls]
