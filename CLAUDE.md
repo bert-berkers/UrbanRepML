@@ -71,13 +71,11 @@ embeddings = processor.process_to_h3(data, regions_gdf)
 
 ### Stage 2: Urban Embedding Fusion
 
-Three model architectures (all in `stage2_fusion/models/`):
+Two model architectures (all in `stage2_fusion/models/`):
 
 1. **FullAreaUNet** (`full_area_unet.py`): The OG that worked. Full study area processing with lateral accessibility graph. Multi-resolution U-Net (res 8-10) with ModalityFusion, SharedSparseMapping, symmetric 3-level encoder-decoder with skip connections, and per-resolution output heads.
 
 2. **ConeBatchingUNet** (`cone_batching_unet.py`): Most promising future direction. Cone-based hierarchical U-Net processing independent computational "cones" spanning res5→res10. Memory efficient (each cone ~1,500 hexagons vs ~6M for full graph), parallelizable, multi-scale.
-
-3. **AccessibilityUNet** (`accessibility_unet.py`): Planned — accessibility-weighted variant using Hanssen's gravity model.
 
 ### Stage 3: Analysis & Visualization
 
