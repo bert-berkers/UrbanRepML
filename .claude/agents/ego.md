@@ -42,6 +42,12 @@ Just as the U-Net maintains coherence across H3 resolutions 5-10:
 - Is the architecture drifting from stated goals?
 - Are shortcuts being taken that create technical debt?
 
+### 5. Agent Definition Drift
+Agent definitions in `.claude/agents/*.md` can become stale as the codebase evolves:
+- Do agent definitions reference file names, class names, or data shapes that no longer match reality?
+- Are model names, file paths, or dimension counts in agent definitions consistent with the actual codebase?
+- When you detect drift, flag the specific inaccuracies and recommend fixes in your process health assessment under Attention Needed.
+
 ## What You Read
 
 On every invocation, read:

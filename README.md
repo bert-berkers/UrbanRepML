@@ -29,8 +29,8 @@ Create high-quality urban embeddings capable of reconstructing urban environment
 - **GTFS**: Transit data (planned)
 
 ### Stage 2: Urban Embedding Fusion
-- **UrbanUNet**: Full study area U-Net with lateral accessibility graph
-- **ConeLatticeUNet**: Cone-based hierarchical U-Net (res5→res10, most promising)
+- **FullAreaUNet**: Full study area U-Net with lateral accessibility graph
+- **ConeBatchingUNet**: Cone-based hierarchical U-Net (res5→res10, most promising)
 - **AccessibilityUNet**: Planned — Hanssen's gravity model variant
 
 ### Stage 3: Analysis & Visualization

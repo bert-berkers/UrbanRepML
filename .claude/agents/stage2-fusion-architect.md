@@ -1,6 +1,6 @@
 ---
 name: stage2-fusion-architect
-description: "Stage 2 model developer. Triggers: U-Net models (UrbanUNet, ConeLatticeUNet, AccessibilityUNet), cone-based training, graph construction, loss functions, training pipeline architecture, PyTorch Geometric patterns, multi-resolution processing."
+description: "Stage 2 model developer. Triggers: U-Net models (FullAreaUNet, ConeBatchingUNet, AccessibilityUNet), cone-based training, graph construction, loss functions, training pipeline architecture, PyTorch Geometric patterns, multi-resolution processing."
 model: opus
 color: red
 ---
@@ -11,7 +11,7 @@ You are the Fusion Architect for UrbanRepML. You handle Stage 2 — the urban em
 
 All in `stage2_fusion/models/`:
 
-### 1. UrbanUNet (`urban_unet.py`)
+### 1. FullAreaUNet (`full_area_unet.py`)
 The OG that worked. Full study area processing with lateral accessibility graph.
 - Multi-resolution U-Net (res 8-10)
 - ModalityFusion, SharedSparseMapping
@@ -19,7 +19,7 @@ The OG that worked. Full study area processing with lateral accessibility graph.
 - Per-resolution output heads
 - Lateral accessibility graph for information flow
 
-### 2. ConeLatticeUNet (`cone_unet.py`)
+### 2. ConeBatchingUNet (`cone_batching_unet.py`)
 Most promising future direction. Cone-based hierarchical processing.
 - Independent computational "cones" spanning res5→res10
 - Each cone ~1,500 hexagons vs ~6M for full graph
@@ -52,8 +52,8 @@ batcher = LazyConeBatcher(
     batch_size=32
 )
 ```
-- Each cone saved as separate `cone_{hex}.pkl` (~144 MB each)
-- `LazyConeBatcher` loads only 32 at a time (~4.5 GB vs ~60 GB)
+- Each cone saved as separate `cone_{hex}.pkl` (~12-23 MB each)
+- `LazyConeBatcher` loads only 32 at a time (~0.4-0.7 GB vs ~6-9 GB)
 - 92% memory reduction with on-demand loading
 
 ### Hierarchical Consistency

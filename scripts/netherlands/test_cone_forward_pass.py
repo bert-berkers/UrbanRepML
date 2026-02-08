@@ -23,7 +23,7 @@ sys.path.insert(0, str(project_root))
 import torch
 
 from stage2_fusion.data.cone_dataset import ConeDataset
-from stage2_fusion.models.cone_unet import create_cone_unet
+from stage2_fusion.models.cone_batching_unet import create_cone_batching_unet
 from stage2_fusion.losses.cone_losses import create_cone_loss
 
 # Setup logging
@@ -89,7 +89,7 @@ def test_cone_forward_backward():
         logger.info("Step 3: Creating Model")
         logger.info("="*60)
 
-        model = create_cone_unet(
+        model = create_cone_batching_unet(
             input_dim=64,
             output_dim=64,
             model_size="small"  # Use small for testing

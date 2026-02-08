@@ -16,7 +16,10 @@ from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm
 from datetime import datetime
-import wandb
+try:
+    import wandb
+except ImportError:
+    wandb = None
 
 logger = logging.getLogger(__name__)
 

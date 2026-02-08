@@ -25,8 +25,8 @@ The graph tracks **nodes** (code entities) and **edges** (relationships between 
 |-----------|---------------|---------|
 | **Module** | Path, purpose, public API | `stage1_modalities/alphaearth/processor.py` — AlphaEarth TIFF→H3 |
 | **Class** | Location, base class, key methods | `AlphaEarthProcessor(ModalityProcessor)` at `stage1_modalities/alphaearth/processor.py` |
-| **Function** | Location, signature, input→output shapes | `process(raw_data_path, regions_gdf) → GeoDataFrame[region_id, A00..A63]` |
-| **Data artifact** | Path pattern, format, index type, shape | `data/study_areas/*/embeddings/alphaearth/*.parquet` — h3_index column, 64 float cols |
+| **Function** | Location, signature, input→output shapes | `process(raw_data_path, regions_gdf) → GeoDataFrame[region_id, A00..A66]` |
+| **Data artifact** | Path pattern, format, index type, shape | `data/study_areas/*/embeddings/alphaearth/*.parquet` — h3_index column, 67 float cols |
 | **Config** | Path, key parameters, what reads it | `configs/netherlands_pipeline.yaml` — read by pipeline runner |
 | **Index contract** | Name, dtype, where enforced | `region_id` — str (H3 hex), enforced at SRAI regionalizer output |
 
@@ -34,9 +34,9 @@ The graph tracks **nodes** (code entities) and **edges** (relationships between 
 
 | Edge | Meaning | Example |
 |------|---------|---------|
-| `imports` | Module A imports from B | `stage2_fusion.models.cone_unet` imports `srai.neighbourhoods` |
+| `imports` | Module A imports from B | `stage2_fusion.models.cone_batching_unet` imports `srai.neighbourhoods` |
 | `inherits` | Class A extends B | `AlphaEarthProcessor` inherits `ModalityProcessor` |
-| `produces → consumes` | Output of A is input to B | AlphaEarth embeddings → UrbanUNet node features |
+| `produces → consumes` | Output of A is input to B | AlphaEarth embeddings → FullAreaUNet node features |
 | `shape_contract` | Expected tensor/DataFrame shape at boundary | `modality output: (N_hexagons, emb_dim)` → `fusion input: (N_nodes, feature_dim)` |
 | `index_contract` | Expected index type at boundary | `region_id (str)` flows from regionalizer → processor → fusion |
 | `config_drives` | Config parameter controls behavior | `resolution: 9` in config → `H3Regionalizer(resolution=9)` |
@@ -54,7 +54,7 @@ Last updated: YYYY-MM-DD
 - `processor.py`
   - `AlphaEarthProcessor(ModalityProcessor)`
     - `.process(raw_data_path, regions_gdf)` → `DataFrame[region_id, emb_0..emb_N]`
-    - shape: (N_hexagons, 64) float32
+    - shape: (N_hexagons, 67) float32
     - index: region_id (str, H3 hex)
   - imports: srai.regionalizers.H3Regionalizer, rioxarray, numpy
   - produces → stage2_fusion.pipeline (node features)
@@ -65,8 +65,8 @@ Last updated: YYYY-MM-DD
 ## Stage 2: Fusion Models
 
 ### stage2_fusion/models/
-- `urban_unet.py`
-  - `UrbanUNet(nn.Module)` [:147]
+- `full_area_unet.py`
+  - `FullAreaUNet(nn.Module)` [:147]
     - `.forward(data: torch_geometric.data.Data)` → `Tensor[N_nodes, out_dim]`
     - consumes: node features (N, F), edge_index (2, E), edge_attr (E,)
     - index: nodes ordered by region_id
@@ -76,9 +76,9 @@ Last updated: YYYY-MM-DD
 
 | Boundary | Producer | Consumer | Shape | Index |
 |----------|----------|----------|-------|-------|
-| Modality → Fusion | AlphaEarthProcessor | UrbanUNet | (N, 256) | region_id |
+| Modality → Fusion | AlphaEarthProcessor | FullAreaUNet | (N, 67) | region_id |
 | Regionalizer → All | H3Regionalizer | All processors | GeoDataFrame | region_id |
-| Fusion → Analysis | UrbanUNet | (TBD) | (N, out_dim) | region_id |
+| Fusion → Analysis | FullAreaUNet | (TBD) | (N, out_dim) | region_id |
 
 ## Import Graph (key chains)
 ...

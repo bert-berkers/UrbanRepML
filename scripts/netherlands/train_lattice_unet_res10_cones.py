@@ -38,7 +38,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 # Import project modules directly - bypasses problematic __init__.py imports
-from stage2_fusion.models.cone_unet import ConeLatticeUNet, ConeUNetConfig
+from stage2_fusion.models.cone_batching_unet import ConeBatchingUNet, ConeBatchingUNetConfig
 from stage2_fusion.graphs.hexagonal_graph_constructor import HexagonalLatticeConstructor
 from stage2_fusion.data.study_area_loader import StudyAreaLoader
 from stage2_fusion.data.hierarchical_cone_masking import (
@@ -374,12 +374,12 @@ class HierarchicalConeTrainer:
 
         return torch.tensor(features_list, dtype=torch.float32).to(self.device)
 
-    def _create_model(self, hidden_dim: int, num_layers: int) -> ConeLatticeUNet:
-        """Create ConeLatticeUNet model for cone-based processing."""
+    def _create_model(self, hidden_dim: int, num_layers: int) -> ConeBatchingUNet:
+        """Create ConeBatchingUNet model for cone-based processing."""
         # Determine embedding dimension (should be same across resolutions)
         embedding_dim = len(list(self.embeddings_by_resolution.values())[0].columns)
 
-        config = ConeUNetConfig(
+        config = ConeBatchingUNetConfig(
             input_dim=embedding_dim,
             output_dim=embedding_dim,
             hidden_dims={
@@ -398,9 +398,9 @@ class HierarchicalConeTrainer:
             dropout=0.1
         )
 
-        model = ConeLatticeUNet(config)
+        model = ConeBatchingUNet(config)
         num_params = sum(p.numel() for p in model.parameters())
-        logger.info(f"ConeLatticeUNet created with {num_params:,} parameters")
+        logger.info(f"ConeBatchingUNet created with {num_params:,} parameters")
         logger.info(f"  Per-resolution processing: 2 GCN hops × 6 resolutions")
 
         return model
@@ -417,7 +417,7 @@ class HierarchicalConeTrainer:
             'device': str(self.device),
             'num_cones': len(self.cones),
             'approach': 'cone-based (no global graph)',
-            'model_type': 'ConeLatticeUNet',
+            'model_type': 'ConeBatchingUNet',
             'model_config': {
                 'input_dim': self.model.config.input_dim,
                 'output_dim': self.model.config.output_dim,
@@ -455,7 +455,7 @@ class HierarchicalConeTrainer:
                 # 3. Extract res10 features for THIS cone
                 features_res10 = self._extract_cone_features(cone)
 
-                # 4. Forward pass through ConeLatticeUNet
+                # 4. Forward pass through ConeBatchingUNet
                 output = self.model(
                     features_res10,          # [N_res10_in_cone, feature_dim]
                     spatial_edges,           # Dict[res] -> (edge_index, edge_weight)
@@ -596,7 +596,7 @@ class HierarchicalConeTrainer:
     def train(self):
         """Run full training loop - pure cone-based processing."""
         logger.info("\n" + "="*60)
-        logger.info("Starting Cone-Based Hierarchical Training (ConeLatticeUNet)")
+        logger.info("Starting Cone-Based Hierarchical Training (ConeBatchingUNet)")
         logger.info("="*60)
         logger.info("CONE-BASED APPROACH:")
         logger.info("  - No global graph")

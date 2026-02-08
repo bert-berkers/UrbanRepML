@@ -73,10 +73,10 @@ Focus coverage on code that breaks:
 
 ### Forward Pass Shape Validation
 ```python
-def test_urban_unet_forward_shapes(urban_unet_model, synthetic_pyg_batch):
-    out = urban_unet_model(synthetic_pyg_batch)
+def test_full_area_unet_forward_shapes(full_area_unet_model, synthetic_pyg_batch):
+    out = full_area_unet_model(synthetic_pyg_batch)
     assert out.shape[0] == synthetic_pyg_batch.num_nodes
-    assert out.shape[1] == urban_unet_model.out_channels
+    assert out.shape[1] == full_area_unet_model.out_channels
     assert not torch.isnan(out).any()
 ```
 

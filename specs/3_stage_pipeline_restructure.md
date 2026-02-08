@@ -29,12 +29,12 @@ Goal: rename packages to make the 3-stage pipeline explicit, move misplaced code
 ```python
 # Before
 from stage1_modalities.alphaearth.processor import AlphaEarthProcessor
-from stage2_fusion.models.cone_unet import ConeLatticeUNet
+from stage2_fusion.models.cone_batching_unet import ConeBatchingUNet
 from stage2_fusion.analysis.analytics import UrbanEmbeddingAnalyzer
 
 # After
 from stage1_modalities.alphaearth.processor import AlphaEarthProcessor
-from stage2_fusion.models.cone_unet import ConeLatticeUNet
+from stage2_fusion.models.cone_batching_unet import ConeBatchingUNet
 from stage3_analysis.analytics import UrbanEmbeddingAnalyzer
 ```
 
@@ -62,7 +62,7 @@ Subpackages that stay:
 stage2_fusion/
 ├── __init__.py
 ├── pipeline.py
-├── models/          (urban_unet, cone_unet, accessibility_unet, base)
+├── models/          (full_area_unet, cone_batching_unet, accessibility_unet)
 ├── data/            (cone_dataset, multimodal_loader, hierarchical_cone_masking,
 │                     feature_processing, study_area_loader, study_area_filter, spatial_batching)
 ├── graphs/          (graph_construction, hexagonal_graph_constructor)
@@ -177,7 +177,7 @@ uv run python -c "from stage1_modalities.base import ModalityProcessor; print('S
 uv run python -c "from stage1_modalities.alphaearth.processor import AlphaEarthProcessor; print('AlphaEarth OK')"
 
 # Stage 2 imports
-uv run python -c "from stage2_fusion.models.cone_unet import ConeLatticeUNet; print('ConeUNet OK')"
+uv run python -c "from stage2_fusion.models.cone_batching_unet import ConeBatchingUNet; print('ConeBatchingUNet OK')"
 uv run python -c "from stage2_fusion.models.accessibility_unet import AccessibilityUNet; print('AccessibilityUNet OK')"
 uv run python -c "from stage2_fusion.data.cone_dataset import ConeDataset; print('ConeDataset OK')"
 

@@ -78,7 +78,7 @@ graph:
       drive: 0.01
 
 model:
-  architecture: "UrbanUNet"
+  architecture: "FullAreaUNet"
   hidden_dim: 256
   num_layers: 3
   dropout: 0.1

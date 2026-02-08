@@ -1,5 +1,5 @@
 """
-ConeLatticeUNet - Cone-Based Hierarchical U-Net
+ConeBatchingUNet - Cone-Based Hierarchical U-Net
 
 CONE-BASED ARCHITECTURE:
 Each res5 hexagon defines a cone (center + 5-ring neighbors + all descendants to res10).
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ConeUNetConfig:
+class ConeBatchingUNetConfig:
     """Configuration for MultiResolutionConeUNet."""
 
     # Input/output dimensions
@@ -214,7 +214,7 @@ class HierarchicalBroadcast(nn.Module):
         return child_features
 
 
-class ConeLatticeUNet(nn.Module):
+class ConeBatchingUNet(nn.Module):
     """
     Hierarchical Cone-Based U-Net for Multi-Resolution Processing.
 
@@ -245,11 +245,11 @@ class ConeLatticeUNet(nn.Module):
         - Consistency: Parent states match aggregated children within cone
     """
 
-    def __init__(self, config: ConeUNetConfig):
+    def __init__(self, config: ConeBatchingUNetConfig):
         super().__init__()
         self.config = config
 
-        logger.info("Initializing ConeLatticeUNet (Cone-Based Architecture):")
+        logger.info("Initializing ConeBatchingUNet (Cone-Based Architecture):")
         logger.info(f"  Input dim: {config.input_dim} (res10 only, per cone)")
         logger.info(f"  Output dim: {config.output_dim}")
         logger.info(f"  Hidden dims: {config.hidden_dims}")
@@ -502,12 +502,12 @@ class ConeLatticeUNet(nn.Module):
         }
 
 
-def create_cone_lattice_unet(
+def create_cone_batching_unet(
     input_dim: int = 64,
     output_dim: int = 64,
     model_size: str = "medium",
     **kwargs
-) -> ConeLatticeUNet:
+) -> ConeBatchingUNet:
     """
     Factory function for creating cone-based lattice U-Net with preset sizes.
 
@@ -522,7 +522,7 @@ def create_cone_lattice_unet(
         **kwargs: Additional config overrides
 
     Returns:
-        ConeLatticeUNet model configured for cone-based processing
+        ConeBatchingUNet model configured for cone-based processing
     """
     size_presets = {
         "small": {
@@ -547,16 +547,16 @@ def create_cone_lattice_unet(
 
     preset = size_presets[model_size]
 
-    config = ConeUNetConfig(
+    config = ConeBatchingUNetConfig(
         input_dim=input_dim,
         output_dim=output_dim,
         **preset,
         **kwargs
     )
 
-    model = ConeLatticeUNet(config)
+    model = ConeBatchingUNet(config)
 
-    logger.info(f"Created {model_size} ConeLatticeUNet (cone-based):")
+    logger.info(f"Created {model_size} ConeBatchingUNet (cone-based):")
     logger.info(f"  Parameters: {sum(p.numel() for p in model.parameters()):,}")
     logger.info(f"  Trainable: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
 
