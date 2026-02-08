@@ -5,13 +5,13 @@ Accessibility-Weighted U-Net (PLACEHOLDER - TO BE IMPLEMENTED)
 Location-based accessibility U-Net using Hanssen's gravity model for edge weighting.
 
 CURRENT STATUS: Placeholder for future development
-ACTIVE MODEL: lattice_unet.py (LatticeUNet)
+ACTIVE MODEL: cone_unet.py (ConeLatticeUNet)
 
 ---
 
 ## Planned Architecture
 
-This model will extend LatticeUNet with accessibility-based edge weighting:
+This model will extend ConeLatticeUNet with accessibility-based edge weighting:
 
 1. **Accessibility Graph Construction**
    - Floodfill travel time calculation (local cutoff, e.g., 15 minutes)
@@ -158,20 +158,20 @@ class AccessibilityGraphConstructor:
 
 ### Phase 3: AccessibilityUNet Model
 ```python
-from stage2_fusion.models.lattice_unet import LatticeUNet, LatticeUNetConfig
+from stage2_fusion.models.cone_unet import ConeLatticeUNet, ConeUNetConfig
 
-class AccessibilityUNet(LatticeUNet):
+class AccessibilityUNet(ConeLatticeUNet):
     \"\"\"
     U-Net with accessibility-weighted graph convolutions.
 
-    Extends LatticeUNet with:
+    Extends ConeLatticeUNet with:
     - Accessibility-based edge weighting
     - Resolution-specific graph pruning
     - Gravity model integration
     \"\"\"
 
     def __init__(self,
-                 config: LatticeUNetConfig,
+                 config: ConeUNetConfig,
                  accessibility_graphs: Dict[int, EdgeFeatures]):
         super().__init__(config)
         self.accessibility_graphs = accessibility_graphs
@@ -291,7 +291,7 @@ model = AccessibilityUNet(config, accessibility_graphs)
 ---
 
 **Status**: PLACEHOLDER (not yet implemented)
-**Active Model**: LatticeUNet (`lattice_unet.py`)
+**Active Model**: ConeLatticeUNet (`cone_unet.py`)
 **Future**: Accessibility-based variant using Hanssen's gravity model
 **Last Updated**: October 2025
 """
@@ -306,13 +306,13 @@ class AccessibilityUNet:
     See module docstring above for complete implementation plan.
 
     Current Status: Not implemented
-    Active Model: Use LatticeUNet from lattice_unet.py
+    Active Model: Use ConeLatticeUNet from cone_unet.py
     """
 
     def __init__(self):
         raise NotImplementedError(
             "AccessibilityUNet is not yet implemented. "
             "This is a placeholder documenting the planned architecture. "
-            "Use LatticeUNet from lattice_unet.py for current development. "
+            "Use ConeLatticeUNet from cone_unet.py for current development. "
             "See module docstring for implementation plan."
         )
