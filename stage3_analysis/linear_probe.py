@@ -206,16 +206,13 @@ class LinearProbeRegressor:
         joined = joined.dropna(subset=self.feature_names + self.config.target_cols)
         logger.info(f"  After dropna: {len(joined):,} (dropped {before - len(joined):,})")
 
-        # Create geometry from H3 centroids for spatial blocking
+        # Create geometry from H3 centroids for spatial blocking (SRAI-compliant)
         logger.info("  Creating geometry from H3 cell centroids for spatial blocking...")
-        import h3 as _h3
-        from shapely.geometry import Point
-        coords = [_h3.cell_to_latlng(hex_id) for hex_id in joined.index]
-        points = gpd.points_from_xy(
-            [c[1] for c in coords],  # lng
-            [c[0] for c in coords],  # lat
-        )
-        joined = gpd.GeoDataFrame(joined, geometry=points, crs="EPSG:4326")
+        from srai.h3 import h3_to_geoseries
+        hex_geom = h3_to_geoseries(joined.index)
+        centroids = hex_geom.centroid
+        centroids.index = joined.index
+        joined = gpd.GeoDataFrame(joined, geometry=centroids, crs="EPSG:4326")
 
         self.data_gdf = joined
         return joined

@@ -24,7 +24,6 @@ Usage:
 import copy
 import json
 import logging
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -190,6 +189,11 @@ class GNNProbeModel(nn.Module):
         """
         Forward pass.
 
+        Assumes input features are NaN-free. If NaN values are present
+        (e.g. due to missing embeddings that slipped past upstream
+        validation), they are replaced with 0.0 as a safety guard and
+        a warning is logged.
+
         Args:
             x: Node features [N, input_dim].
             edge_index: Edge indices [2, E].
@@ -197,6 +201,11 @@ class GNNProbeModel(nn.Module):
         Returns:
             Per-node predictions [N, 1].
         """
+        # Safety guard: replace NaN inputs to avoid silent propagation
+        if torch.isnan(x).any():
+            logger.warning("NaN detected in input features, replacing with 0.0")
+            x = torch.nan_to_num(x, nan=0.0)
+
         # Input projection
         h = self.input_proj(x)
         h = self.input_norm(h)
@@ -226,6 +235,24 @@ class DNNProbeRegressor:
 
     Evaluates whether spatially-aware (graph-based) transformations of
     AlphaEarth embeddings improve liveability prediction over linear probes.
+
+    Visualization compatibility:
+        Produces TargetResult objects compatible with LinearProbeVisualizer,
+        but because the GNN has no linear coefficients (``coefficients`` is
+        a zero vector), only a subset of visualizer methods produce
+        meaningful output.
+
+        Works correctly:
+            - plot_scatter_predicted_vs_actual (uses oof_predictions)
+            - plot_spatial_residuals (uses oof_predictions + region_ids)
+            - plot_fold_metrics (uses fold_metrics)
+            - plot_metrics_comparison (uses overall_r2)
+
+        Not meaningful (coefficients are zeros):
+            - plot_coefficient_bars / plot_coefficient_bars_faceted
+            - plot_coefficient_heatmap
+            - plot_rgb_top3_map
+            - plot_cross_target_correlation
     """
 
     def __init__(self, config: DNNProbeConfig, project_root: Optional[Path] = None):
@@ -233,6 +260,7 @@ class DNNProbeRegressor:
         self.project_root = project_root or Path(__file__).parent.parent
         self.results: Dict[str, TargetResult] = {}
         self.best_hparams: Dict[str, Dict[str, Any]] = {}
+        self.training_curves: Dict[str, Dict[int, List[float]]] = {}
         self.data_gdf: Optional[gpd.GeoDataFrame] = None
         self.feature_names: List[str] = []
 
@@ -296,15 +324,13 @@ class DNNProbeRegressor:
         joined = joined.dropna(subset=self.feature_names + self.config.target_cols)
         logger.info(f"  After dropna: {len(joined):,} (dropped {before - len(joined):,})")
 
-        # Create geometry from H3 centroids for spatial blocking
+        # Create geometry from H3 centroids for spatial blocking (SRAI-compliant)
         logger.info("  Creating geometry from H3 cell centroids for spatial blocking...")
-        import h3 as _h3
-        coords = [_h3.cell_to_latlng(hex_id) for hex_id in joined.index]
-        points = gpd.points_from_xy(
-            [c[1] for c in coords],  # lng
-            [c[0] for c in coords],  # lat
-        )
-        joined = gpd.GeoDataFrame(joined, geometry=points, crs="EPSG:4326")
+        from srai.h3 import h3_to_geoseries
+        hex_geom = h3_to_geoseries(joined.index)
+        centroids = hex_geom.centroid
+        centroids.index = joined.index
+        joined = gpd.GeoDataFrame(joined, geometry=centroids, crs="EPSG:4326")
 
         self.data_gdf = joined
         return joined
@@ -327,6 +353,8 @@ class DNNProbeRegressor:
         Returns:
             PyG Data with edge_index [2, E] and num_nodes.
         """
+        import time
+
         from srai.neighbourhoods import H3Neighbourhood
 
         n = len(region_ids)
@@ -604,8 +632,8 @@ class DNNProbeRegressor:
             "use_layer_norm": self.config.use_layer_norm,
         }
 
-        rmse_scores = []
-        for fold_id in unique_folds:
+        fold_rmses: List[float] = []
+        for fold_idx, fold_id in enumerate(unique_folds):
             val_mask = folds == fold_id
             train_mask = ~val_mask
 
@@ -613,16 +641,16 @@ class DNNProbeRegressor:
                 X, y, edge_index, num_nodes, train_mask, val_mask, hparams
             )
             # val_loss is MSE, convert to RMSE
-            rmse_scores.append(np.sqrt(best_val_loss))
+            fold_rmses.append(np.sqrt(best_val_loss))
 
-        mean_rmse = float(np.mean(rmse_scores))
+            # Per-fold pruning: report running mean RMSE so Optuna can
+            # prune unpromising trials before all folds complete.
+            running_mean_rmse = float(np.mean(fold_rmses[: fold_idx + 1]))
+            trial.report(running_mean_rmse, step=fold_idx)
+            if trial.should_prune():
+                raise optuna.TrialPruned()
 
-        # Pruning: report intermediate value
-        trial.report(mean_rmse, step=0)
-        if trial.should_prune():
-            raise optuna.TrialPruned()
-
-        return mean_rmse
+        return float(np.mean(fold_rmses))
 
     # ------------------------------------------------------------------
     # Per-target pipeline
@@ -693,6 +721,7 @@ class DNNProbeRegressor:
             study = optuna.create_study(
                 direction="minimize",
                 sampler=optuna.samplers.TPESampler(seed=self.config.random_state),
+                pruner=optuna.pruners.MedianPruner(),
             )
             study.optimize(
                 lambda trial: self._optuna_objective(
@@ -730,24 +759,23 @@ class DNNProbeRegressor:
             val_mask = folds == fold_id
             train_mask = ~val_mask
 
-            model, best_val_loss, val_history = self._train_one_fold(
+            model, best_val_loss, fold_scaler, val_history = self._train_one_fold(
                 X, y, edge_index, num_nodes, train_mask, val_mask, best_hparams
             )
             training_curves[int(fold_id)] = val_history
 
-            # Get predictions on validation set
+            # Get predictions on validation set using the scaler fitted during
+            # training (reuse fold_scaler to avoid train/predict misalignment).
             device = torch.device(self.config.device)
 
-            # Standardize the same way as training
-            scaler = StandardScaler()
             X_scaled = np.empty_like(X, dtype=np.float32)
-            X_scaled[train_mask] = scaler.fit_transform(X[train_mask]).astype(
+            X_scaled[train_mask] = fold_scaler.transform(X[train_mask]).astype(
                 np.float32
             )
-            X_scaled[val_mask] = scaler.transform(X[val_mask]).astype(np.float32)
+            X_scaled[val_mask] = fold_scaler.transform(X[val_mask]).astype(np.float32)
             other_mask = ~(train_mask | val_mask)
             if other_mask.any():
-                X_scaled[other_mask] = scaler.transform(X[other_mask]).astype(
+                X_scaled[other_mask] = fold_scaler.transform(X[other_mask]).astype(
                     np.float32
                 )
 
@@ -793,6 +821,9 @@ class DNNProbeRegressor:
             del data
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+
+        # Persist training curves for save_results()
+        self.training_curves[target_col] = training_curves
 
         # Overall metrics from OOF predictions
         valid_mask = ~np.isnan(oof_predictions)
@@ -978,6 +1009,23 @@ class DNNProbeRegressor:
 
         logger.info(f"Saved config to {out_dir / 'config.json'}")
 
+        # ----- Training curves per target/fold -----
+        if self.training_curves:
+            curves_dir = out_dir / "training_curves"
+            curves_dir.mkdir(parents=True, exist_ok=True)
+            for target_col, fold_curves in self.training_curves.items():
+                for fold_id, curve in fold_curves.items():
+                    curve_path = curves_dir / f"{target_col}_fold{fold_id}.json"
+                    with open(curve_path, "w") as f:
+                        json.dump(
+                            {"target": target_col, "fold": fold_id, "val_loss": curve},
+                            f,
+                        )
+            logger.info(
+                f"Saved training curves to {curves_dir} "
+                f"({sum(len(fc) for fc in self.training_curves.values())} files)"
+            )
+
         return out_dir
 
     # ------------------------------------------------------------------
@@ -1150,6 +1198,11 @@ def main():
         default=None,
         help="Path to linear probe results dir for comparison table",
     )
+    parser.add_argument(
+        "--visualize",
+        action="store_true",
+        help="Generate DNN probe visualizations after saving results",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -1179,6 +1232,7 @@ def main():
     out_dir = regressor.save_results()
 
     # Comparison with linear probe
+    linear_results = None
     if args.compare:
         linear_dir = Path(args.compare)
         logger.info(f"\nLoading linear probe results from {linear_dir}...")
@@ -1188,6 +1242,22 @@ def main():
         comparison_df.to_csv(comparison_path, index=False)
         logger.info(f"\nComparison saved to {comparison_path}")
         logger.info(f"\n{comparison_df.to_string(index=False)}")
+
+    # Visualization
+    if args.visualize:
+        from stage3_analysis.dnn_probe_viz import DNNProbeVisualizer
+
+        viz_dir = out_dir / "plots"
+        logger.info(f"\nGenerating DNN probe visualizations to {viz_dir}...")
+        viz = DNNProbeVisualizer(
+            results=regressor.results,
+            output_dir=viz_dir,
+            training_curves=regressor.training_curves,
+        )
+        plot_paths = viz.plot_all(
+            linear_results=linear_results,
+        )
+        logger.info(f"Generated {len(plot_paths)} plots to {viz_dir}")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ from .leefbaarometer_target import LeefbaarometerTargetBuilder, LeefbaarometerCo
 from .linear_probe import LinearProbeRegressor, LinearProbeConfig
 from .linear_probe_viz import LinearProbeVisualizer
 from .dnn_probe import DNNProbeRegressor, DNNProbeConfig
+from .dnn_probe_viz import DNNProbeVisualizer
 
 __all__ = [
     'UrbanEmbeddingAnalyzer',
@@ -24,4 +25,5 @@ __all__ = [
     'LinearProbeVisualizer',
     'DNNProbeRegressor',
     'DNNProbeConfig',
+    'DNNProbeVisualizer',
 ]
