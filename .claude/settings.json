@@ -1,0 +1,62 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Skill(coordinate)",
+      "Skill(summarize-scratchpads)",
+      "Skill(ego-check)",
+      "Skill(librarian-update)"
+    ],
+    "deny": [],
+    "defaultMode": "acceptEdits"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/session-start.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/subagent-context.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check: did this subagent write to its scratchpad at .claude/scratchpad/{agent_type}/YYYY-MM-DD.md (using today's date)? The file must exist and contain 'What I did', 'Cross-agent observations', and 'Unresolved' sections. If the scratchpad was NOT written, respond with decision: block and reason explaining the agent must write its scratchpad before completing. If it WAS written, allow completion.",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check: if this session involved coordinator mode (/coordinate skill was used or multi-agent delegation occurred), was a coordinator scratchpad written to .claude/scratchpad/coordinator/YYYY-MM-DD.md (using today's date)? If coordinator mode was active and no scratchpad exists, respond with decision: block and reason reminding to write the coordinator scratchpad. If coordinator mode was NOT active, or scratchpad exists, allow.",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -2,48 +2,16 @@
 
 Instructions for Claude Code and developers working with the UrbanRepML project.
 
-## CRITICAL: SRAI-First, h3-py for Hierarchy Only
-
-**This project uses SRAI (Spatial Representations for AI) as the primary spatial interface.**
-- Use SRAI for: tessellation, neighborhoods, regionalization, spatial joins
-- **Exception**: `h3` is acceptable for parent-child hierarchy operations that SRAI does not wrap:
-  - `h3.cell_to_parent()`, `h3.cell_to_children()`, `h3.cell_to_center_child()`
-  - `h3.get_resolution()`, `h3.cell_to_local_ij()` and similar introspection
-- NEVER use h3 for tessellation or neighborhood queries — SRAI handles those
-- Always index by `region_id` (SRAI convention), never `h3_index`
-
 ## Core Development Principles
 
 1. **HONEST COMPLEXITY**: Development is hard. Wrangling parallel datasets during training is challenging. Late-fusion makes it manageable.
 2. **ONE THING AT A TIME**: Focus on individual modalities before fusion.
 3. **DENSE WEB OVER OFFSHOOTS**: Every component must connect meaningfully to the core pipeline.
 4. **STUDY-AREA BASED**: All work is organized by study areas. Each area is self-contained.
-5. **DATA-CODE SEPARATION**: Absolute boundary between data/ and code directories. Never mix.
-6. **SRAI-FIRST**: Use SRAI for tessellation, neighborhoods, and regionalization. h3-py is OK for parent-child hierarchy traversal only.
+5. **DATA-CODE SEPARATION**: Absolute boundary between data/ and code directories. Never mix. (See `.claude/rules/data-code-separation.md`)
+6. **SRAI-FIRST**: Use SRAI for tessellation, neighborhoods, and regionalization. h3-py is OK for parent-child hierarchy traversal only. (See `.claude/rules/srai-spatial.md`)
 7. **THINK BEFORE ADDING**: Deeply consider how new code integrates with existing architecture.
 8. **ANTI-CLUTTER**: Keep documentation minimal and focused.
-
-## Study Area Organization
-
-All processing is study-area based. Each study area contains:
-
-```
-data/study_areas/{area_name}/
-├── area_gdf/           # Study area boundary
-├── regions_gdf/        # H3 tessellation (via SRAI!)
-├── embeddings/         # Per-modality embeddings
-│   ├── alphaearth/
-│   ├── poi/
-│   ├── roads/
-│   └── gtfs/
-├── urban_embedding/    # Fused results
-└── plots/             # Visualizations
-```
-
-Primary study areas:
-- **netherlands**: Complete coverage for training volume (primary)
-- **cascadia**: Coastal urban-forest interface
-- **south_holland**: Dense urban subset
 
 ## Three-Stage Architecture
 
@@ -64,10 +32,10 @@ embeddings = processor.process_to_h3(data, regions_gdf)
 
 **Active Modalities:**
 - **AlphaEarth**: Pre-computed Google Earth Engine embeddings (PRIMARY, working)
-- **POI**: OpenStreetMap points → categorical density features (partial)
-- **Roads**: OSM network topology → connectivity metrics (partial)
-- **GTFS**: Transit stops → accessibility potential (planned)
-- **Aerial Imagery**: PDOK Netherlands → DINOv3 (optional)
+- **POI**: OpenStreetMap points -> categorical density features (partial)
+- **Roads**: OSM network topology -> connectivity metrics (partial)
+- **GTFS**: Transit stops -> accessibility potential (planned)
+- **Aerial Imagery**: PDOK Netherlands -> DINOv3 (optional)
 
 ### Stage 2: Urban Embedding Fusion
 
@@ -75,7 +43,7 @@ Two model architectures (all in `stage2_fusion/models/`):
 
 1. **FullAreaUNet** (`full_area_unet.py`): The OG that worked. Full study area processing with lateral accessibility graph. Multi-resolution U-Net (res 8-10) with ModalityFusion, SharedSparseMapping, symmetric 3-level encoder-decoder with skip connections, and per-resolution output heads.
 
-2. **ConeBatchingUNet** (`cone_batching_unet.py`): Most promising future direction. Cone-based hierarchical U-Net processing independent computational "cones" spanning res5→res10. Memory efficient (each cone ~1,500 hexagons vs ~6M for full graph), parallelizable, multi-scale.
+2. **ConeBatchingUNet** (`cone_batching_unet.py`): Most promising future direction. Cone-based hierarchical U-Net processing independent computational "cones" spanning res5->res10. Memory efficient (each cone ~1,500 hexagons vs ~6M for full graph), parallelizable, multi-scale.
 
 ### Stage 3: Analysis & Visualization
 
@@ -107,31 +75,24 @@ uv sync              # Install all dependencies
 uv sync --extra dev  # Include dev tools
 ```
 
-## SRAI region_id Index Standard
+## Key Commands
 
-- **ALWAYS** work with SRAI's `region_id` index format
-- **DO NOT** rename to `h3_index` — adapt scripts to use `region_id`
-- H3Regionalizer creates: `GeoDataFrame` with `region_id` as index containing H3 hex strings
+```bash
+# Stage 1: Process modalities for study area
+python -m stage1_modalities.alphaearth --study-area netherlands --use-srai
 
-### Stage Boundary Convention
-- **Stage 1 parquet outputs** use `h3_index` as column name for backwards compatibility with existing saved data
-- **Stage 2+** uses `region_id` internally (SRAI convention)
-- The `MultiModalLoader` bridges this by normalizing column names at the stage1→stage2 boundary
+# Stage 2: Run fusion pipeline
+python -m stage2_fusion.pipeline --study-area netherlands --modalities alphaearth,poi,roads
 
-### TIFF Processing Architecture
+# Generate accessibility graphs
+python scripts/accessibility/generate_graphs.py --study-area netherlands --use-srai
+
+# Train cone-based model
+python scripts/netherlands/train_lattice_unet_res10_cones.py
+
+# Stage 3: Analyze and visualize embeddings
+python -m stage3_analysis.analytics --study-area netherlands
 ```
-1. Pre-regionalize study area (SRAI H3Regionalizer)
-   ↓
-2. For each TIFF: spatial intersection → find relevant hexagons
-   ↓
-3. Process pixels → spatial join with hexagons → aggregate by region_id
-   ↓
-4. Merge tiles → weighted average overlapping hexagons
-   ↓
-5. Output: embeddings indexed by region_id
-```
-
-**Key Insight**: Hexagons are defined by the study area, not by individual tiles. Each tile contributes data to pre-existing hexagons.
 
 ## Cone-Based Training Memory Optimization
 
@@ -170,58 +131,22 @@ Includes adaptive sampling: dense near tile edges, sparse in center.
 ### Gap Elimination for Tile Stitching
 Eliminates tile boundary discontinuities by consistently averaging embeddings for ALL hexagons (including single-tile ones). Targeted gap elimination specifically handles boundary hexagons. Track quality via boundary_hexagons and filled_gaps metrics.
 
-## Key Commands
-
-```bash
-# Stage 1: Process modalities for study area
-python -m stage1_modalities.alphaearth --study-area netherlands --use-srai
-
-# Stage 2: Run fusion pipeline
-python -m stage2_fusion.pipeline --study-area netherlands --modalities alphaearth,poi,roads
-
-# Generate accessibility graphs
-python scripts/accessibility/generate_graphs.py --study-area netherlands --use-srai
-
-# Train cone-based model
-python scripts/netherlands/train_lattice_unet_res10_cones.py
-
-# Stage 3: Analyze and visualize embeddings
-python -m stage3_analysis.analytics --study-area netherlands
-```
-
 ## Multi-Agent Workflow
 
-### Coordination Protocol
-The main agent IS the coordinator. It talks to the user AND orchestrates specialist agents.
-For project work, the main agent runs OODA (observe-orient-decide-act), delegates to
-specialist agents via the Task tool, and maintains `.claude/scratchpad/coordinator/`.
-The `/coordinate` skill activates this mode with a structured protocol reminder.
+The coordinator, SRAI, data-code, and index conventions are now enforced via:
+- **Rules**: `.claude/rules/` (auto-loaded based on file context)
+- **Hooks**: `.claude/settings.json` (SessionStart, SubagentStart/Stop, Stop)
+- **Skills**: `/coordinate`, `/summarize-scratchpads`, `/ego-check`, `/librarian-update`
 
-The main agent NEVER spawns a separate coordinator sub-agent — that indirection is removed.
-Exception: trivial non-project tasks (explain a concept, quick question) don't need OODA.
-
-### Stigmergic Logging (MANDATORY)
-Every agent that does work MUST write a dated scratchpad entry (`.claude/scratchpad/{agent}/YYYY-MM-DD.md`) containing:
-- **What I did**: actions taken, files modified, decisions made
-- **Cross-agent observations**: what I read from other agents' scratchpads, what was useful, what confused me, what I disagree with or would do differently
-- **Unresolved**: open questions, things that need follow-up
-
-This is not optional documentation — it is the coordination mechanism. Without scratchpad entries, the next session starts blind.
-
-### Why This Matters
-- Scratchpads are how agents communicate across sessions (stigmergy)
-- The coordinator reads all scratchpads to prioritize work
-- The ego agent monitors scratchpads for process health
-- The librarian's codebase graph is the shared map everyone orients from
-- Cross-agent observations catch disagreements, confusion, and integration issues early
+See `specs/claude_code_multi_agent_setup.md` for the full architecture description.
 
 ## Common Pitfalls
 
-1. **Using h3-py for tessellation/neighborhoods** → Use SRAI for those. h3-py is OK only for hierarchy traversal (cell_to_parent, cell_to_children, etc.)
-2. **Mixing data and code** → Keep strict separation
-3. **Processing without study area** → Everything is study-area based
-4. **Ignoring SRAI capabilities** → SRAI has built-in embedders and analysis tools
-5. **Over-engineering** → Keep it simple, late-fusion is about manageability
+1. **Using h3-py for tessellation/neighborhoods** -> Use SRAI for those. h3-py is OK only for hierarchy traversal (cell_to_parent, cell_to_children, etc.)
+2. **Mixing data and code** -> Keep strict separation
+3. **Processing without study area** -> Everything is study-area based
+4. **Ignoring SRAI capabilities** -> SRAI has built-in embedders and analysis tools
+5. **Over-engineering** -> Keep it simple, late-fusion is about manageability
 
 ## Essential Resources
 
