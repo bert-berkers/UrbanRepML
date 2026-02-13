@@ -119,12 +119,18 @@ class ConeInferenceAggregator:
 
         config = ConeBatchingUNetConfig(
             input_dim=embedding_dim,
-            hidden_dim=128,  # Should match training
             output_dim=embedding_dim,
-            num_layers=4,  # Should match training
-            dropout=0.1,
+            hidden_dims={
+                10: 64,   # res10: finest resolution (input)
+                9: 128,   # res9
+                8: 128,   # res8
+                7: 256,   # res7
+                6: 256,   # res6
+                5: 512    # res5: coarsest (bottleneck)
+            },
+            lateral_conv_layers=2,  # 2 GCN hops per resolution
             conv_type="gcn",
-            use_batch_norm=False,
+            dropout=0.1,
             use_graph_norm=True,
             use_skip_connections=True,
             activation="gelu"
@@ -182,31 +188,40 @@ class ConeInferenceAggregator:
         # Get cone data
         batch = self.dataset[cone_idx]
 
-        # Extract data
+        # Extract features and move to device
         features = batch['features_res10'].to(self.device)
-        edge_index = batch['spatial_edges'][self.target_resolution][0].to(self.device)
-        edge_weights = batch['spatial_edges'][self.target_resolution][1].to(self.device)
         cone_id = batch['cone_id']  # Center res5 hexagon
 
+        # Move spatial edges to device (keep dict structure)
+        spatial_edges = {}
+        for res, (edge_index, edge_weight) in batch['spatial_edges'].items():
+            spatial_edges[res] = (
+                edge_index.to(self.device),
+                edge_weight.to(self.device)
+            )
+
+        # Convert hierarchical_mappings from 3-tuple to 2-tuple and move to device
+        hierarchical_mappings = {}
+        for child_res, mapping in batch['hierarchical_mappings'].items():
+            child_to_parent_idx, valid_children_mask, num_parents = mapping
+            hierarchical_mappings[child_res] = (
+                child_to_parent_idx.to(self.device),
+                num_parents
+            )
+
         # Get hex ID mapping
-        hex_to_local_idx = batch['hex_to_local_idx_by_res'][self.target_resolution]
         local_idx_to_hex = batch['local_idx_to_hex_by_res'][self.target_resolution]
 
-        # Forward pass
+        # Forward pass with dict-based args
         outputs = self.model(
             features,
-            edge_index,
-            edge_weights,
+            spatial_edges,           # Dict[res] -> (edge_index, edge_weight)
+            hierarchical_mappings,   # Dict[child_res] -> (child_to_parent_idx, num_parents)
             batch=None
         )
 
-        # Extract embeddings
-        if isinstance(outputs, dict):
-            embeddings = outputs['embeddings']
-        else:
-            embeddings = outputs
-
-        embeddings_np = embeddings.cpu().numpy()
+        # Extract reconstruction (model returns 'reconstruction' key)
+        embeddings_np = outputs['reconstruction'].cpu().numpy()
 
         # Store predictions with weights
         for local_idx, hex_id in local_idx_to_hex.items():

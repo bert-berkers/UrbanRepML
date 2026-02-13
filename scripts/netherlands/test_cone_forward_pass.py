@@ -79,9 +79,11 @@ def test_cone_forward_backward():
             res: (edge_index.to(device), edge_weight.to(device))
             for res, (edge_index, edge_weight) in cone_data['spatial_edges'].items()
         }
+        # ConeDataset returns 3-tuples: (child_to_parent_idx, valid_children_mask, num_parents)
+        # ConeBatchingUNet expects 2-tuples: (child_to_parent_idx, num_parents)
         hierarchical_mappings = {
             res: (child_to_parent.to(device), num_parents)
-            for res, (child_to_parent, num_parents) in cone_data['hierarchical_mappings'].items()
+            for res, (child_to_parent, _valid_mask, num_parents) in cone_data['hierarchical_mappings'].items()
         }
 
         # 3. Create model
