@@ -171,17 +171,21 @@ class ConeAlphaEarthTrainer:
 
         config = ConeBatchingUNetConfig(
             input_dim=embedding_dim,
-            hidden_dim=hidden_dim,
             output_dim=embedding_dim,  # Reconstruct to same dimension
-            num_layers=num_layers,
-            dropout=0.1,
+            hidden_dims={
+                10: 64,   # res10: finest resolution (input)
+                9: 128,   # res9
+                8: 128,   # res8
+                7: 256,   # res7
+                6: 256,   # res6
+                5: 512    # res5: coarsest (bottleneck)
+            },
+            lateral_conv_layers=2,  # 2 GCN hops per resolution
             conv_type="gcn",
-            use_batch_norm=False,
+            dropout=0.1,
             use_graph_norm=True,
             use_skip_connections=True,
-            activation="gelu",
-            reconstruction_weight=1.0,
-            consistency_weight=0.0  # Not using consistency loss for now
+            activation="gelu"
         )
 
         self.model = ConeBatchingUNet(config).to(self.device)
@@ -226,9 +230,9 @@ class ConeAlphaEarthTrainer:
             'val_cones': len(self.val_dataset),
             'model_config': {
                 'input_dim': model_config.input_dim,
-                'hidden_dim': model_config.hidden_dim,
                 'output_dim': model_config.output_dim,
-                'num_layers': model_config.num_layers,
+                'hidden_dims': model_config.hidden_dims,
+                'lateral_conv_layers': model_config.lateral_conv_layers,
                 'conv_type': model_config.conv_type,
             },
             'timestamp': datetime.now().isoformat()
@@ -237,6 +241,38 @@ class ConeAlphaEarthTrainer:
         with open(self.output_dir / "logs" / "config.json", 'w') as f:
             json.dump(config, f, indent=2)
 
+    def _prepare_model_inputs(self, batch: dict):
+        """
+        Prepare model inputs from ConeDataset batch.
+
+        ConeDataset returns hierarchical_mappings as 3-tuples:
+            (child_to_parent_idx, valid_children_mask, num_parents)
+        ConeBatchingUNet.forward() expects 2-tuples:
+            (child_to_parent_idx, num_parents)
+
+        This method handles the conversion and moves tensors to device.
+        """
+        features = batch['features_res10'].to(self.device)
+
+        # Move spatial edges to device (keep dict structure)
+        spatial_edges = {}
+        for res, (edge_index, edge_weight) in batch['spatial_edges'].items():
+            spatial_edges[res] = (
+                edge_index.to(self.device),
+                edge_weight.to(self.device)
+            )
+
+        # Convert hierarchical_mappings from 3-tuple to 2-tuple and move to device
+        hierarchical_mappings = {}
+        for child_res, mapping in batch['hierarchical_mappings'].items():
+            child_to_parent_idx, valid_children_mask, num_parents = mapping
+            hierarchical_mappings[child_res] = (
+                child_to_parent_idx.to(self.device),
+                num_parents
+            )
+
+        return features, spatial_edges, hierarchical_mappings
+
     def train_epoch(self, epoch: int) -> float:
         """Train for one epoch."""
         self.model.train()
@@ -244,29 +280,23 @@ class ConeAlphaEarthTrainer:
         num_batches = 0
 
         for batch_idx, batch in enumerate(self.train_loader):
-            # Extract data
-            features = batch['features_res10'].to(self.device)
-            edge_index = batch['spatial_edges'][self.target_resolution][0].to(self.device)
-            edge_weights = batch['spatial_edges'][self.target_resolution][1].to(self.device)
+            # Prepare dict-based inputs for ConeBatchingUNet
+            features, spatial_edges, hierarchical_mappings = (
+                self._prepare_model_inputs(batch)
+            )
 
             # Forward pass
             self.optimizer.zero_grad()
 
             outputs = self.model(
                 features,
-                edge_index,
-                edge_weights,
+                spatial_edges,           # Dict[res] -> (edge_index, edge_weight)
+                hierarchical_mappings,   # Dict[child_res] -> (child_to_parent_idx, num_parents)
                 batch=None
             )
 
-            # Get embeddings from output dict
-            if isinstance(outputs, dict):
-                embeddings = outputs['embeddings']
-            else:
-                embeddings = outputs
-
-            # Reconstruction loss
-            loss = nn.functional.mse_loss(embeddings, features)
+            # Reconstruction loss (model returns 'reconstruction' key)
+            loss = nn.functional.mse_loss(outputs['reconstruction'], features)
 
             # Backward pass
             loss.backward()
@@ -297,27 +327,21 @@ class ConeAlphaEarthTrainer:
         num_batches = 0
 
         for batch in self.val_loader:
-            # Extract data
-            features = batch['features_res10'].to(self.device)
-            edge_index = batch['spatial_edges'][self.target_resolution][0].to(self.device)
-            edge_weights = batch['spatial_edges'][self.target_resolution][1].to(self.device)
+            # Prepare dict-based inputs for ConeBatchingUNet
+            features, spatial_edges, hierarchical_mappings = (
+                self._prepare_model_inputs(batch)
+            )
 
             # Forward pass
             outputs = self.model(
                 features,
-                edge_index,
-                edge_weights,
+                spatial_edges,           # Dict[res] -> (edge_index, edge_weight)
+                hierarchical_mappings,   # Dict[child_res] -> (child_to_parent_idx, num_parents)
                 batch=None
             )
 
-            # Get embeddings
-            if isinstance(outputs, dict):
-                embeddings = outputs['embeddings']
-            else:
-                embeddings = outputs
-
-            # Loss
-            loss = nn.functional.mse_loss(embeddings, features)
+            # Reconstruction loss
+            loss = nn.functional.mse_loss(outputs['reconstruction'], features)
 
             total_loss += loss.item()
             num_batches += 1

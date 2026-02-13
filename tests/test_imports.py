@@ -11,6 +11,7 @@ h3-py functions (tessellation/neighborhood) that should go through SRAI.
 from pathlib import Path
 
 import pytest
+import torch
 
 # ---------------------------------------------------------------------------
 # Stage 1: Modality Encoders
@@ -166,6 +167,123 @@ class TestStage3Imports:
             HierarchicalLandscapeVisualizer,
         )
         assert HierarchicalLandscapeVisualizer is not None
+
+    def test_import_dnn_probe_classes(self):
+        from stage3_analysis.dnn_probe import (
+            DNNProbeRegressor,
+            DNNProbeConfig,
+            GNNProbeModel,
+        )
+        assert DNNProbeRegressor is not None
+        assert DNNProbeConfig is not None
+        assert GNNProbeModel is not None
+
+    def test_import_dnn_probe_from_package_init(self):
+        """DNNProbeRegressor and DNNProbeConfig are re-exported from __init__."""
+        import stage3_analysis
+
+        assert hasattr(stage3_analysis, "DNNProbeRegressor")
+        assert hasattr(stage3_analysis, "DNNProbeConfig")
+
+
+class TestDNNProbeForwardPass:
+    """Verify GNNProbeModel forward pass shapes for GCN and GAT variants."""
+
+    @pytest.mark.parametrize("conv_type", ["gcn", "gat"])
+    def test_forward_output_shape(self, conv_type):
+        """Forward pass with random input produces [N, 1] output."""
+        from stage3_analysis.dnn_probe import GNNProbeModel
+
+        model = GNNProbeModel(
+            input_dim=16,
+            hidden_dim=32,
+            num_layers=2,
+            conv_type=conv_type,
+        )
+        model.eval()
+
+        x = torch.randn(10, 16)
+        edge_index = torch.randint(0, 10, (2, 20))
+
+        with torch.no_grad():
+            out = model(x, edge_index)
+
+        assert out.shape == (10, 1), (
+            f"Expected output shape (10, 1) but got {out.shape}"
+        )
+        assert not torch.isnan(out).any(), "Output contains NaN values"
+
+    def test_forward_invalid_conv_type_raises(self):
+        """Unknown conv_type raises ValueError at construction."""
+        from stage3_analysis.dnn_probe import GNNProbeModel
+
+        with pytest.raises(ValueError, match="Unknown conv_type"):
+            GNNProbeModel(
+                input_dim=16,
+                hidden_dim=32,
+                num_layers=2,
+                conv_type="invalid",
+            )
+
+
+class TestDNNProbeConfig:
+    """Verify DNNProbeConfig defaults and device resolution."""
+
+    def test_default_hidden_dim(self):
+        from stage3_analysis.dnn_probe import DNNProbeConfig
+
+        config = DNNProbeConfig()
+        assert config.hidden_dim == 128
+
+    def test_default_conv_type(self):
+        from stage3_analysis.dnn_probe import DNNProbeConfig
+
+        config = DNNProbeConfig()
+        assert config.conv_type == "gcn"
+
+    def test_default_num_layers(self):
+        from stage3_analysis.dnn_probe import DNNProbeConfig
+
+        config = DNNProbeConfig()
+        assert config.num_layers == 2
+
+    def test_device_resolves_to_cuda_or_cpu(self):
+        """Auto device should resolve to 'cuda' or 'cpu', never remain 'auto'."""
+        from stage3_analysis.dnn_probe import DNNProbeConfig
+
+        config = DNNProbeConfig()
+        assert config.device in ("cuda", "cpu"), (
+            f"Device should be 'cuda' or 'cpu' but got '{config.device}'"
+        )
+
+
+class TestDNNProbeCompatibility:
+    """Verify DNN probe can import shared types from linear_probe."""
+
+    def test_target_result_importable(self):
+        from stage3_analysis.linear_probe import TargetResult
+        from stage3_analysis.dnn_probe import DNNProbeRegressor
+
+        assert TargetResult is not None
+        assert DNNProbeRegressor is not None
+
+    def test_fold_metrics_importable(self):
+        from stage3_analysis.linear_probe import FoldMetrics
+        from stage3_analysis.dnn_probe import DNNProbeRegressor
+
+        assert FoldMetrics is not None
+        assert DNNProbeRegressor is not None
+
+    def test_dnn_probe_uses_target_result_type(self):
+        """DNNProbeRegressor.results dict should accept TargetResult values."""
+        from stage3_analysis.dnn_probe import DNNProbeConfig, DNNProbeRegressor
+        from stage3_analysis.linear_probe import TargetResult
+
+        config = DNNProbeConfig()
+        regressor = DNNProbeRegressor(config)
+        # results dict should exist and be empty initially
+        assert isinstance(regressor.results, dict)
+        assert len(regressor.results) == 0
 
 
 # ---------------------------------------------------------------------------

@@ -788,9 +788,33 @@ class LinearProbeVisualizer:
             boundary_gdf = boundary_gdf.to_crs(epsg=28992)
 
         # ----------------------------------------------------------
+        # 7b. RGB quantize + dissolve for fast rendering
+        # ----------------------------------------------------------
+        n_hexagons = len(plot_gdf)
+
+        # Quantize each channel to 8 levels (0-7) and build composite bin key
+        rgb_quantized = (rgb_array * 7).round().astype(np.uint8)
+        plot_gdf["rgb_bin"] = (
+            rgb_quantized[:, 0].astype(int) * 64
+            + rgb_quantized[:, 1].astype(int) * 8
+            + rgb_quantized[:, 2].astype(int)
+        )
+        plot_gdf["R"] = rgb_array[:, 0]
+        plot_gdf["G"] = rgb_array[:, 1]
+        plot_gdf["B"] = rgb_array[:, 2]
+
+        dissolved = plot_gdf.dissolve(by="rgb_bin", aggfunc="mean")
+        dissolved_rgb = dissolved[["R", "G", "B"]].values.clip(0, 1)
+
+        logger.info(f"  Dissolved {n_hexagons:,} hexagons into "
+                     f"{len(dissolved)} RGB bins")
+
+        # ----------------------------------------------------------
         # 8. Plot
         # ----------------------------------------------------------
         fig, ax = plt.subplots(figsize=(12, 14), dpi=self.dpi)
+        fig.set_facecolor("white")
+        ax.set_facecolor("white")
 
         # Background boundary
         if boundary_gdf is not None:
@@ -801,16 +825,17 @@ class LinearProbeVisualizer:
                 linewidth=0.5,
             )
 
-        # Hex layer with RGB colors
-        plot_gdf.plot(
+        # Hex layer with RGB colors (dissolved for speed)
+        dissolved.plot(
             ax=ax,
-            color=rgb_array,
+            color=dissolved_rgb,
             edgecolor="none",
             linewidth=0,
             rasterized=True,
         )
 
-        ax.set_axis_off()
+        ax.grid(True, linewidth=0.5, alpha=0.5, color="gray")
+        ax.tick_params(labelsize=8)
 
         # Cartographic elements
         self._add_scale_bar(ax, length_km=50)
@@ -872,7 +897,7 @@ class LinearProbeVisualizer:
             f"G={channel_names[1]} ({channel_coefs[1]:+.4f})  "
             f"B={channel_names[2]} ({channel_coefs[2]:+.4f})",
             f"Percentile [2, 98] normalization | EPSG:28992 (RD New) | "
-            f"n={len(plot_gdf):,} hexagons",
+            f"n={n_hexagons:,} hexagons ({len(dissolved)} dissolved bins)",
         ]
         ax.set_title("\n".join(title_lines), fontsize=11, pad=10)
 

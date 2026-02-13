@@ -11,6 +11,7 @@ from .hierarchical_visualization import HierarchicalLandscapeVisualizer
 from .leefbaarometer_target import LeefbaarometerTargetBuilder, LeefbaarometerConfig
 from .linear_probe import LinearProbeRegressor, LinearProbeConfig
 from .linear_probe_viz import LinearProbeVisualizer
+from .dnn_probe import DNNProbeRegressor, DNNProbeConfig
 
 __all__ = [
     'UrbanEmbeddingAnalyzer',
@@ -21,4 +22,6 @@ __all__ = [
     'LinearProbeRegressor',
     'LinearProbeConfig',
     'LinearProbeVisualizer',
+    'DNNProbeRegressor',
+    'DNNProbeConfig',
 ]
