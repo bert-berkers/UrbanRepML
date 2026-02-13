@@ -643,6 +643,62 @@ class LinearProbeVisualizer:
                 ha="center", va="bottom", fontsize=12, fontweight="bold",
                 transform=ax.transData)
 
+    def _rasterize_centroids(
+        self,
+        hex_ids: pd.Index,
+        rgb_array: np.ndarray,
+        extent: tuple,
+        width: int = 2000,
+        height: int = 2400,
+    ) -> np.ndarray:
+        """
+        Rasterize H3 centroids to an RGB image via SRAI.
+
+        Converts H3 hex IDs to centroids using SRAI's h3_to_geoseries,
+        reprojects to EPSG:28992 (RD New), and writes RGB values into a
+        numpy pixel array.  ~18x faster than dissolve+vector rendering.
+
+        Args:
+            hex_ids: Index of H3 hex ID strings.
+            rgb_array: (N, 3) float array with R, G, B in [0, 1].
+            extent: (minx, miny, maxx, maxy) in EPSG:28992.
+            width: Output image width in pixels.
+            height: Output image height in pixels.
+
+        Returns:
+            (height, width, 4) RGBA float32 array with white background.
+        """
+        from srai.h3 import h3_to_geoseries
+
+        hex_geom = h3_to_geoseries(hex_ids)
+        gdf = gpd.GeoDataFrame(geometry=hex_geom, crs="EPSG:4326").to_crs(epsg=28992)
+        centroids = gdf.geometry.centroid
+
+        minx, miny, maxx, maxy = extent
+        mask = (
+            (centroids.x >= minx) & (centroids.x <= maxx)
+            & (centroids.y >= miny) & (centroids.y <= maxy)
+        )
+
+        cx = centroids.x[mask].values
+        cy = centroids.y[mask].values
+        rgb_masked = rgb_array[mask.values]
+
+        # Map to pixel coordinates
+        px = ((cx - minx) / (maxx - minx) * (width - 1)).astype(int)
+        py = ((cy - miny) / (maxy - miny) * (height - 1)).astype(int)
+
+        # Clip to valid pixel range
+        np.clip(px, 0, width - 1, out=px)
+        np.clip(py, 0, height - 1, out=py)
+
+        # Write into RGBA image (white background)
+        image = np.ones((height, width, 4), dtype=np.float32)
+        image[height - 1 - py, px, :3] = rgb_masked  # flip y for imshow
+        image[height - 1 - py, px, 3] = 1.0
+
+        return image
+
     # ------------------------------------------------------------------
     # RGB top-3 coefficient map
     # ------------------------------------------------------------------
@@ -755,23 +811,7 @@ class LinearProbeVisualizer:
             rgb_array[:, ch_idx] = normalized
 
         # ----------------------------------------------------------
-        # 6. Build geometry from H3 hex IDs
-        # ----------------------------------------------------------
-        from srai.h3 import h3_to_geoseries
-
-        hex_geom = h3_to_geoseries(pd.Index(emb_df.index, name="region_id"))
-        hex_geom.index = emb_df.index
-        plot_gdf = gpd.GeoDataFrame(
-            emb_df,
-            geometry=hex_geom,
-            crs="EPSG:4326",
-        )
-
-        # Reproject to RD New for cartographic elements
-        plot_gdf = plot_gdf.to_crs(epsg=28992)
-
-        # ----------------------------------------------------------
-        # 7. Load boundary if not provided
+        # 6. Load boundary if not provided
         # ----------------------------------------------------------
         if boundary_gdf is None:
             boundary_path = (
@@ -788,26 +828,56 @@ class LinearProbeVisualizer:
             boundary_gdf = boundary_gdf.to_crs(epsg=28992)
 
         # ----------------------------------------------------------
-        # 7b. RGB quantize + dissolve for fast rendering
+        # 7a. Filter boundary to European Netherlands (exclude Caribbean)
         # ----------------------------------------------------------
-        n_hexagons = len(plot_gdf)
+        from shapely import get_geometry, get_num_geometries
+        if boundary_gdf is not None:
+            geom = boundary_gdf.geometry.iloc[0]
+            n_parts = get_num_geometries(geom)
+            if n_parts > 1:
+                euro_geom = max(
+                    (get_geometry(geom, i) for i in range(n_parts)),
+                    key=lambda g: g.area,
+                )
+                boundary_gdf = gpd.GeoDataFrame(
+                    geometry=[euro_geom], crs=boundary_gdf.crs
+                )
 
-        # Quantize each channel to 8 levels (0-7) and build composite bin key
-        rgb_quantized = (rgb_array * 7).round().astype(np.uint8)
-        plot_gdf["rgb_bin"] = (
-            rgb_quantized[:, 0].astype(int) * 64
-            + rgb_quantized[:, 1].astype(int) * 8
-            + rgb_quantized[:, 2].astype(int)
+        # ----------------------------------------------------------
+        # 7b. Compute extent from boundary (EPSG:28992)
+        # ----------------------------------------------------------
+        if boundary_gdf is not None:
+            extent = boundary_gdf.total_bounds
+        else:
+            # Fallback: compute extent from hex centroids
+            from srai.h3 import h3_to_geoseries
+            _geom = h3_to_geoseries(pd.Index(emb_df.index, name="region_id"))
+            _gdf = gpd.GeoDataFrame(geometry=_geom, crs="EPSG:4326").to_crs(epsg=28992)
+            extent = _gdf.total_bounds
+        minx, miny, maxx, maxy = extent
+        pad = (maxx - minx) * 0.03
+        render_extent = (minx - pad, miny - pad, maxx + pad, maxy + pad)
+
+        # ----------------------------------------------------------
+        # 7c. Rasterize centroids (replaces dissolve, ~18x faster)
+        # ----------------------------------------------------------
+        n_hexagons = len(emb_df)
+        raster_image = self._rasterize_centroids(
+            hex_ids=pd.Index(emb_df.index, name="region_id"),
+            rgb_array=rgb_array,
+            extent=render_extent,
+            width=2000,
+            height=2400,
         )
-        plot_gdf["R"] = rgb_array[:, 0]
-        plot_gdf["G"] = rgb_array[:, 1]
-        plot_gdf["B"] = rgb_array[:, 2]
-
-        dissolved = plot_gdf.dissolve(by="rgb_bin", aggfunc="mean")
-        dissolved_rgb = dissolved[["R", "G", "B"]].values.clip(0, 1)
-
-        logger.info(f"  Dissolved {n_hexagons:,} hexagons into "
-                     f"{len(dissolved)} RGB bins")
+        # Count pixels with data (not pure white background)
+        has_data = (
+            (raster_image[:, :, 0] < 0.999)
+            | (raster_image[:, :, 1] < 0.999)
+            | (raster_image[:, :, 2] < 0.999)
+        )
+        n_rendered = int(has_data.sum())
+        logger.info(f"  Rasterized {n_hexagons:,} hexagons -> {n_rendered:,} pixels "
+                     f"(extent filtered to European NL)")
 
         # ----------------------------------------------------------
         # 8. Plot
@@ -825,14 +895,19 @@ class LinearProbeVisualizer:
                 linewidth=0.5,
             )
 
-        # Hex layer with RGB colors (dissolved for speed)
-        dissolved.plot(
-            ax=ax,
-            color=dissolved_rgb,
-            edgecolor="none",
-            linewidth=0,
-            rasterized=True,
+        # Rasterized RGB layer via imshow
+        ax.imshow(
+            raster_image,
+            extent=[render_extent[0], render_extent[2],
+                    render_extent[1], render_extent[3]],
+            origin="lower",
+            aspect="equal",
+            interpolation="nearest",
+            zorder=2,
         )
+
+        ax.set_xlim(render_extent[0], render_extent[2])
+        ax.set_ylim(render_extent[1], render_extent[3])
 
         ax.grid(True, linewidth=0.5, alpha=0.5, color="gray")
         ax.tick_params(labelsize=8)
@@ -875,6 +950,7 @@ class LinearProbeVisualizer:
         # Interpretation text box
         # ----------------------------------------------------------
         interpretation = (
+            f"Linear probe: R, G, B = top-3 linear coefficients\n"
             f"Similar colors = similar embedding representation\n"
             f"in the 3 dimensions most predictive of "
             f"{result.target_name.lower()}"
@@ -891,13 +967,17 @@ class LinearProbeVisualizer:
         # ----------------------------------------------------------
         # Title
         # ----------------------------------------------------------
+        # Detect probe type from coefficients
+        is_regularized = (result.best_alpha or 0) > 0
+        probe_label = "ElasticNet" if is_regularized else "OLS"
         title_lines = [
-            f"RGB Top-3 Coefficient Map: {result.target_name} ({target_col})",
+            f"Linear Probe ({probe_label}): {result.target_name} ({target_col})",
+            f"Top-3 coefficients mapped to RGB | "
             f"R={channel_names[0]} ({channel_coefs[0]:+.4f})  "
             f"G={channel_names[1]} ({channel_coefs[1]:+.4f})  "
             f"B={channel_names[2]} ({channel_coefs[2]:+.4f})",
-            f"Percentile [2, 98] normalization | EPSG:28992 (RD New) | "
-            f"n={n_hexagons:,} hexagons ({len(dissolved)} dissolved bins)",
+            f"Percentile [2, 98] normalization | "
+            f"n={n_hexagons:,} hexagons (centroid rasterized)",
         ]
         ax.set_title("\n".join(title_lines), fontsize=11, pad=10)
 

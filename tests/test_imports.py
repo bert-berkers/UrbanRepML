@@ -298,6 +298,8 @@ BANNED_H3_PATTERNS = [
     r"h3\.grid_ring",
     r"h3\.cell_to_boundary",
     r"h3\.latlng_to_cell",
+    r"h3\.cell_to_latlng",
+    r"h3\.cell_to_lat_lng",
 ]
 
 # Aliases used in some modules (import h3 as _h3)
@@ -306,6 +308,8 @@ BANNED_H3_ALIAS_PATTERNS = [
     r"_h3\.grid_ring",
     r"_h3\.cell_to_boundary",
     r"_h3\.latlng_to_cell",
+    r"_h3\.cell_to_latlng",
+    r"_h3\.cell_to_lat_lng",
 ]
 
 # Directories to scan (stage code only, not scripts/archive or tests)
@@ -366,6 +370,8 @@ class TestH3Compliance:
             "from h3 import grid_ring",
             "from h3 import cell_to_boundary",
             "from h3 import latlng_to_cell",
+            "from h3 import cell_to_latlng",
+            "from h3 import cell_to_lat_lng",
         ]
         violations = []
 
