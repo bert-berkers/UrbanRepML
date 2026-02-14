@@ -90,5 +90,5 @@ You MUST write to `.claude/scratchpad/fusion-architect/YYYY-MM-DD.md` before ret
 
 **On start**: Read coordinator's and ego's scratchpads for context. Read own previous day's scratchpad for continuity.
 **During work**: Log architectural decisions, model changes, performance observations.
-**Cross-agent observations**: Note if stage1's output shapes don't match your expectations, if srai-spatial's changes affected graph construction, or if training-runner reports issues with your model code.
+**Cross-agent observations**: Note if stage1's output shapes don't match your expectations, if srai-spatial's changes affected graph construction, or if execution agent reports issues with your model code.
 **On finish**: 2-3 line summary of what was accomplished and what's unresolved.

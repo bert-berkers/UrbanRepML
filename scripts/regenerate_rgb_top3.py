@@ -35,7 +35,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Paths
-ANALYSIS_DIR = PROJECT_ROOT / "data" / "study_areas" / "netherlands" / "analysis" / "linear_probe"
+ANALYSIS_DIR = PROJECT_ROOT / "data" / "study_areas" / "netherlands" / "analysis" / "linear_probe" / "linear weekend W7"
 EMBEDDINGS_PATH = PROJECT_ROOT / "data" / "study_areas" / "netherlands" / "embeddings" / "alphaearth" / "netherlands_res10_2022.parquet"
 BOUNDARY_PATH = PROJECT_ROOT / "data" / "study_areas" / "netherlands" / "boundaries" / "netherlands_boundary.parquet"
 

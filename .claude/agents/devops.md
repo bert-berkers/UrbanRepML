@@ -70,7 +70,7 @@ netstat -ano | findstr :<port>
 
 ## Weights & Biases (WandB)
 
-WandB is in the `ml` optional group (`uv sync --extra ml`). You handle the infrastructure side — login, project setup, dashboard access. The training-runner handles interpreting metrics and training decisions.
+WandB is in the `ml` optional group (`uv sync --extra ml`). You handle the infrastructure side — login, project setup, dashboard access. The execution agent handles interpreting metrics and training decisions.
 
 ```bash
 # Login (stores API key in ~/.netrc)
@@ -103,7 +103,7 @@ wandb artifact cache cleanup 1GB
 - Runs not appearing in dashboard → check `WANDB_MODE` isn't set to `disabled`
 - Large `wandb/` folder → `wandb artifact cache cleanup 1GB` or delete old `wandb/run-*` dirs
 
-**Boundary with training-runner:** You handle wandb login, sync, dashboard access, storage cleanup. Training-runner handles interpreting loss curves, comparing runs, hyperparameter analysis.
+**Boundary with execution:** You handle wandb login, sync, dashboard access, storage cleanup. Execution agent handles interpreting loss curves, comparing runs, hyperparameter analysis.
 
 ## Environment Setup
 
@@ -128,7 +128,7 @@ You handle the infrastructure side of git, not commit content decisions:
 # Disk space (Windows)
 wmic logicaldisk get size,freespace,caption
 
-# GPU status (standalone diagnostic — training-runner handles during training)
+# GPU status (standalone diagnostic — execution agent handles during training)
 nvidia-smi
 
 # Memory usage
@@ -168,12 +168,12 @@ flake8
 | Processing TIFFs/data to H3 | `stage1-modality-encoder` | Domain logic |
 | H3 tessellation, spatial joins | `srai-spatial` | SRAI domain |
 | U-Net architecture, PyG graphs | `stage2-fusion-architect` | Model design |
-| GPU training, CUDA OOM mid-training | `training-runner` | Training context |
+| GPU training, CUDA OOM mid-training | `execution` | Training context |
 | Architecture specs, tradeoffs | `spec-writer` | Design decisions |
 | Commit strategy, what to work on | `coordinator` | Orchestration |
 
 **Grey areas:**
-- "nvidia-smi shows GPU busy" → Standalone diagnostic: **you**. During training: training-runner.
+- "nvidia-smi shows GPU busy" → Standalone diagnostic: **you**. During training: execution.
 - "uv add torch-geometric" → The `uv add`: **you**. "Which PyG version fits our architecture?" → stage2-fusion-architect.
 - "Data download failed" → Timeout/network: **you**. Wrong CRS/format: stage1-modality-encoder.
 
@@ -187,5 +187,5 @@ Keep entries lightweight — log infrastructure state changes, not analysis:
 - "Started TensorBoard on :6006 for lightning_logs/"
 
 **On start**: Read coordinator's scratchpad for pending infra tasks.
-**Cross-agent observations**: Note if other agents' work introduced dependency issues, if training-runner's GPU needs conflict with available resources, or if environment state doesn't match what others expect.
+**Cross-agent observations**: Note if other agents' work introduced dependency issues, if execution agent's GPU needs conflict with available resources, or if environment state doesn't match what others expect.
 **On finish**: 2-3 line summary of environment changes made.

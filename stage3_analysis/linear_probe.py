@@ -370,6 +370,57 @@ class LinearProbeRegressor:
 
         return oof_predictions, fold_metrics_list
 
+    def _train_and_evaluate_cv_linear(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        folds: np.ndarray,
+        unique_folds: np.ndarray,
+    ) -> Tuple[np.ndarray, List[FoldMetrics]]:
+        """
+        Train and evaluate plain LinearRegression with spatial CV (no regularization).
+
+        Returns:
+            Out-of-fold predictions and per-fold metrics.
+        """
+        oof_predictions = np.full(len(y), np.nan)
+        fold_metrics_list = []
+
+        for fold_id in unique_folds:
+            test_mask = folds == fold_id
+            train_mask = ~test_mask
+
+            X_train, X_test = X[train_mask], X[test_mask]
+            y_train, y_test = y[train_mask], y[test_mask]
+
+            scaler = StandardScaler()
+            X_train_s = scaler.fit_transform(X_train)
+            X_test_s = scaler.transform(X_test)
+
+            model = LinearRegression()
+            model.fit(X_train_s, y_train)
+            y_pred = model.predict(X_test_s)
+
+            oof_predictions[test_mask] = y_pred
+
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            mae = mean_absolute_error(y_test, y_pred)
+            r2 = r2_score(y_test, y_pred)
+
+            fold_metrics_list.append(FoldMetrics(
+                fold=int(fold_id),
+                rmse=rmse,
+                mae=mae,
+                r2=r2,
+                n_train=int(train_mask.sum()),
+                n_test=int(test_mask.sum()),
+            ))
+
+            logger.info(f"    Fold {fold_id}: R2={r2:.4f}, RMSE={rmse:.4f}, MAE={mae:.4f} "
+                         f"(train={train_mask.sum():,}, test={test_mask.sum():,})")
+
+        return oof_predictions, fold_metrics_list
+
     def _train_final_model(
         self,
         X: np.ndarray,
@@ -554,6 +605,89 @@ class LinearProbeRegressor:
 
         return self.results
 
+    def run_linear_cv(self, use_pca: bool = False) -> Dict[str, TargetResult]:
+        """
+        Run plain LinearRegression with spatial block CV (no regularization, no Optuna).
+
+        OLS regression with spatial cross-validation to get honest
+        out-of-fold R² estimates.
+
+        Args:
+            use_pca: If True, use PCA-16 embeddings instead of full 64-dim.
+
+        Returns:
+            Dictionary mapping target column to TargetResult.
+        """
+        emb_type = "PCA-16" if use_pca else f"full {len(self.feature_names) or '?'}-dim"
+        logger.info(f"=== Linear Probe Regression (Linear CV Mode, {emb_type}) ===")
+        logger.info(f"Study area: {self.config.study_area}")
+        logger.info(f"Year: {self.config.year}")
+        logger.info("Mode: Plain LinearRegression with spatial block CV")
+
+        gdf = self.load_and_join_data(use_pca=use_pca)
+        folds = self.create_spatial_blocks(gdf)
+
+        X = gdf[self.feature_names].values
+        y_all = gdf[self.config.target_cols]
+        region_ids = gdf.index.values
+
+        logger.info(f"\nFeature matrix: {X.shape}")
+        logger.info(f"Targets: {self.config.target_cols}")
+
+        unique_folds = np.unique(folds)
+
+        for target_col in self.config.target_cols:
+            y = y_all[target_col].values
+            target_name = TARGET_NAMES.get(target_col, target_col)
+
+            logger.info(f"\n--- Target: {target_col} ({target_name}) ---")
+            logger.info(f"  y range: [{y.min():.4f}, {y.max():.4f}], mean={y.mean():.4f}")
+
+            oof_predictions, fold_metrics = self._train_and_evaluate_cv_linear(
+                X, y, folds, unique_folds
+            )
+
+            valid_mask = ~np.isnan(oof_predictions)
+            overall_r2 = r2_score(y[valid_mask], oof_predictions[valid_mask])
+            overall_rmse = np.sqrt(mean_squared_error(y[valid_mask], oof_predictions[valid_mask]))
+            overall_mae = mean_absolute_error(y[valid_mask], oof_predictions[valid_mask])
+
+            logger.info(f"  Overall OOF: R2={overall_r2:.4f}, RMSE={overall_rmse:.4f}, "
+                         f"MAE={overall_mae:.4f}")
+
+            # Train final model on all data for coefficients
+            scaler = StandardScaler()
+            X_s = scaler.fit_transform(X)
+            final_model = LinearRegression()
+            final_model.fit(X_s, y)
+
+            result = TargetResult(
+                target=target_col,
+                target_name=target_name,
+                best_alpha=0.0,
+                best_l1_ratio=0.0,
+                fold_metrics=fold_metrics,
+                overall_r2=overall_r2,
+                overall_rmse=overall_rmse,
+                overall_mae=overall_mae,
+                coefficients=final_model.coef_,
+                intercept=final_model.intercept_,
+                feature_names=self.feature_names,
+                oof_predictions=oof_predictions,
+                actual_values=y,
+                region_ids=region_ids,
+            )
+
+            self.results[target_col] = result
+
+        # Summary
+        logger.info("\n=== Summary ===")
+        for target_col, result in self.results.items():
+            logger.info(f"  {target_col} ({result.target_name}): "
+                         f"R2={result.overall_r2:.4f}, RMSE={result.overall_rmse:.4f}")
+
+        return self.results
+
     def run(self, use_pca: bool = False) -> Dict[str, TargetResult]:
         """
         Run the full linear probe pipeline for all target variables.
@@ -676,8 +810,9 @@ def main():
     parser = argparse.ArgumentParser(description="Linear Probe: AlphaEarth -> Leefbaarometer")
     parser.add_argument("--study-area", default="netherlands")
     parser.add_argument("--pca", action="store_true", help="Use PCA-16 embeddings")
-    parser.add_argument("--mode", choices=["elasticnet", "simple"], default="elasticnet",
-                        help="Regression mode: elasticnet (regularized with CV) or simple (no regularization, no CV)")
+    parser.add_argument("--mode", choices=["elasticnet", "simple", "linear"], default="elasticnet",
+                        help="Regression mode: elasticnet (regularized with CV), simple (no regularization, no CV), "
+                             "or linear (plain OLS with spatial CV)")
     parser.add_argument("--n-trials", type=int, default=50, help="Optuna trials (ElasticNet mode only)")
     parser.add_argument("--n-folds", type=int, default=5, help="Spatial CV folds (ElasticNet mode only)")
     args = parser.parse_args()
@@ -697,6 +832,8 @@ def main():
 
     if args.mode == "simple":
         regressor.run_simple(use_pca=args.pca)
+    elif args.mode == "linear":
+        regressor.run_linear_cv(use_pca=args.pca)
     else:
         regressor.run(use_pca=args.pca)
 

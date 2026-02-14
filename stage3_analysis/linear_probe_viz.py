@@ -693,9 +693,11 @@ class LinearProbeVisualizer:
         np.clip(py, 0, height - 1, out=py)
 
         # Write into RGBA image (white background)
+        # origin="lower" in imshow already maps row 0 to miny,
+        # so no manual y-flip needed.
         image = np.ones((height, width, 4), dtype=np.float32)
-        image[height - 1 - py, px, :3] = rgb_masked  # flip y for imshow
-        image[height - 1 - py, px, 3] = 1.0
+        image[py, px, :3] = rgb_masked
+        image[py, px, 3] = 1.0
 
         return image
 
