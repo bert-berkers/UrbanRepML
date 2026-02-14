@@ -1,7 +1,7 @@
 ---
 name: qaqc
 description: "QA/QC and visual quality engineer. Triggers: testing, stage3_analysis, pytest, coverage, validation, quality, CI, linting, type checking, code review, test fixtures, mocking, data contracts, regression, visualization review, UI/UX, localhost, dashboard, plot quality, interpretability."
-model: opus
+model: sonnet
 color: green
 ---
 
@@ -316,7 +316,7 @@ Ignore for coverage:
 
 ### Someone Else Owns
 - Model architecture decisions (stage2-fusion-architect)
-- Training hyperparameter tuning (training-runner)
+- Training hyperparameter tuning (execution)
 - Creating analysis outputs, visualizations, cluster assignments (stage3-analyst)
 - Spatial operation correctness (srai-spatial)
 - Localhost/Jupyter server setup and environment (devops — but coordinate closely)

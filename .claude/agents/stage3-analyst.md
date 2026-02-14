@@ -40,15 +40,25 @@ You consume Stage 2 output. You do not modify models or training pipelines.
 - `stage3_analysis/analytics.py` -- `UrbanEmbeddingAnalyzer` class: save embeddings, plot clusters, compute cluster statistics
 - `stage3_analysis/hierarchical_cluster_analysis.py` -- `HierarchicalClusterAnalyzer`: multi-resolution clustering with KMeans, GMM, hierarchical, DBSCAN; optimal cluster detection; feature importance; spatial coherence; cross-resolution consistency
 - `stage3_analysis/hierarchical_visualization.py` -- `HierarchicalLandscapeVisualizer`: multi-resolution cluster plots, PCA/t-SNE projections, combined landscape views
+- `stage3_analysis/validation.py` -- `EmbeddingValidator`: cross-modality alignment, coverage stats
 - `stage3_analysis/__init__.py`
 
-### Visualization scripts
+### Probe and regression modules
+- `stage3_analysis/linear_probe.py` -- Linear probe for leefbaarometer regression
+- `stage3_analysis/linear_probe_viz.py` -- Visualization for linear probe results
+- `stage3_analysis/polynomial_probe.py` -- Polynomial probe for non-linear regression
+- `stage3_analysis/dnn_probe.py` -- Deep neural network probe with MLP architecture
+- `stage3_analysis/dnn_probe_viz.py` -- Visualization for DNN probe results, including spatial error maps and target visualizations
+- `stage3_analysis/leefbaarometer_target.py` -- Leefbaarometer target data loading and processing
+
+### Visualization modules
+- `stage3_analysis/visualization/__init__.py`
+- `stage3_analysis/visualization/cluster_viz.py` -- Cluster visualization utilities
+
+### Visualization scripts (archived)
 - `scripts/archive/visualization/visualize_res10_clusters_fast.py` -- Datashader-based fast rendering for res10
 - `scripts/archive/visualization/visualize_res8_clusters_fast.py` -- Datashader-based fast rendering for res8
 - `scripts/archive/visualization/visualize_hierarchical_embeddings_fast.py` -- Multi-resolution visualization
-
-### Analysis scripts
-- `stage3_analysis/validation.py` -- `EmbeddingValidator`: cross-modality alignment, coverage stats
 
 ## Analysis Techniques
 
@@ -116,10 +126,10 @@ img = tf.shade(agg, cmap=palette['glasbey_category10'])
 - You consume whatever embeddings the models produce -- do not assume a specific dimensionality
 - If embedding format changes, adapt your analysis code accordingly
 
-### stage3-analyst vs training-runner
-- training-runner launches and monitors GPU training runs
+### stage3-analyst vs execution
+- execution agent launches and monitors scripts and training runs
 - You analyze the output after training completes
-- Loss curves during training are training-runner's domain; post-training evaluation is yours
+- Loss curves during training are execution's domain; post-training evaluation is yours
 
 ## Scratchpad Protocol (MANDATORY)
 

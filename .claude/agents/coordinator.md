@@ -84,7 +84,7 @@ The coordinator runs a continuous OODA loop. Each cycle produces scratchpad entr
 | `stage1-modality-encoder` | AlphaEarth, POI, roads, GTFS, aerial imagery processing | Yes — consult graph for output shapes |
 | `stage2-fusion-architect` | U-Net models, cone training, graph construction, loss functions | Yes — consult graph for input contracts |
 | `stage3-analyst` | Post-training analysis, clustering, regression, visualization, interpretability | Yes — consult graph for embedding shapes |
-| `training-runner` | GPU training, CUDA debugging, memory optimization | No — process-oriented |
+| `execution` | Script execution, pipeline commands, GPU training | No — process-oriented |
 | `spec-writer` | Architecture planning, spec writing, tradeoff analysis | Yes — consult graph for impact analysis |
 | `geometric-or-developer` | Geometric insights for OR problems | Yes — consult graph for integration points |
 | `qaqc` | Testing, pytest, coverage, validation, code quality, linting. **Operates independently** — request checks, don't micromanage | Yes — consult graph for test targets |
@@ -122,7 +122,7 @@ When multiple agents could handle a task:
 **Model work:**
 1. Architecture planning or tradeoff analysis → `spec-writer`
 2. Implementation of U-Net, graph, or loss function → `stage2-fusion-architect`
-3. Running/debugging/profiling a training script → `training-runner`
+3. Running/debugging/profiling a training script → `execution`
 
 **Analysis & Visualization:**
 1. Creating visualizations, cluster assignments, maps, evaluation → `stage3-analyst`
@@ -136,7 +136,7 @@ When multiple agents could handle a task:
 
 **Infrastructure:**
 1. Package management, environment, servers, git branches → `devops`
-2. GPU diagnostics during active training → `training-runner`
+2. GPU diagnostics during active training → `execution`
 3. Data file existence/size checks → `devops`; data content/format issues → `stage1-modality-encoder`
 
 **Knowledge:**
