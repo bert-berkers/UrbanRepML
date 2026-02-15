@@ -33,6 +33,7 @@ import pandas as pd
 from stage3_analysis.dnn_probe import DNNProbeRegressor, DNNProbeConfig, TARGET_COLS, TARGET_NAMES
 from stage3_analysis.dnn_probe_viz import DNNProbeVisualizer
 from stage3_analysis.linear_probe import TargetResult
+from utils import StudyAreaPaths
 
 logger = logging.getLogger(__name__)
 
@@ -72,22 +73,24 @@ def main():
         description="Compare DNN (MLP) probe vs linear probe results"
     )
     parser.add_argument(
+        "--study-area",
+        type=str,
+        default="netherlands",
+        help="Study area name (default: netherlands)",
+    )
+    parser.add_argument(
         "--dnn-dir",
         type=str,
-        default=str(
-            PROJECT_ROOT
-            / "data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-02-15_default"
-        ),
-        help="Path to DNN probe results directory",
+        default=None,
+        help="Path to DNN probe results directory "
+             "(default: latest run in stage3/dnn_probe)",
     )
     parser.add_argument(
         "--linear-dir",
         type=str,
-        default=str(
-            PROJECT_ROOT
-            / "data/study_areas/netherlands/stage3_analysis/linear_probe/2026-02-15_default"
-        ),
-        help="Path to linear probe results directory",
+        default=None,
+        help="Path to linear probe results directory "
+             "(default: latest run in stage3/linear_probe)",
     )
     parser.add_argument(
         "--skip-spatial",
@@ -101,8 +104,23 @@ def main():
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
-    dnn_dir = Path(args.dnn_dir)
-    linear_dir = Path(args.linear_dir)
+    paths = StudyAreaPaths(args.study_area)
+
+    if args.dnn_dir:
+        dnn_dir = Path(args.dnn_dir)
+    else:
+        dnn_dir = paths.latest_run(paths.stage3("dnn_probe"))
+        if dnn_dir is None:
+            logger.error("No DNN probe runs found")
+            sys.exit(1)
+
+    if args.linear_dir:
+        linear_dir = Path(args.linear_dir)
+    else:
+        linear_dir = paths.latest_run(paths.stage3("linear_probe"))
+        if linear_dir is None:
+            logger.error("No linear probe runs found")
+            sys.exit(1)
 
     logger.info(f"DNN results dir:    {dnn_dir}")
     logger.info(f"Linear results dir: {linear_dir}")
@@ -126,7 +144,7 @@ def main():
     # the existing DNN results so no new run directory is created.
     # Note: DNNProbeConfig.__post_init__ creates a new run_id, but we
     # override output_dir afterward and never call run().
-    config = DNNProbeConfig(study_area="netherlands")
+    config = DNNProbeConfig(study_area=args.study_area)
     config.output_dir = str(dnn_dir)
 
     regressor = DNNProbeRegressor(config, project_root=PROJECT_ROOT)
@@ -156,6 +174,7 @@ def main():
         results=dnn_results,
         output_dir=plots_dir,
         training_curves=training_curves,
+        study_area=args.study_area,
     )
 
     generated_plots = []

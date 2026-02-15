@@ -138,7 +138,7 @@ class MLPProbeModel(nn.Module):
         input_dim: int,
         hidden_dim: int,
         num_layers: int,
-        dropout: float = 0.1,
+        dropout: float = 0.0,
         use_layer_norm: bool = True,
     ):
         super().__init__()
@@ -909,12 +909,27 @@ class DNNProbeRegressor:
                 actuals = np.array([])
                 region_ids = np.array([])
 
+            # Reconstruct fold metrics from fold{k}_r2/fold{k}_rmse columns
+            fold_metrics = []
+            for fold_id in range(1, 20):
+                r2_key = f"fold{fold_id}_r2"
+                rmse_key = f"fold{fold_id}_rmse"
+                if r2_key in row and not pd.isna(row[r2_key]):
+                    fold_metrics.append(FoldMetrics(
+                        fold=fold_id,
+                        r2=float(row[r2_key]),
+                        rmse=float(row[rmse_key]),
+                        mae=0.0,
+                        n_train=0,
+                        n_test=0,
+                    ))
+
             results[target_col] = TargetResult(
                 target=target_col,
                 target_name=row.get("target_name", target_col),
                 best_alpha=row.get("best_alpha", 0.0),
                 best_l1_ratio=row.get("best_l1_ratio", 0.0),
-                fold_metrics=[],
+                fold_metrics=fold_metrics,
                 overall_r2=row["overall_r2"],
                 overall_rmse=row["overall_rmse"],
                 overall_mae=row["overall_mae"],
@@ -925,6 +940,16 @@ class DNNProbeRegressor:
                 actual_values=actuals,
                 region_ids=region_ids,
             )
+
+        # Supplement with coefficients if available
+        coef_path = linear_dir / "coefficients.csv"
+        if coef_path.exists():
+            coef_df = pd.read_csv(coef_path)
+            for target_col, result in results.items():
+                target_coefs = coef_df[coef_df["target"] == target_col]
+                if not target_coefs.empty:
+                    result.feature_names = target_coefs["feature"].tolist()
+                    result.coefficients = target_coefs["coefficient"].values
 
         return results
 

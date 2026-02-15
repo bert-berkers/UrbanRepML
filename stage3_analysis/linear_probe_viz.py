@@ -49,12 +49,14 @@ class LinearProbeVisualizer:
         self,
         results: Dict[str, TargetResult],
         output_dir: Path,
+        study_area: str = "netherlands",
         figsize_base: Tuple[float, float] = (10, 6),
         dpi: int = 150,
     ):
         self.results = results
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.paths = StudyAreaPaths(study_area)
         self.figsize_base = figsize_base
         self.dpi = dpi
 
@@ -486,8 +488,7 @@ class LinearProbeVisualizer:
         # Load boundary for background and extent
         # ----------------------------------------------------------
         boundary_gdf = None
-        _fallback_paths = StudyAreaPaths("netherlands")
-        boundary_path = _fallback_paths.area_gdf_file()
+        boundary_path = self.paths.area_gdf_file()
         if boundary_path.exists():
             boundary_gdf = gpd.read_file(boundary_path)
             logger.info(f"  Loaded boundary from {boundary_path}")
@@ -808,8 +809,7 @@ class LinearProbeVisualizer:
         if embeddings_path is None:
             # Construct via StudyAreaPaths rather than navigating up from
             # output_dir, which breaks when output_dir is a run subdirectory.
-            _fallback_paths = StudyAreaPaths("netherlands")
-            embeddings_path = _fallback_paths.embedding_file("alphaearth", 10, 2022)
+            embeddings_path = self.paths.embedding_file("alphaearth", 10, 2022)
 
         embeddings_path = Path(embeddings_path)
         if not embeddings_path.exists():
@@ -865,10 +865,7 @@ class LinearProbeVisualizer:
         # 6. Load boundary if not provided
         # ----------------------------------------------------------
         if boundary_gdf is None:
-            # Construct via StudyAreaPaths rather than navigating up from
-            # output_dir, which breaks when output_dir is a run subdirectory.
-            _fallback_paths = StudyAreaPaths("netherlands")
-            boundary_path = _fallback_paths.area_gdf_file()
+            boundary_path = self.paths.area_gdf_file()
             if boundary_path.exists():
                 boundary_gdf = gpd.read_file(boundary_path)
                 logger.info(f"  Loaded boundary from {boundary_path}")

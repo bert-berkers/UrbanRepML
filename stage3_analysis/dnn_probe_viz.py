@@ -55,6 +55,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         results: Dict[str, TargetResult],
         output_dir: Path,
         training_curves: Optional[Dict[str, Dict[int, List[float]]]] = None,
+        study_area: str = "netherlands",
         figsize_base: Tuple[float, float] = (10, 6),
         dpi: int = 150,
     ):
@@ -64,10 +65,11 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
             output_dir: Directory to save figures.
             training_curves: Dict of {target_col: {fold_id: [val_loss_per_epoch]}}.
                 This is the structure stored in DNNProbeRegressor.training_curves.
+            study_area: Study area name for resolving data paths.
             figsize_base: Base figure size (width, height).
             dpi: Dots per inch for saved figures.
         """
-        super().__init__(results, output_dir, figsize_base, dpi)
+        super().__init__(results, output_dir, study_area, figsize_base, dpi)
         self.training_curves = training_curves or {}
 
     # ------------------------------------------------------------------
@@ -564,7 +566,6 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
             Path to saved figure, or None if insufficient data.
         """
         from shapely import get_geometry, get_num_geometries
-        from utils import StudyAreaPaths
 
         if target_col not in linear_results:
             logger.warning(
@@ -615,8 +616,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         # Load boundary for background and extent
         # ----------------------------------------------------------
         boundary_gdf = None
-        _fallback_paths = StudyAreaPaths("netherlands")
-        boundary_path = _fallback_paths.area_gdf_file()
+        boundary_path = self.paths.area_gdf_file()
         if boundary_path.exists():
             boundary_gdf = gpd.read_file(boundary_path)
             logger.info(f"  Loaded boundary from {boundary_path}")
