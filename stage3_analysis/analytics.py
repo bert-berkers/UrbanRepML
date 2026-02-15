@@ -13,6 +13,8 @@ import torch
 from datetime import datetime
 from shapely.ops import unary_union
 
+from utils import StudyAreaPaths
+
 logger = logging.getLogger(__name__)
 
 class UrbanEmbeddingAnalyzer:
@@ -24,23 +26,28 @@ class UrbanEmbeddingAnalyzer:
             city_name: str,
             cmap: str = 'tab20b',
             dpi: int = 600,
-            figsize: tuple = (12, 12)
+            figsize: tuple = (12, 12),
+            paths: Optional[StudyAreaPaths] = None,
     ):
         """
         Initialize the analyzer.
 
         Args:
-            output_dir: Directory for saving results
+            output_dir: Directory for saving results [old 2024]
             city_name: Name of the city being analyzed
             cmap: Matplotlib colormap name
             dpi: Figure resolution
             figsize: Figure size (width, height)
+            paths: Optional StudyAreaPaths for centralized path management.
+                   If provided, overrides output_dir-based path construction
+                   for embeddings and analysis output.
         """
         self.output_dir = output_dir
         self.city_name = city_name
         self.cmap = cmap
         self.dpi = dpi
         self.figsize = figsize
+        self.paths = paths
 
         self.plot_dir = output_dir / "plots" / city_name
         self.plot_dir.mkdir(parents=True, exist_ok=True)
@@ -62,7 +69,10 @@ class UrbanEmbeddingAnalyzer:
         Returns:
             Dictionary of saved file paths by resolution
         """
-        emb_dir = self.output_dir / 'embeddings' / self.city_name
+        if self.paths is not None:
+            emb_dir = self.paths.model_embeddings(self.city_name)
+        else:
+            emb_dir = self.output_dir / 'embeddings' / self.city_name
         emb_dir.mkdir(parents=True, exist_ok=True)
 
         saved_paths = {}
@@ -270,7 +280,10 @@ class UrbanEmbeddingAnalyzer:
         stats_df = pd.DataFrame(stats_list)
 
         # Save statistics
-        output_path = self.output_dir / 'analysis' / self.city_name / 'cluster_statistics.parquet'
+        if self.paths is not None:
+            output_path = self.paths.stage3("clustering") / 'cluster_statistics.parquet'
+        else:
+            output_path = self.output_dir / 'analysis' / self.city_name / 'cluster_statistics.parquet'
         output_path.parent.mkdir(parents=True, exist_ok=True)
         stats_df.to_parquet(output_path)
 

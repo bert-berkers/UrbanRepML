@@ -134,7 +134,7 @@ def benchmark_optimized(cone_system, regions_by_res, cache_dir):
 
 
 def verify_correctness(original_cones, optimized_cones):
-    """Verify that both methods produce identical results."""
+    """Verify that both methods produce identical results [old 2024]."""
     logger.info("\n" + "="*60)
     logger.info("Verifying Correctness")
     logger.info("="*60)
@@ -161,7 +161,7 @@ def verify_correctness(original_cones, optimized_cones):
                 mismatches += 1
 
     if mismatches == 0:
-        logger.info("✅ All cones match! Optimized version produces identical results.")
+        logger.info("✅ All cones match! Optimized version produces identical results [old 2024].")
         return True
     else:
         logger.error(f"❌ Found {mismatches} mismatches")

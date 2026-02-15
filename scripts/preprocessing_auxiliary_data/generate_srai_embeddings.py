@@ -47,7 +47,7 @@ class SRAIEmbeddingGenerator:
             resolution: H3 resolution level (default 10)
             batch_size: Number of hexagons to process per batch
             output_dir: Directory for output embeddings
-            cache_dir: Directory for caching intermediate embeddings stage1_modalities results
+            cache_dir: Directory for caching intermediate embeddings stage1_modalities results [old 2024]
         """
         self.resolution = resolution
         self.batch_size = batch_size

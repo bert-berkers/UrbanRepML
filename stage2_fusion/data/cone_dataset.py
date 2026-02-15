@@ -22,6 +22,8 @@ from dataclasses import dataclass
 # SRAI for H3 operations
 from srai.neighbourhoods import H3Neighbourhood
 
+from utils.paths import StudyAreaPaths
+
 from .hierarchical_cone_masking import (
     HierarchicalConeMaskingSystem,
     HierarchicalCone
@@ -95,7 +97,7 @@ class ConeDataset(Dataset):
         self.neighbor_rings = neighbor_rings
 
         if data_dir is None:
-            data_dir = f"data/study_areas/{study_area}"
+            data_dir = str(StudyAreaPaths(study_area).root)
         self.data_dir = Path(data_dir)
 
         if cache_dir is None:

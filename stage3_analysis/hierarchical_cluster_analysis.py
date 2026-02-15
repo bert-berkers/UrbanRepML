@@ -79,7 +79,7 @@ class HierarchicalClusterAnalyzer:
         self.primary_resolution = primary_resolution
         self.clustering_methods = clustering_methods
 
-        # Storage for results
+        # Storage for results [old 2024]
         self.hierarchical_embeddings = {}
         self.cluster_results = {}
         self.cross_resolution_mappings = {}
@@ -514,7 +514,7 @@ class HierarchicalClusterAnalyzer:
             parent_resolution not in self.hierarchical_embeddings):
             return None
 
-        # Get parent clustering results
+        # Get parent clustering results [old 2024]
         parent_results = self.cluster_results[parent_resolution]
         if not parent_results:
             return None
@@ -569,7 +569,7 @@ class HierarchicalClusterAnalyzer:
             feature_categories: Feature categories to include
 
         Returns:
-            Nested dictionary: resolution -> method -> results
+            Nested dictionary: resolution -> method -> results [old 2024]
         """
         if methods is None:
             methods = self.clustering_methods
@@ -598,7 +598,7 @@ class HierarchicalClusterAnalyzer:
         return results
 
     def create_cluster_summary(self) -> pd.DataFrame:
-        """Create summary table of clustering results across all resolutions."""
+        """Create summary table of clustering results [old 2024] across all resolutions."""
 
         summary_rows = []
 

@@ -79,7 +79,7 @@ class ConeAlphaEarthTrainer:
             epochs: Number of training epochs
             batch_size: Cones per batch (typically 1)
             device: Training device
-            output_dir: Output directory for results
+            output_dir: Output directory for results [old 2024]
         """
         self.study_area = study_area
         self.parent_resolution = parent_resolution
@@ -106,7 +106,7 @@ class ConeAlphaEarthTrainer:
 
         # Setup output directory
         if output_dir is None:
-            output_dir = f"data/study_areas/{study_area}/results/cone_alphaearth"
+            output_dir = f"data/study_areas/{study_area}/results [old 2024]/cone_alphaearth"
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 

@@ -575,7 +575,7 @@ class HierarchicalConeMaskingSystem:
             log_warnings: Whether to log warnings
 
         Returns:
-            Validation results
+            Validation results [old 2024]
         """
         # Get actual counts
         actual_counts = cone.nodes_per_resolution()
@@ -713,7 +713,7 @@ class HierarchicalConeMaskingSystem:
                 result = self._validate_cone_geometry(cone, log_warnings=False)
                 validation_results.append(result)
 
-        # Aggregate validation results
+        # Aggregate validation results [old 2024]
         if validate_geometry and validation_results:
             num_valid = sum(1 for r in validation_results if r['valid'])
             logger.info(f"\nGeometric Validation: {num_valid}/{len(validation_results)} sample cones passed")
@@ -897,13 +897,15 @@ class LazyConeBatcher:
 
 def example_usage():
     """Example of how to use the hierarchical cone masking system."""
+    from utils.paths import StudyAreaPaths
 
     # Load regions at multiple resolutions
     study_area = "netherlands"
+    paths = StudyAreaPaths(study_area)
     regions_by_resolution = {}
 
     for res in range(5, 11):
-        regions_path = f"data/study_areas/{study_area}/regions_gdf/{study_area}_res{res}.parquet"
+        regions_path = paths.region_file(res)
         regions_by_resolution[res] = gpd.read_parquet(regions_path)
         logger.info(f"Loaded res{res}: {len(regions_by_resolution[res])} hexagons")
 

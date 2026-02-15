@@ -275,13 +275,13 @@ class TestDNNProbeCompatibility:
         assert DNNProbeRegressor is not None
 
     def test_dnn_probe_uses_target_result_type(self):
-        """DNNProbeRegressor.results dict should accept TargetResult values."""
+        """DNNProbeRegressor.results [old 2024] dict should accept TargetResult values."""
         from stage3_analysis.dnn_probe import DNNProbeConfig, DNNProbeRegressor
         from stage3_analysis.linear_probe import TargetResult
 
         config = DNNProbeConfig()
         regressor = DNNProbeRegressor(config)
-        # results dict should exist and be empty initially
+        # results [old 2024] dict should exist and be empty initially
         assert isinstance(regressor.results, dict)
         assert len(regressor.results) == 0
 

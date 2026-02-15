@@ -93,7 +93,7 @@ def setup_study_area_structure(study_area_name: str = 'pearl_river_delta') -> Pa
         'embeddings/poi',     # POI embeddings (future)
         'embeddings/roads',   # Roads embeddings (future)
         'embeddings/gtfs',    # Transit embeddings (future)
-        'stage2_fusion',    # Fused results
+        'stage2_fusion',    # Fused results [old 2024]
         'plots',              # Visualizations
         'cache'               # Temporary files
     ]

@@ -11,6 +11,8 @@ import numpy as np
 import yaml
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
+from utils.paths import StudyAreaPaths
+
 logger = logging.getLogger(__name__)
 
 
@@ -257,12 +259,15 @@ class MultiModalLoader:
         return output_path
 
 
-def load_multimodal_embeddings(config_path: str, 
+def load_multimodal_embeddings(config_path: str,
                               alignment: str = 'intersection',
                               save_output: bool = True,
-                              output_dir: str = 'data/study_areas/default/stage2_fusion/multimodal') -> pd.DataFrame:
+                              output_dir: str = None,
+                              study_area: str = 'netherlands') -> pd.DataFrame:
     """Convenience function to load and align multi-modal embeddings."""
-    
+    if output_dir is None:
+        output_dir = str(StudyAreaPaths(study_area).stage2("multimodal"))
+
     loader = MultiModalLoader(config_path=config_path)
     
     # Load all stage1_modalities

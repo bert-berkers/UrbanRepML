@@ -22,6 +22,8 @@ import os
 import concurrent.futures
 from tqdm.auto import tqdm
 
+from utils import StudyAreaPaths
+
 # H3 and Projection imports
 # Using SRAI as primary interface (per CLAUDE.md)
 from srai.regionalizers import H3Regionalizer
@@ -100,7 +102,7 @@ def process_subtile(data: np.ndarray, transform, tile_hexagons: gpd.GeoDataFrame
     # Calculate mean and count simultaneously
     aggregations = grouped.agg(['mean', 'count'])
 
-    # Format results
+    # Format results [old 2024]
     result = {}
     for h3_index, row in aggregations.iterrows():
         # Check minimum pixel count
@@ -161,7 +163,7 @@ def process_tile_worker(tiff_path: Path, tile_hexagons: gpd.GeoDataFrame, subtil
                         subtile_data, subtile_transform, tile_hexagons, min_pixels_per_hex, transformer
                     )
 
-                    # Merge results (Handle overlaps between subtiles)
+                    # Merge results [old 2024] (Handle overlaps between subtiles)
                     for h3_index, values in subtile_results.items():
                         if h3_index not in tile_results:
                             tile_results[h3_index] = values
@@ -236,8 +238,10 @@ class AlphaEarthProcessor(ModalityProcessor):
             intermediate_dir = Path(self.config['intermediate_dir'])
             intermediate_dir.mkdir(parents=True, exist_ok=True)
         else:
-            # Create intermediate embeddings stage1_modalities directory in new structure
-            intermediate_base = Path('data/study_areas/default/embeddings/intermediate/alphaearth')
+            # Create intermediate embeddings directory using StudyAreaPaths
+            study_area = self.config.get('study_area', 'default')
+            paths = StudyAreaPaths(study_area)
+            intermediate_base = paths.intermediate("alphaearth")
             intermediate_base.mkdir(parents=True, exist_ok=True)
 
             # Create study-specific intermediate embeddings stage1_modalities directory
@@ -299,7 +303,7 @@ class AlphaEarthProcessor(ModalityProcessor):
             logger.warning("No regions_gdf provided, cannot process without study area regions")
             raise ValueError("regions_gdf is required for processing AlphaEarth data")
 
-        # Merge all intermediate embeddings stage1_modalities results
+        # Merge all intermediate embeddings stage1_modalities results [old 2024]
         return self.merge_intermediate_results(intermediate_dir)
     
     def get_tiff_files(self, source_dir: Path, year_filter: Optional[str] = None) -> List[Path]:
@@ -316,8 +320,8 @@ class AlphaEarthProcessor(ModalityProcessor):
         return sorted(all_tiff_files)
     
     def merge_intermediate_results(self, intermediate_dir: Path) -> gpd.GeoDataFrame:
-        """Merge intermediate embeddings stage1_modalities JSON results into a GeoDataFrame."""
-        logger.info("Merging intermediate embeddings stage1_modalities results...")
+        """Merge intermediate embeddings stage1_modalities JSON results [old 2024] into a GeoDataFrame."""
+        logger.info("Merging intermediate embeddings stage1_modalities results [old 2024]...")
         
         intermediate_files = list(intermediate_dir.glob("*.json"))
         if not intermediate_files:
@@ -325,7 +329,7 @@ class AlphaEarthProcessor(ModalityProcessor):
         
         logger.info(f"Loading and combining {len(intermediate_files)} intermediate embeddings stage1_modalities files...")
         
-        # Combine all results with overlap handling
+        # Combine all results [old 2024] with overlap handling
         merged = {}
         
         for intermediate_file in tqdm(intermediate_files, desc="Loading Intermediate Files"):

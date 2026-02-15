@@ -332,7 +332,7 @@ def main():
 
 
 def update_processing_log(hexagon_count, duration, validation_passed, logger):
-    """Update the processing_modalities log with this session's results."""
+    """Update the processing_modalities log with this session's results [old 2024]."""
     
     try:
         # Read current processing_modalities log

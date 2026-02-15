@@ -191,7 +191,7 @@ uv run python -m pytest stage3_analysis/ -v
 # Verify no stale references remain
 grep -r "from modalities" --include="*.py" .
 grep -r "from urban_embedding" --include="*.py" .
-# Both should return 0 results
+# Both should return 0 results [old 2024]
 ```
 
 ---

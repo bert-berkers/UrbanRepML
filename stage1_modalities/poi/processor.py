@@ -46,6 +46,7 @@ warnings.filterwarnings('ignore', category=UserWarning)
 
 
 from stage1_modalities.base import ModalityProcessor
+from utils import StudyAreaPaths
 
 
 class POIProcessor(ModalityProcessor):
@@ -82,7 +83,8 @@ class POIProcessor(ModalityProcessor):
         
         # Intermediate data saving
         self.save_intermediate = config.get('save_intermediate', False)
-        self.intermediate_dir = Path(config.get('intermediate_dir', 'data/study_areas/default/embeddings/intermediate/poi'))
+        _poi_paths = StudyAreaPaths(config.get('study_area', 'default'))
+        self.intermediate_dir = Path(config.get('intermediate_dir', str(_poi_paths.intermediate("poi"))))
 
         logger.info(f"Initialized POIProcessor. Hex2Vec: {self.use_hex2vec}, GeoVex: {self.use_geovex}")
         logger.info(f"GPU settings - Hex2Vec epochs: {self.hex2vec_epochs}, GeoVex epochs: {self.geovex_epochs}, Batch size: {self.batch_size}")
@@ -282,7 +284,7 @@ class POIProcessor(ModalityProcessor):
         regions_gdf.to_parquet(regions_path)
         logger.info(f"Saved regions_gdf to {regions_path}")
         
-        # Save joint (spatial join results)
+        # Save joint (spatial join results [old 2024])
         joint_path = joint_dir / f"{base_name}_joint.parquet"
         joint_gdf.to_parquet(joint_path)
         logger.info(f"Saved joint_gdf to {joint_path}")
@@ -333,7 +335,8 @@ class POIProcessor(ModalityProcessor):
 
         # Use configured output dir if not specified
         if output_dir is None:
-            output_dir = self.config.get('output_dir', 'data/study_areas/default/embeddings/poi')
+            _poi_paths = StudyAreaPaths(self.config.get('study_area', 'default'))
+            output_dir = self.config.get('output_dir', str(_poi_paths.stage1("poi")))
 
         # Load study area
         if isinstance(study_area, str):

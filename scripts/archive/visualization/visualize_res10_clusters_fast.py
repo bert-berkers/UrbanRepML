@@ -71,21 +71,21 @@ STUDY_AREA_CONFIG = {
     'pearl_river_delta': {
         'file_pattern': 'prd_res10_2023_FIXED_*.parquet',
         'data_dir': 'data/study_areas/pearl_river_delta/embeddings/alphaearth',
-        'output_dir': 'results/visualizations/prd_clusters',
+        'output_dir': 'results [old 2024]/visualizations/prd_clusters',
         'crs': 'EPSG:3857',  # Web Mercator
         'title_prefix': 'Pearl River Delta'
     },
     'netherlands': {
         'file_pattern': 'netherlands_res10_*.parquet',
         'data_dir': 'data/study_areas/netherlands/embeddings/alphaearth',
-        'output_dir': 'results/visualizations/netherlands_clusters',
+        'output_dir': 'results [old 2024]/visualizations/netherlands_clusters',
         'crs': 'EPSG:28992',  # Dutch RD
         'title_prefix': 'Netherlands'
     },
     'cascadia_oldremove': {
         'file_pattern': 'cascadia_coastal_forests_2021_res8_final.parquet',
         'data_dir': 'data/study_areas/cascadia_oldremove/embeddings/alphaearth',
-        'output_dir': 'results/visualizations/cascadia_clusters',
+        'output_dir': 'results [old 2024]/visualizations/cascadia_clusters',
         'crs': 'EPSG:3857',  # Web Mercator
         'title_prefix': 'Cascadia'
     }
@@ -201,7 +201,7 @@ def perform_minibatch_clustering(embeddings_reduced: np.ndarray,
         delayed(cluster_single_k)(k) for k in n_clusters_list
     )
 
-    # Store results
+    # Store results [old 2024]
     cluster_results = {}
     for k, clusters, _ in results:
         cluster_results[k] = clusters

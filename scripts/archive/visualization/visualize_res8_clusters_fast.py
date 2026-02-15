@@ -72,7 +72,7 @@ STUDY_AREA_CONFIG = {
     'cascadia': {
         'file_pattern': 'cascadia_coastal_forests_2021_res8_final.parquet',
         'data_dir': 'data/study_areas/cascadia/embeddings/alphaearth',
-        'output_dir': 'results/visualizations/cascadia_clusters_res8',
+        'output_dir': 'results [old 2024]/visualizations/cascadia_clusters_res8',
         'crs': 'EPSG:3857',  # Web Mercator
         'title_prefix': 'Cascadia',
         'resolution': 8
@@ -80,7 +80,7 @@ STUDY_AREA_CONFIG = {
     'netherlands': {
         'file_pattern': 'netherlands_res8_*.parquet',
         'data_dir': 'data/study_areas/netherlands/embeddings/alphaearth',
-        'output_dir': 'results/visualizations/netherlands_clusters_res8',
+        'output_dir': 'results [old 2024]/visualizations/netherlands_clusters_res8',
         'crs': 'EPSG:28992',  # Dutch RD
         'title_prefix': 'Netherlands',
         'resolution': 8
@@ -88,7 +88,7 @@ STUDY_AREA_CONFIG = {
     'pearl_river_delta': {
         'file_pattern': 'prd_res8_*.parquet',
         'data_dir': 'data/study_areas/pearl_river_delta/embeddings/alphaearth',
-        'output_dir': 'results/visualizations/prd_clusters_res8',
+        'output_dir': 'results [old 2024]/visualizations/prd_clusters_res8',
         'crs': 'EPSG:3857',  # Web Mercator
         'title_prefix': 'Pearl River Delta',
         'resolution': 8
@@ -213,7 +213,7 @@ def perform_minibatch_clustering(embeddings_reduced: np.ndarray,
         delayed(cluster_single_k)(k) for k in n_clusters_list
     )
 
-    # Store results
+    # Store results [old 2024]
     cluster_results = {}
     for k, clusters, _ in results:
         cluster_results[k] = clusters

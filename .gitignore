@@ -107,10 +107,25 @@ data/archive/
 data/boundaries/
 data/cache/
 
-# Study area embeddings and results
+# Study area embeddings and results [old 2024]
 data/study_areas/*/embeddings/
 data/study_areas/*/urban_embedding/
 data/study_areas/*/plots/
+
+# New path convention (2026+)
+data/study_areas/*/stage1_unimodal/
+data/study_areas/*/stage2_multimodal/
+data/study_areas/*/stage3_analysis/
+
+# Study area data files (boundaries, targets, metadata, etc.)
+data/study_areas/*/boundaries/
+data/study_areas/*/target/
+data/study_areas/*/metadata/
+data/study_areas/*/regions_gdf/
+data/study_areas/*/cones/
+data/study_areas/*/accessibility/
+data/study_areas/*/*.json
+data/study_areas/*/*.parquet
 
 # Exclude entire pearl_river_delta study area from repo
 data/study_areas/pearl_river_delta/
@@ -325,6 +340,7 @@ yarn-error.log*
 # ==========================================
 # Results and Visualizations
 # ==========================================
+results [old 2024]/
 results/
 plots/
 figures/

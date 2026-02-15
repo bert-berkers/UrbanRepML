@@ -11,7 +11,7 @@ Cones are batched and processed in parallel for efficient GPU utilization.
 Usage:
     python scripts/netherlands/train_lattice_unet_res10_cones.py
 
-Outputs saved to: data/study_areas/netherlands/results/lattice_unet_cones/
+Outputs saved to: data/study_areas/netherlands/results [old 2024]/lattice_unet_cones/
 """
 
 import sys
@@ -113,7 +113,7 @@ class HierarchicalConeTrainer:
         logger.info(f"  Device: {self.device}")
 
         # Setup paths
-        self.output_dir = Path(f"data/study_areas/{study_area}/results/lattice_unet_cones")
+        self.output_dir = Path(f"data/study_areas/{study_area}/results [old 2024]/lattice_unet_cones")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         (self.output_dir / "checkpoints").mkdir(exist_ok=True)

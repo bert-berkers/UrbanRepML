@@ -4,7 +4,7 @@
 Visualization and Interpretability for Linear Probe Results
 
 Creates publication-quality visualizations of ElasticNet linear probe
-regression results: coefficient analysis, prediction quality, and
+regression results [old 2024]: coefficient analysis, prediction quality, and
 spatial residual maps.
 
 Visualizations:
@@ -31,6 +31,8 @@ import seaborn as sns
 from matplotlib.colors import TwoSlopeNorm, Normalize
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
+from utils import StudyAreaPaths
+
 from .linear_probe import LinearProbeRegressor, TargetResult, TARGET_NAMES
 
 logger = logging.getLogger(__name__)
@@ -38,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 class LinearProbeVisualizer:
     """
-    Creates visualizations for linear probe regression results.
+    Creates visualizations for linear probe regression results [old 2024].
 
     All plots are saved to the output directory as high-resolution PNGs.
     """
@@ -49,9 +51,11 @@ class LinearProbeVisualizer:
         output_dir: Path,
         figsize_base: Tuple[float, float] = (10, 6),
         dpi: int = 150,
+        paths: Optional[StudyAreaPaths] = None,
     ):
         self.results = results
         self.output_dir = Path(output_dir)
+        self.paths = paths
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.figsize_base = figsize_base
         self.dpi = dpi
@@ -357,8 +361,8 @@ class LinearProbeVisualizer:
         """
         Bar chart comparing R2 across targets and embedding types.
 
-        If only self.results is available, plots a single set.
-        If both full and PCA results are provided, plots side-by-side.
+        If only self.results [old 2024] is available, plots a single set.
+        If both full and PCA results [old 2024] are provided, plots side-by-side.
 
         Returns:
             Path to saved figure.
@@ -756,11 +760,13 @@ class LinearProbeVisualizer:
         # 2. Load only needed columns from embeddings parquet
         # ----------------------------------------------------------
         if embeddings_path is None:
-            embeddings_path = (
-                self.output_dir.parent.parent
-                / "embeddings" / "alphaearth"
-                / "netherlands_res10_2022.parquet"
-            )
+            if self.paths is not None:
+                embeddings_path = self.paths.embedding_file("alphaearth", 10, 2022)
+            else:
+                # Construct via StudyAreaPaths rather than navigating up from
+                # output_dir, which breaks when output_dir is a run subdirectory.
+                _fallback_paths = StudyAreaPaths("netherlands")
+                embeddings_path = _fallback_paths.embedding_file("alphaearth", 10, 2022)
 
         embeddings_path = Path(embeddings_path)
         if not embeddings_path.exists():
@@ -816,10 +822,13 @@ class LinearProbeVisualizer:
         # 6. Load boundary if not provided
         # ----------------------------------------------------------
         if boundary_gdf is None:
-            boundary_path = (
-                self.output_dir.parent.parent.parent
-                / "boundaries" / "netherlands_boundary.geojson"
-            )
+            if self.paths is not None:
+                boundary_path = self.paths.boundary_file()
+            else:
+                # Construct via StudyAreaPaths rather than navigating up from
+                # output_dir, which breaks when output_dir is a run subdirectory.
+                _fallback_paths = StudyAreaPaths("netherlands")
+                boundary_path = _fallback_paths.boundary_file()
             if boundary_path.exists():
                 boundary_gdf = gpd.read_file(boundary_path)
                 logger.info(f"  Loaded boundary from {boundary_path}")
@@ -1058,7 +1067,7 @@ class LinearProbeVisualizer:
 
         Args:
             geometry_source: GeoDataFrame for spatial maps.
-            results_pca: Optional PCA results for comparison.
+            results_pca: Optional PCA results [old 2024] for comparison.
             embeddings_path: Path to embeddings parquet for RGB top-3 maps.
             boundary_gdf: Optional study-area boundary for map backgrounds.
 

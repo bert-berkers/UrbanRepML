@@ -71,7 +71,7 @@ def calculate_building_density(regions_gdf: gpd.GeoDataFrame, building_data_path
         regions_for_overlay = regions_for_overlay.drop(columns=['region_id'])
     overlay = gpd.overlay(building_gdf, regions_for_overlay.reset_index(), how='intersection')
     
-    # Initialize results DataFrame
+    # Initialize results [old 2024] DataFrame
     results_df = pd.DataFrame(
         index=regions_gdf.index,
         columns=['FSI_24', 'building_volume', 'total_area', 'in_study_area'],
@@ -101,7 +101,7 @@ def calculate_building_density(regions_gdf: gpd.GeoDataFrame, building_data_path
             aggregated['building_volume'] / aggregated['intersection_area']
         ).fillna(0)
         
-        # Update results with calculated values
+        # Update results [old 2024] with calculated values
         # Use pandas Index intersection
         valid_indices = pd.Index(aggregated['region_id']).intersection(results_df.index)
         aggregated_indexed = aggregated.set_index('region_id')

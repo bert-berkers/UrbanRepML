@@ -1,5 +1,3 @@
-# D:\Projects\UrbanRepML\stage2_fusion\pipeline.py
-
 import logging
 from pathlib import Path
 import sys
@@ -19,6 +17,8 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from matplotlib.colors import ListedColormap
 import time
+
+from utils.paths import StudyAreaPaths, write_run_info, _find_project_root
 
 # Setup logging with more detailed format
 logging.basicConfig(
@@ -54,21 +54,24 @@ class UrbanEmbeddingPipeline:
         self._init_components()
 
     def _setup_directories(self):
-        """Setup directory structure."""
+        """Setup directory structure using StudyAreaPaths."""
         self.project_dir = Path(self.config['project_dir'])
-        self.output_dir = self.project_dir / 'results'
-        self.data_dir = self.project_dir / 'data' / 'preprocessed [TODO SORT & CLEAN UP]'
-        self.embeddings_dir = self.project_dir / 'data' / 'embeddings'
+        self.paths = StudyAreaPaths(self.config['city_name'], project_root=self.project_dir)
+
+        # Stage 2 output directory
+        model_name = self.config.get('model_name', 'full_area_unet')
+        self.output_dir = self.paths.stage2(model_name)
+
+        # Data directory is the study area root (e.g. data/study_areas/netherlands)
+        self.data_dir = self.paths.root
         self.cache_dir = self.project_dir / 'cache'
 
         directories = [
             self.output_dir,
             self.data_dir,
-            self.embeddings_dir,
             self.cache_dir,
             self.cache_dir / 'pca_models',
             self.cache_dir / 'checkpoints',
-            self.data_dir / self.config['city_name']
         ]
 
         for directory in directories:
@@ -91,7 +94,7 @@ class UrbanEmbeddingPipeline:
             max_components=max_components,
             device=self.device,
             cache_dir=self.cache_dir / 'pca_models',
-            preprocessed_dir=self.data_dir
+            preprocessed_dir=self.paths.root.parent  # data/study_areas/ -- UrbanFeatureProcessor adds /city_name
         )
 
         # Initialize graph constructor based on graph type
@@ -193,6 +196,7 @@ class UrbanEmbeddingPipeline:
                     logger.info(f"Found experiment data at {exp_data_dir}, using as variant")
                     # Update city name to use the variant
                     self.config['city_name'] = variant_name
+                    self.data_dir = exp_data_dir
                     return
                 else:
                     if 'fsi_threshold' in self.config:
@@ -206,15 +210,17 @@ class UrbanEmbeddingPipeline:
             else:
                 logger.info(f"Using existing threshold variant: {variant_name}")
 
-            # Update city name to threshold variant
+            # Update city name and paths to threshold variant
             self.config['city_name'] = variant_name
+            self.paths = StudyAreaPaths(variant_name, project_root=self.project_dir)
+            self.data_dir = self.paths.root
 
     def load_data(self) -> Tuple[gpd.GeoDataFrame, Dict[int, gpd.GeoDataFrame], Dict[int, List[str]]]:
         """Load geographic data with proper density information."""
         logger.info("Loading geographic data...")
 
         # Load study area - check both standard and experiment locations
-        area_file = self.data_dir / self.config['city_name'] / 'area_study_gdf.parquet'
+        area_file = self.data_dir / 'area_study_gdf.parquet'
         if not area_file.exists():
             # Try experiments directory
             exp_area_file = self.project_dir / 'experiments' / self.config['city_name'] / 'data' / 'area_study_gdf.parquet'
@@ -230,15 +236,15 @@ class UrbanEmbeddingPipeline:
         regions_by_res = {}
 
         for resolution in self.config['modes'].keys():
-            regions_file = self.data_dir / self.config['city_name'] / f'regions_{resolution}_gdf.parquet'
-            density_file = self.data_dir / self.config['city_name'] / f'building_density_res{resolution}_preprocessed.parquet'
-            
+            regions_file = self.data_dir / f'regions_{resolution}_gdf.parquet'
+            density_file = self.data_dir / f'building_density_res{resolution}_preprocessed.parquet'
+
             # Check if files exist, if not try experiments directory
             if not regions_file.exists():
                 exp_regions_file = self.project_dir / 'experiments' / self.config['city_name'] / 'data' / f'regions_{resolution}_gdf.parquet'
                 if exp_regions_file.exists():
                     regions_file = exp_regions_file
-                    
+
             if not density_file.exists():
                 exp_density_file = self.project_dir / 'experiments' / self.config['city_name'] / 'data' / f'building_density_res{resolution}_preprocessed.parquet'
                 if exp_density_file.exists():
@@ -293,40 +299,33 @@ class UrbanEmbeddingPipeline:
         logger.info("Loading modality features...")
 
         features = {}
-        sources = {
-            'gtfs': 'gtfs/embeddings_GTFS_10',
-            'roadnetwork': 'road_network/embeddings_roadnetwork_10', 
-            'aerial_alphaearth': 'aerial_alphaearth/embeddings_AlphaEarth/processed/embeddings_aerial_10_alphaearth',
-            'poi': 'poi_hex2vec/embeddings_POI_hex2vec_10'
-        }
+        modalities = self.config.get('modalities', ['alphaearth'])
+        resolution = max(self.config['modes'].keys())  # typically 10
 
-        for modality, filename in sources.items():
-            path = self.embeddings_dir / f'{filename}.parquet'
+        for modality in modalities:
+            path = self.paths.embedding_file(modality, resolution)
             if path.exists():
                 df = pd.read_parquet(path)
-                
+
                 # Handle different index formats
                 if 'h3_index' in df.columns and df.index.name != 'h3_index':
-                    # Set h3_index as index if it's a column
                     df = df.set_index('h3_index')
-                
-                # For AlphaEarth, drop non-embedding columns
-                if modality == 'aerial_alphaearth' and 'geometry' in df.columns:
-                    # Keep only embedding columns (embed_0, embed_1, etc.)
-                    embedding_cols = [col for col in df.columns if col.startswith('embed_')]
-                    df = df[embedding_cols]
-                
+
+                # Drop non-embedding columns (geometry, pixel_count, etc.)
+                drop_cols = [c for c in df.columns if c in ('geometry', 'pixel_count', 'tile_count')]
+                if drop_cols:
+                    df = df.drop(columns=drop_cols)
+
                 df = df.reindex(hex_indices, fill_value=0)
                 features[modality] = df
 
-                # Log feature statistics
                 logger.info(f"\nLoaded {modality} features:")
                 logger.info(f"Shape: {df.shape}")
                 logger.info(f"Range: [{df.values.min():.3f}, {df.values.max():.3f}]")
                 logger.info(f"Mean: {df.values.mean():.3f}")
                 logger.info(f"Std: {df.values.std():.3f}")
             else:
-                logger.warning(f"Feature file not found: {path}")
+                logger.warning(f"Embedding file not found: {path}")
 
         if not features:
             raise ValueError("No feature files were loaded successfully")
@@ -464,7 +463,7 @@ class UrbanEmbeddingPipeline:
                     logger.info(f"Mean: {emb.mean():.3f}")
                     logger.info(f"Std: {emb.std():.3f}")
 
-                # Save and visualize results only if we have embeddings
+                # Save and visualize results
                 if embeddings_by_res:
                     try:
                         logger.info("Saving embeddings...")
@@ -531,7 +530,7 @@ class UrbanEmbeddingPipeline:
         """
         config_dict = {
             "city_name": city_name,
-            "project_dir": r"D:\Projects\UrbanRepML",
+            "project_dir": str(_find_project_root()),
         }
 
         if threshold is not None:
@@ -614,7 +613,7 @@ class UrbanEmbeddingPipeline:
         """
         config_dict = {
             "city_name": "south_holland",
-            "project_dir": r"C:\Users\Bert Berkers\PycharmProjects\UrbanRepML",
+            "project_dir": str(_find_project_root()),
             "fsi_threshold": 0.1,
             "feature_processing": {
                 "pca": {
@@ -700,7 +699,7 @@ class UrbanEmbeddingPipeline:
         """
         config_dict = {
             "city_name": city_name,
-            "project_dir": r"C:\Users\Bert Berkers\PycharmProjects\UrbanRepML",
+            "project_dir": str(_find_project_root()),
             "graph_type": "hexagonal_lattice",
             "feature_processing": {
                 "pca": {

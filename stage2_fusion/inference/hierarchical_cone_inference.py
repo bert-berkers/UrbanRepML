@@ -27,6 +27,8 @@ import numpy as np
 from tqdm import tqdm
 from dataclasses import dataclass
 
+from utils.paths import StudyAreaPaths
+
 from ..data.hierarchical_cone_masking import (
     HierarchicalConeMaskingSystem,
     ConeBatcher,  # LEGACY - uses all cones in memory
@@ -115,14 +117,12 @@ class HierarchicalConeInference:
                 logger.warning(f"  Could not load res{res}: {e}")
 
         # Load embeddings (input features)
+        paths = StudyAreaPaths(self.study_area)
         embeddings_by_res = {}
         for res in range(self.config.parent_resolution, self.config.target_resolution + 1):
-            embeddings_path = (
-                f"data/study_areas/{self.study_area}/embeddings/alphaearth/"
-                f"{self.study_area}_res{res}_2022.parquet"
-            )
+            embeddings_path = paths.embedding_file("alphaearth", res, year=2022)
 
-            if Path(embeddings_path).exists():
+            if embeddings_path.exists():
                 embeddings_df = pd.read_parquet(embeddings_path)
 
                 # Align indices
@@ -473,7 +473,7 @@ class HierarchicalConeInference:
         aggregated_predictions = self.aggregate_predictions(predictions_per_hex)
 
         # Organize by resolution and save
-        logger.info("\nOrganizing results by resolution...")
+        logger.info("\nOrganizing results [old 2024] by resolution...")
         results_by_resolution = {}
 
         for res in range(self.config.parent_resolution, self.config.target_resolution + 1):
@@ -549,7 +549,8 @@ def example_usage():
     model = ConeBatchingUNet(model_config)
 
     # Load checkpoint
-    checkpoint_path = "data/study_areas/netherlands/results/lattice_unet_cones/checkpoints/best.pth"
+    paths = StudyAreaPaths("netherlands")
+    checkpoint_path = paths.checkpoints("lattice_unet_cones") / "best.pth"
     checkpoint = torch.load(checkpoint_path, map_location='cpu')
     model.load_state_dict(checkpoint['model_state_dict'])
 
@@ -572,10 +573,10 @@ def example_usage():
     )
 
     # Run inference
-    output_dir = Path("data/study_areas/netherlands/results/lattice_unet_cones/inference")
+    output_dir = paths.stage2("lattice_unet_cones") / "inference"
     results = inference_engine.run_inference(output_dir=output_dir)
 
-    logger.info("\nInference results:")
+    logger.info("\nInference results [old 2024]:")
     for res, df in results.items():
         logger.info(f"  Resolution {res}: {df.shape}")
 

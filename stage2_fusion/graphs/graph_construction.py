@@ -249,7 +249,7 @@ class SpatialGraphConstructor:
 
     def _load_study_area(self, data_dir: Path, city_name: str) -> gpd.GeoDataFrame:
         """Load study area boundary."""
-        study_area_path = data_dir / 'data' / 'preprocessed [TODO SORT & CLEAN UP]' / city_name / 'area_study_gdf.parquet'
+        study_area_path = data_dir / 'data' / 'study_areas' / city_name / 'area_study_gdf.parquet'
         try:
             study_area = gpd.read_parquet(study_area_path)
             logger.info(f"Loaded study area boundary from {study_area_path}")

@@ -32,6 +32,9 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler
 from spatialkfold.blocks import spatial_blocks
 
+from utils import StudyAreaPaths
+from utils.paths import write_run_info
+
 logger = logging.getLogger(__name__)
 
 # Leefbaarometer target columns
@@ -76,26 +79,32 @@ class LinearProbeConfig:
     target_path: Optional[str] = None
     output_dir: Optional[str] = None
 
+    # Run-level provenance: if non-empty, a dated run directory is created
+    # under stage3_analysis/linear_probe/{run_id}/ instead of writing to the
+    # flat analysis directory.  When empty (default), behaviour is unchanged.
+    run_descriptor: str = ""
+
     def __post_init__(self):
+        paths = StudyAreaPaths(self.study_area)
+        self.run_id: Optional[str] = None
         if self.embeddings_path is None:
-            self.embeddings_path = (
-                f"data/study_areas/{self.study_area}/embeddings/alphaearth/"
-                f"{self.study_area}_res{self.h3_resolution}_{self.year}.parquet"
+            self.embeddings_path = str(
+                paths.embedding_file("alphaearth", self.h3_resolution, self.year)
             )
         if self.pca_embeddings_path is None:
-            self.pca_embeddings_path = (
-                f"data/study_areas/{self.study_area}/embeddings/alphaearth/"
-                f"{self.study_area}_res{self.h3_resolution}_pca16_{self.year}.parquet"
+            self.pca_embeddings_path = str(
+                paths.pca_embedding_file("alphaearth", self.h3_resolution, 16, self.year)
             )
         if self.target_path is None:
-            self.target_path = (
-                f"data/study_areas/{self.study_area}/target/leefbaarometer/"
-                f"leefbaarometer_h3res{self.h3_resolution}_{self.year}.parquet"
+            self.target_path = str(
+                paths.target_file("leefbaarometer", self.h3_resolution, self.year)
             )
         if self.output_dir is None:
-            self.output_dir = (
-                f"data/study_areas/{self.study_area}/analysis/linear_probe"
-            )
+            if self.run_descriptor:
+                self.run_id = paths.create_run_id(self.run_descriptor)
+                self.output_dir = str(paths.stage3_run("linear_probe", self.run_id))
+            else:
+                self.output_dir = str(paths.stage3("linear_probe"))
 
 
 @dataclass
@@ -181,7 +190,14 @@ class LinearProbeRegressor:
                                       and pd.api.types.is_numeric_dtype(emb_df[c])]
         else:
             self.feature_names = [c for c in emb_df.columns
-                                  if c.startswith("A") and c[1:].isdigit()]
+                                  if (c.startswith("A") and c[1:].isdigit())
+                                  or c.startswith("emb_")]
+            if not self.feature_names:
+                # Numeric fallback for arbitrary embedding column names
+                exclude = {"pixel_count", "tile_count", "geometry"}
+                self.feature_names = [c for c in emb_df.columns
+                                      if c not in exclude
+                                      and pd.api.types.is_numeric_dtype(emb_df[c])]
 
         logger.info(f"  Embedding features: {len(self.feature_names)} "
                      f"({self.feature_names[0]}..{self.feature_names[-1]})")
@@ -799,6 +815,17 @@ class LinearProbeRegressor:
         }
         with open(out_dir / "config.json", "w") as f:
             json.dump(config_dict, f, indent=2)
+
+        # Write run-level provenance when using a run directory
+        if self.config.run_id is not None:
+            write_run_info(
+                out_dir,
+                stage="stage3",
+                study_area=self.config.study_area,
+                config=config_dict,
+                upstream_runs={"stage1/alphaearth": "unknown"},
+            )
+            logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
 
         return out_dir
 

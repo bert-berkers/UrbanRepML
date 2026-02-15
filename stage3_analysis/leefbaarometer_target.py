@@ -28,6 +28,8 @@ import pandas as pd
 from srai.regionalizers import H3Regionalizer
 from shapely.validation import make_valid
 
+from utils import StudyAreaPaths
+
 logger = logging.getLogger(__name__)
 
 # Leefbaarometer target columns
@@ -50,26 +52,25 @@ class LeefbaarometerConfig:
     regions_gdf_path: Optional[str] = None
 
     def __post_init__(self):
+        paths = StudyAreaPaths(self.study_area)
         if self.scores_csv is None:
-            self.scores_csv = (
-                f"data/study_areas/{self.study_area}/target/leefbaarometer/"
-                f"open-data-leefbaarometer-meting-2022_2023-11-21_1035/"
-                f"Leefbaarometer-scores grids 2002-2022.csv"
+            self.scores_csv = str(
+                paths.target("leefbaarometer")
+                / "open-data-leefbaarometer-meting-2022_2023-11-21_1035"
+                / "Leefbaarometer-scores grids 2002-2022.csv"
             )
         if self.grid_gpkg is None:
-            self.grid_gpkg = (
-                f"data/study_areas/{self.study_area}/target/leefbaarometer/"
-                f"geometrie-lbm3-2024/geometrie-lbm3-2024/grid 2024.gpkg"
+            self.grid_gpkg = str(
+                paths.target("leefbaarometer")
+                / "geometrie-lbm3-2024" / "geometrie-lbm3-2024" / "grid 2024.gpkg"
             )
         if self.output_path is None:
-            self.output_path = (
-                f"data/study_areas/{self.study_area}/target/leefbaarometer/"
-                f"leefbaarometer_h3res{self.h3_resolution}_{self.year}.parquet"
+            self.output_path = str(
+                paths.target_file("leefbaarometer", self.h3_resolution, self.year)
             )
         if self.regions_gdf_path is None:
-            self.regions_gdf_path = (
-                f"data/study_areas/{self.study_area}/regions_gdf/"
-                f"{self.study_area}_res{self.h3_resolution}.parquet"
+            self.regions_gdf_path = str(
+                paths.region_file(self.h3_resolution)
             )
 
 
