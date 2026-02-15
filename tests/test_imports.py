@@ -46,17 +46,29 @@ class TestStage1Imports:
         processor = load_modality_processor("alphaearth")
         assert isinstance(processor, AlphaEarthProcessor)
 
-    def test_load_modality_processor_aerial_imagery_fails(self):
-        """Known broken: AerialImageryProcessor class does not exist.
+    def test_load_modality_processor_aerial_imagery(self):
+        """AerialImageryProcessor loads via factory.
 
-        The __init__.py imports AerialImageryProcessor from
-        aerial_imagery/processor.py, but that file only contains imports
-        and no class definition. This test documents the known failure.
+        The DINOv3 encoder uses lazy imports for transformers, so the
+        factory succeeds even without transformers installed.
         """
         from stage1_modalities import load_modality_processor
+        from stage1_modalities.aerial_imagery.processor import AerialImageryProcessor
 
-        with pytest.raises(ImportError):
-            load_modality_processor("aerial_imagery")
+        processor = load_modality_processor("aerial_imagery")
+        assert isinstance(processor, AerialImageryProcessor)
+
+    def test_import_gtfs_processor(self):
+        from stage1_modalities.gtfs.processor import GTFSProcessor
+        assert GTFSProcessor is not None
+
+    def test_load_modality_processor_gtfs(self):
+        """Factory function returns a GTFSProcessor instance."""
+        from stage1_modalities import load_modality_processor
+        from stage1_modalities.gtfs.processor import GTFSProcessor
+
+        processor = load_modality_processor("gtfs")
+        assert isinstance(processor, GTFSProcessor)
 
     def test_load_modality_processor_unknown_raises(self):
         from stage1_modalities import load_modality_processor

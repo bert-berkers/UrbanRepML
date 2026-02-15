@@ -1,0 +1,61 @@
+# GTFS Modality Configuration
+
+default:
+  # Data source: 'download' or 'local'
+  data_source: download
+
+  # URL for Dutch GTFS feed (OVapi)
+  gtfs_url: "https://gtfs.ovapi.nl/nl/gtfs-nl.zip"
+
+  # Path to local GTFS .zip file (required if data_source is 'local')
+  gtfs_path: null
+
+  # Output directory for embeddings
+  output_dir: data/study_areas/${STUDY_AREA}/stage1_unimodal/gtfs
+
+  # GTFS feed validation
+  skip_validation: false
+  fail_on_validation_errors: false
+
+# GTFS2Vec Embedder Configuration
+gtfs2vec:
+  # Model architecture
+  embedding_size: 64        # Final embedding dimensions
+  hidden_size: 48           # Hidden layer size in autoencoder
+
+  # Skip autoencoder (use raw aggregated features instead)
+  skip_autoencoder: false
+
+  # Training parameters
+  epochs: 10
+  batch_size: 256
+
+  # Performance settings
+  use_gpu: true             # Use GPU if available (auto-detected)
+  progress_bar: true        # Show training progress
+
+# H3 resolution settings
+h3_resolutions:
+  # Resolution levels to process
+  available: [8, 9, 10]
+
+  # Default resolution
+  default: 9
+
+# Data sources by region
+data_sources:
+  netherlands:
+    source: download
+    gtfs_url: "https://gtfs.ovapi.nl/nl/gtfs-nl.zip"
+
+  default:
+    source: download
+    gtfs_url: "https://gtfs.ovapi.nl/nl/gtfs-nl.zip"
+
+# Performance optimization
+performance:
+  # Memory limit for processing (MB)
+  memory_limit: 8192
+
+  # Cache downloaded GTFS feeds
+  use_cache: true

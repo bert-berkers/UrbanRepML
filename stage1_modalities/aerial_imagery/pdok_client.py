@@ -1,23 +1,25 @@
 """
 PDOK API Client for fetching aerial RGB images.
 
-PDOK (Publieke Dienstverlening Op de Kaart) provides free access to 
+PDOK (Publieke Dienstverlening Op de Kaart) provides free access to
 high-resolution aerial imagery of the Netherlands.
+
+Design: 1 PDOK request = 1 hex = 1 DINOv3 input (224x224).
+Hexagon geometry comes from the regions_gdf (via SRAI H3Regionalizer),
+not from direct h3 boundary calls (per srai-spatial rule).
 """
 
 import io
 import time
+from pathlib import Path
 from typing import Tuple, Optional, List, Dict
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 import numpy as np
 from PIL import Image
 import geopandas as gpd
-from shapely.geometry import box, Polygon
-# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
-from srai.regionalizers import H3Regionalizer
-from srai.neighbourhoods import H3Neighbourhood
-# Note: SRAI provides H3 functionality with additional spatial analysis tools
+from shapely.geometry import Polygon
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,16 +28,20 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ImageTile:
     """Container for an image tile with metadata."""
-    image: np.ndarray
-    bounds: Tuple[float, float, float, float]  # minx, miny, maxx, maxy
-    h3_cells: List[str]
-    resolution: int
+    image_path: str  # Path to saved PNG on disk
+    bounds: Tuple[float, float, float, float]  # minx, miny, maxx, maxy in EPSG:28992
+    h3_cell: str
     crs: str = "EPSG:28992"  # Dutch RD New
 
 
 class PDOKClient:
-    """Client for fetching aerial imagery from PDOK WMS services."""
-    
+    """Client for fetching aerial imagery from PDOK WMS services.
+
+    Fetches one 224x224 image per H3 hexagon. Hexagon geometry is derived
+    from a regions_gdf (produced by SRAI H3Regionalizer), reprojected to
+    EPSG:28992 for the PDOK WMS bounding box.
+    """
+
     # PDOK WMS endpoints for aerial imagery
     WMS_ENDPOINTS = {
         'current': 'https://service.pdok.nl/hwh/luchtfotorgb/wms/v1_0',
@@ -44,26 +50,28 @@ class PDOKClient:
         '2021': 'https://service.pdok.nl/hwh/luchtfotorgb2021/wms/v1_0',
         '2020': 'https://service.pdok.nl/hwh/luchtfotorgb2020/wms/v1_0',
     }
-    
-    def __init__(self, 
-                 year: str = 'current',
-                 image_size: int = 512,
-                 max_retries: int = 3,
-                 rate_limit: float = 0.1):
-        """
-        Initialize PDOK client.
-        
+
+    def __init__(
+        self,
+        year: str = 'current',
+        image_size: int = 224,
+        max_retries: int = 3,
+        max_workers: int = 64,
+    ):
+        """Initialize PDOK client.
+
         Args:
-            year: Year of imagery or 'current' for most recent
-            image_size: Size of image tiles to fetch (pixels)
-            max_retries: Maximum number of retry attempts
-            rate_limit: Seconds to wait between requests
+            year: Year of imagery or 'current' for most recent.
+            image_size: Size of image tiles to fetch (pixels). Default 224
+                matches DINOv3 native input.
+            max_retries: Maximum number of retry attempts per request.
+            max_workers: Thread pool size for parallel fetching.
         """
         self.wms_url = self.WMS_ENDPOINTS.get(year, self.WMS_ENDPOINTS['current'])
         self.image_size = image_size
         self.max_retries = max_retries
-        self.rate_limit = rate_limit
-        
+        self.max_workers = max_workers
+
         # Standard WMS parameters
         self.wms_params = {
             'SERVICE': 'WMS',
@@ -73,168 +81,149 @@ class PDOKClient:
             'STYLES': '',
             'FORMAT': 'image/png',
             'TRANSPARENT': 'false',
-            'CRS': 'EPSG:28992',  # Dutch coordinate system
+            'CRS': 'EPSG:28992',
             'WIDTH': image_size,
             'HEIGHT': image_size,
         }
-    
-    def get_h3_bounds(self, h3_cell: str, buffer_m: float = 100) -> Tuple[float, float, float, float]:
-        """
-        Get bounding box for H3 cell in Dutch RD coordinates.
-        
+
+    def get_h3_bounds(
+        self, geometry, buffer_m: float = 10.0
+    ) -> Tuple[float, float, float, float]:
+        """Get bounding box for a hexagon geometry in Dutch RD coordinates.
+
         Args:
-            h3_cell: H3 cell index
-            buffer_m: Buffer in meters around hexagon
-            
+            geometry: Shapely geometry (from regions_gdf) in EPSG:4326.
+            buffer_m: Buffer in meters around hexagon. Tight (10m) for 224px.
+
         Returns:
-            Tuple of (minx, miny, maxx, maxy) in EPSG:28992
+            Tuple of (minx, miny, maxx, maxy) in EPSG:28992.
         """
-        # Get hexagon boundary in lat/lon
-        boundary = h3.h3_to_geo_boundary(h3_cell)
-        coords = [(lon, lat) for lat, lon in boundary]
-        
-        # Create polygon and convert to Dutch RD
-        poly = gpd.GeoSeries([Polygon(coords)], crs='EPSG:4326')
+        # Create GeoSeries in WGS84 and reproject to Dutch RD
+        poly = gpd.GeoSeries([geometry], crs='EPSG:4326')
         poly_rd = poly.to_crs('EPSG:28992')
-        
-        # Get bounds with buffer
+
+        # Get bounds with small buffer
         bounds = poly_rd.total_bounds
         minx, miny, maxx, maxy = bounds
-        
-        # Add buffer
+
         minx -= buffer_m
         miny -= buffer_m
         maxx += buffer_m
         maxy += buffer_m
-        
+
         return minx, miny, maxx, maxy
-    
-    def fetch_image_for_h3(self, h3_cell: str) -> Optional[ImageTile]:
-        """
-        Fetch aerial image for a single H3 cell.
-        
+
+    def fetch_image_for_h3(
+        self, h3_cell: str, geometry, cache_dir: Path
+    ) -> Optional[str]:
+        """Fetch aerial image for a single H3 cell and save to disk.
+
         Args:
-            h3_cell: H3 cell index
-            
+            h3_cell: H3 cell index string.
+            geometry: Shapely geometry for this cell (from regions_gdf).
+            cache_dir: Directory to save PNG files.
+
         Returns:
-            ImageTile with image data and metadata
+            Path to saved PNG file, or None on failure.
         """
+        out_path = cache_dir / f"{h3_cell}.png"
+
+        # Skip if already cached (resume support)
+        if out_path.exists():
+            return str(out_path)
+
         try:
-            # Get bounding box
-            bounds = self.get_h3_bounds(h3_cell)
+            bounds = self.get_h3_bounds(geometry)
             bbox_str = f"{bounds[0]},{bounds[1]},{bounds[2]},{bounds[3]}"
-            
-            # Prepare WMS request
+
             params = self.wms_params.copy()
             params['BBOX'] = bbox_str
-            
-            # Fetch with retries
+
             for attempt in range(self.max_retries):
                 try:
-                    response = requests.get(self.wms_url, params=params, timeout=30)
+                    response = requests.get(
+                        self.wms_url, params=params, timeout=30
+                    )
                     if response.status_code == 200:
-                        # Load image
+                        # Validate image content
                         img = Image.open(io.BytesIO(response.content))
-                        img_array = np.array(img)
-                        
-                        return ImageTile(
-                            image=img_array,
-                            bounds=bounds,
-                            h3_cells=[h3_cell],
-                            resolution=h3.h3_get_resolution(h3_cell)
-                        )
+                        img = img.convert('RGB')
+                        img.save(out_path, 'PNG')
+                        return str(out_path)
                     else:
-                        logger.warning(f"HTTP {response.status_code} for H3 {h3_cell}")
-                        
+                        logger.warning(
+                            f"HTTP {response.status_code} for H3 {h3_cell}"
+                        )
+
                 except requests.RequestException as e:
-                    logger.warning(f"Request failed (attempt {attempt+1}): {e}")
+                    logger.warning(
+                        f"Request failed for {h3_cell} "
+                        f"(attempt {attempt + 1}/{self.max_retries}): {e}"
+                    )
                     if attempt < self.max_retries - 1:
                         time.sleep(2 ** attempt)  # Exponential backoff
-                        
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error fetching image for {h3_cell}: {e}")
             return None
-    
-    def fetch_images_for_hexagons(self, 
-                                  h3_cells: List[str],
-                                  batch_size: int = 10) -> Dict[str, ImageTile]:
-        """
-        Fetch images for multiple H3 cells with batching.
-        
+
+    def fetch_images_parallel(
+        self,
+        regions_gdf: gpd.GeoDataFrame,
+        cache_dir: Path,
+    ) -> Dict[str, str]:
+        """Fetch images for all hexagons in parallel using ThreadPoolExecutor.
+
         Args:
-            h3_cells: List of H3 cell indices
-            batch_size: Number of images to fetch before pausing
-            
+            regions_gdf: GeoDataFrame indexed by region_id with geometry
+                (from SRAI H3Regionalizer, CRS EPSG:4326).
+            cache_dir: Directory to save/cache PNG files.
+
         Returns:
-            Dictionary mapping H3 cells to ImageTiles
+            Dictionary mapping h3_cell -> image_path for successful fetches.
         """
-        results = {}
-        
-        for i, h3_cell in enumerate(h3_cells):
-            # Rate limiting
-            if i > 0:
-                time.sleep(self.rate_limit)
-            
-            # Batch pausing
-            if i > 0 and i % batch_size == 0:
-                logger.info(f"Processed {i}/{len(h3_cells)} hexagons, pausing...")
-                time.sleep(2.0)  # Longer pause between batches
-            
-            # Fetch image
-            tile = self.fetch_image_for_h3(h3_cell)
-            if tile:
-                results[h3_cell] = tile
-                logger.debug(f"Fetched image for {h3_cell}")
-            else:
-                logger.warning(f"Failed to fetch image for {h3_cell}")
-        
-        logger.info(f"Fetched {len(results)}/{len(h3_cells)} images successfully")
+        cache_dir = Path(cache_dir)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        hex_ids = regions_gdf.index.tolist()
+        total = len(hex_ids)
+        results: Dict[str, str] = {}
+
+        # Check how many are already cached
+        already_cached = sum(
+            1 for h in hex_ids if (cache_dir / f"{h}.png").exists()
+        )
+        if already_cached > 0:
+            logger.info(
+                f"Found {already_cached}/{total} images already cached"
+            )
+
+        def _fetch_one(h3_cell: str) -> Tuple[str, Optional[str]]:
+            geometry = regions_gdf.loc[h3_cell, 'geometry']
+            path = self.fetch_image_for_h3(h3_cell, geometry, cache_dir)
+            return h3_cell, path
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {
+                executor.submit(_fetch_one, h): h for h in hex_ids
+            }
+
+            completed = 0
+            for future in as_completed(futures):
+                h3_cell, path = future.result()
+                if path is not None:
+                    results[h3_cell] = path
+
+                completed += 1
+                if completed % 10_000 == 0:
+                    logger.info(
+                        f"Progress: {completed}/{total} fetched, "
+                        f"{len(results)} successful"
+                    )
+
+        logger.info(
+            f"Fetch complete: {len(results)}/{total} images successful"
+        )
         return results
-    
-    def get_composite_image(self, 
-                           h3_cells: List[str],
-                           resolution: int = 256) -> Optional[np.ndarray]:
-        """
-        Create a composite image covering multiple H3 cells.
-        
-        Args:
-            h3_cells: List of H3 cells to cover
-            resolution: Output image resolution
-            
-        Returns:
-            Composite image as numpy array
-        """
-        if not h3_cells:
-            return None
-        
-        # Get overall bounding box
-        all_bounds = []
-        for h3_cell in h3_cells:
-            bounds = self.get_h3_bounds(h3_cell, buffer_m=0)
-            all_bounds.append(bounds)
-        
-        # Calculate composite bounds
-        all_bounds = np.array(all_bounds)
-        minx = all_bounds[:, 0].min()
-        miny = all_bounds[:, 1].min()
-        maxx = all_bounds[:, 2].max()
-        maxy = all_bounds[:, 3].max()
-        
-        # Fetch composite image
-        bbox_str = f"{minx},{miny},{maxx},{maxy}"
-        params = self.wms_params.copy()
-        params['BBOX'] = bbox_str
-        params['WIDTH'] = resolution
-        params['HEIGHT'] = resolution
-        
-        try:
-            response = requests.get(self.wms_url, params=params, timeout=60)
-            if response.status_code == 200:
-                img = Image.open(io.BytesIO(response.content))
-                return np.array(img)
-        except Exception as e:
-            logger.error(f"Failed to fetch composite image: {e}")
-            
-        return None

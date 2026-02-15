@@ -40,6 +40,9 @@ def load_modality_processor(modality, config=None):
     elif modality == 'roads':
         from .roads.processor import RoadsProcessor
         return RoadsProcessor(config)
+    elif modality == 'gtfs':
+        from .gtfs.processor import GTFSProcessor
+        return GTFSProcessor(config)
     else:
         available = list(get_available_modalities().keys())
         raise ValueError(f"Unknown modality '{modality}'. Available: {available}")

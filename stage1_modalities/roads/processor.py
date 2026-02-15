@@ -196,29 +196,26 @@ class RoadsProcessor(ModalityProcessor):
             
             logger.info("Highway2Vec training completed successfully!")
             logger.info(f"Generated embeddings for {len(embeddings_gdf):,} hexagons")
-            
+
             # Convert to DataFrame format
             embeddings_df = pd.DataFrame(embeddings_gdf.drop(columns='geometry', errors='ignore'))
-            
+
             # Format output for consistency
-            if embeddings_df.index.name == 'region_id':
-                embeddings_df.index.name = 'h3_index'
-            elif embeddings_df.index.name is None:
-                embeddings_df.index.name = 'h3_index'
-                
             embeddings_df['h3_resolution'] = h3_resolution
             embeddings_df.index = embeddings_df.index.astype(str)
-            
+            if embeddings_df.index.name != 'region_id':
+                embeddings_df.index.name = 'region_id'
+
             # Log embedding statistics
-            embedding_cols = [col for col in embeddings_df.columns 
-                            if col not in ['h3_resolution', 'h3_index']]
+            embedding_cols = [col for col in embeddings_df.columns
+                            if col not in ['h3_resolution', 'region_id']]
             if embedding_cols:
                 sample_values = embeddings_df[embedding_cols].iloc[0].values
                 logger.info(f"Embedding dimensions: {len(embedding_cols)}")
-                logger.info(f"Sample embedding values: {sample_values[:5]}...") 
-            
+                logger.info(f"Sample embedding values: {sample_values[:5]}...")
+
             return embeddings_df.reset_index()
-            
+
         except Exception as e:
             logger.error(f"Highway2Vec training failed: {e}")
             if "CUDA" in str(e) or "GPU" in str(e) or "torch" in str(e).lower():
@@ -227,7 +224,7 @@ class RoadsProcessor(ModalityProcessor):
                 logger.info("  - Check PyTorch GPU: python -c 'import torch; print(torch.cuda.is_available())'")
                 logger.info("  - Fallback to CPU: set CUDA_VISIBLE_DEVICES=''")
             raise
-    
+
     def _prepare_highway2vec_features(self, roads_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
                                      joint_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """Prepare numerical features for Highway2Vec training."""
@@ -272,86 +269,6 @@ class RoadsProcessor(ModalityProcessor):
         
         return features_numerical
     
-    def _train_highway2vec_with_data(self, roads_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
-                                   joint_gdf: gpd.GeoDataFrame, h3_resolution: int, study_area_name: str) -> pd.DataFrame:
-        """Train Highway2Vec with pre-loaded intermediate embeddings stage1_modalities data."""
-        logger.info(f"Training Highway2Vec with pre-loaded data for H3 resolution {h3_resolution}")
-        logger.info(f"Roads: {len(roads_gdf):,}, Regions: {len(regions_gdf):,}, Joints: {len(joint_gdf):,}")
-        
-        # Prepare features for Highway2Vec
-        logger.info("Preparing features for Highway2Vec training...")
-        features_for_training = self._prepare_highway2vec_features(roads_gdf, regions_gdf, joint_gdf)
-        logger.info(f"Prepared features shape: {features_for_training.shape}")
-        
-        # Highway2Vec Training
-        logger.info("Training Highway2Vec autoencoder...")
-        logger.info(f"Model architecture: {self.hidden_size} -> {self.embedding_size} dimensions")
-        logger.info("Initializing Highway2Vec (using RTX 3090 if available)...")
-        
-        # Get batch size from config (default to 128 if not specified)
-        batch_size = getattr(self, 'highway2vec_batch_size', 128)
-        logger.info(f"Using batch size: {batch_size} for Highway2Vec training")
-        
-        # Initialize Highway2Vec embedder
-        from srai.embedders import Highway2VecEmbedder
-        embedder = Highway2VecEmbedder(
-            hidden_size=self.hidden_size,
-            embedding_size=self.embedding_size
-        )
-        
-        # Train and generate embeddings with GPU acceleration
-        try:
-            logger.info("Training autoencoder on road network patterns...")
-            
-            embeddings_gdf = embedder.fit_transform(
-                regions_gdf=regions_gdf,
-                features_gdf=features_for_training,
-                joint_gdf=joint_gdf,
-                trainer_kwargs={
-                    'accelerator': 'auto',  # Use GPU if available
-                    'devices': 1,
-                    'max_epochs': self.highway2vec_epochs,  # GPU-optimized epochs
-                    'enable_progress_bar': True
-                },
-                dataloader_kwargs={
-                    'batch_size': self.highway2vec_batch_size
-                }
-            )
-            
-            logger.info("Highway2Vec training completed successfully!")
-            logger.info(f"Generated embeddings for {len(embeddings_gdf):,} hexagons")
-            
-            # Convert to DataFrame format
-            embeddings_df = pd.DataFrame(embeddings_gdf.drop(columns='geometry', errors='ignore'))
-            
-            # Format output for consistency
-            if embeddings_df.index.name == 'region_id':
-                embeddings_df.index.name = 'h3_index'
-            elif embeddings_df.index.name is None:
-                embeddings_df.index.name = 'h3_index'
-                
-            embeddings_df['h3_resolution'] = h3_resolution
-            embeddings_df.index = embeddings_df.index.astype(str)
-            
-            # Log embedding statistics
-            embedding_cols = [col for col in embeddings_df.columns 
-                            if col not in ['h3_resolution', 'h3_index']]
-            if embedding_cols:
-                sample_values = embeddings_df[embedding_cols].iloc[0].values
-                logger.info(f"Embedding dimensions: {len(embedding_cols)}")
-                logger.info(f"Sample embedding values: {sample_values[:5]}...") 
-            
-            return embeddings_df.reset_index()
-            
-        except Exception as e:
-            logger.error(f"Highway2Vec training failed: {e}")
-            if "CUDA" in str(e) or "GPU" in str(e) or "torch" in str(e).lower():
-                logger.info("GPU training failed. Suggestions:")
-                logger.info("  - Check CUDA installation: nvidia-smi")
-                logger.info("  - Check PyTorch GPU: python -c 'import torch; print(torch.cuda.is_available())'")
-                logger.info("  - Fallback to CPU: set CUDA_VISIBLE_DEVICES=''")
-            raise
-    
     def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
                                joint_gdf: gpd.GeoDataFrame, h3_resolution: int, study_area_name: str):
         """Save intermediate embeddings stage1_modalities SRAI data for debugging and analysis."""
@@ -378,7 +295,7 @@ class RoadsProcessor(ModalityProcessor):
         regions_gdf.to_parquet(regions_path)
         logger.info(f"Saved regions_gdf to {regions_path}")
         
-        # Save joint (spatial join results [old 2024])
+        # Save joint (spatial join results)
         joint_path = joint_dir / f"{base_name}_joint.parquet"
         joint_gdf.to_parquet(joint_path)
         logger.info(f"Saved joint_gdf to {joint_path}")
