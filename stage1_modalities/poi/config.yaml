@@ -8,7 +8,7 @@ default:
   pbf_path: null
   
   # Output directory for embeddings
-  output_dir: data/study_areas/${STUDY_AREA}/embeddings/poi
+  output_dir: data/study_areas/${STUDY_AREA}/stage1_unimodal/poi
   
   # Processing parameters
   chunk_size: 1000

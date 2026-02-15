@@ -1,9 +1,8 @@
 """
 Aerial Imagery Modality - PDOK RGB Images with DINOv3 Encoding
 
-This modality fetches high-resolution aerial RGB images from PDOK (Netherlands)
-and encodes them using DINOv3 (especially the remote sensing variant).
-The embeddings are hierarchically aggregated to H3 hexagons.
+Fetches per-hexagon aerial RGB images from PDOK (Netherlands) and encodes
+them with DINOv3 ViT-L/16 (satellite-pretrained, 1024D embeddings).
 """
 
 from .processor import AerialImageryProcessor

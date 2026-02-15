@@ -154,18 +154,18 @@ class POIProcessor(ModalityProcessor):
         # 3. Count embeddings
         logger.info("Step 3: Computing count-based embeddings...")
         count_embedder = CountEmbedder()
-        embeddings_gdf = count_embedder.transform(
+        count_df = count_embedder.transform(
             regions_gdf=regions_gdf,
             features_gdf=pois_gdf,
             joint_gdf=joint_gdf
         )
-        logger.info(f"Count embeddings complete: {embeddings_gdf.shape[1]-1} feature columns")
+        logger.info(f"Count embeddings complete: {count_df.shape[1]} feature columns")
 
-        # Convert to DataFrame
-        embeddings_df = pd.DataFrame(embeddings_gdf.drop(columns='geometry', errors='ignore'))
+        # CountEmbedder.transform returns pd.DataFrame (no geometry column)
+        embeddings_df = pd.DataFrame(count_df)
 
-        # Add total count
-        total_counts = joint_gdf.groupby(joint_gdf.index).size()
+        # Add total POI count per region (joint_gdf has MultiIndex: region_id, feature_id)
+        total_counts = joint_gdf.groupby(level=0).size()
         embeddings_df['total_poi_count'] = total_counts
         embeddings_df['total_poi_count'] = embeddings_df['total_poi_count'].fillna(0).astype(int)
 
@@ -217,6 +217,8 @@ class POIProcessor(ModalityProcessor):
             logger.info("Starting GeoVex hexagonal convolutional embeddings...")
             logger.info(f"Initializing GeoVex model (32D, {self.geovex_epochs} epochs, batch_size={self.batch_size})...")
             try:
+                neighbourhood = H3Neighbourhood(regions_gdf)
+
                 # GeoVexEmbedder uses hexagonal convolutional approach with Poisson distribution
                 geovex = GeoVexEmbedder(
                     target_features=list(self.poi_categories.keys()),
@@ -225,17 +227,17 @@ class POIProcessor(ModalityProcessor):
                     convolutional_layers=2,
                     batch_size=self.batch_size  # GPU-optimized batch size
                 )
-                
+
                 logger.info("Training GeoVex hexagonal convolutional model (GPU-optimized)...")
                 geovex_embeddings = geovex.fit_transform(
                     regions_gdf=regions_gdf,
                     features_gdf=pois_gdf,
                     joint_gdf=joint_gdf,
+                    neighbourhood=neighbourhood,
                     trainer_kwargs={
-                        'accelerator': 'auto', 
-                        'devices': 1, 
+                        'accelerator': 'auto',
+                        'devices': 1,
                         'max_epochs': self.geovex_epochs,
-                        'batch_size': self.batch_size,
                         'enable_progress_bar': True
                     }
                 )
@@ -250,11 +252,11 @@ class POIProcessor(ModalityProcessor):
                 if "CUDA" in str(e) or "GPU" in str(e):
                     logger.info("GPU error detected. You may need to check CUDA/PyTorch setup.")
 
-        # Format output
+        # Format output: ensure region_id is the canonical index name
         embeddings_df['h3_resolution'] = h3_resolution
-        if embeddings_df.index.name == 'region_id':
-            embeddings_df.index.name = 'h3_index'
         embeddings_df.index = embeddings_df.index.astype(str)
+        if embeddings_df.index.name != 'region_id':
+            embeddings_df.index.name = 'region_id'
 
         return embeddings_df.reset_index()
 
@@ -284,7 +286,7 @@ class POIProcessor(ModalityProcessor):
         regions_gdf.to_parquet(regions_path)
         logger.info(f"Saved regions_gdf to {regions_path}")
         
-        # Save joint (spatial join results [old 2024])
+        # Save joint (spatial join results)
         joint_path = joint_dir / f"{base_name}_joint.parquet"
         joint_gdf.to_parquet(joint_path)
         logger.info(f"Saved joint_gdf to {joint_path}")

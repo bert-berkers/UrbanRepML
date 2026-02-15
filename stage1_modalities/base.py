@@ -10,8 +10,7 @@ because the three active processor types have fundamentally different interfaces
 - RoadsProcessor (vector/SRAI): load_data(area_gdf) + highway2vec(...) + run_pipeline(...)
 
 The common contract is: each processor takes a config dict at init and ultimately
-produces a DataFrame/GeoDataFrame indexed by region_id (or h3_index at the
-stage1-stage2 boundary) with embedding columns.
+produces a DataFrame/GeoDataFrame indexed by region_id with embedding columns.
 """
 
 from abc import ABC
