@@ -1,6 +1,6 @@
 ---
-name: stage2-stage2-fusion-architect
-description: "Stage 2 model developer. Triggers: U-Net models (FullAreaUNet, ConeBatchingUNet, AccessibilityUNet), cone-based training, graph construction, loss functions, training pipeline architecture, PyTorch Geometric patterns, multi-resolution processing."
+name: stage2-fusion-architect
+description: "Stage 2 model developer. Triggers: U-Net models (FullAreaUNet, ConeBatchingUNet), cone-based training, graph construction, loss functions, training pipeline architecture, PyTorch Geometric patterns, multi-resolution processing."
 model: opus
 color: red
 ---
@@ -25,9 +25,6 @@ Most promising future direction. Cone-based hierarchical processing.
 - Each cone ~1,500 hexagons vs ~6M for full graph
 - Memory efficient, parallelizable, multi-scale
 - `ConeDataset` auto-filters hexagons for clean parent-child hierarchy
-
-### 3. AccessibilityUNet (`accessibility_unet.py`)
-Planned — accessibility-weighted variant using Hanssen's gravity model.
 
 ## Accessibility Graph Pipeline
 
@@ -86,7 +83,7 @@ Models use PyG's `Data` objects with:
 
 ## Scratchpad Protocol (MANDATORY)
 
-You MUST write to `.claude/scratchpad/fusion-architect/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
+You MUST write to `.claude/scratchpad/stage2-fusion-architect/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
 **On start**: Read coordinator's and ego's scratchpads for context. Read own previous day's scratchpad for continuity.
 **During work**: Log architectural decisions, model changes, performance observations.

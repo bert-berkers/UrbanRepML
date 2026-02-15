@@ -26,7 +26,7 @@ The graph tracks **nodes** (code entities) and **edges** (relationships between 
 | **Module** | Path, purpose, public API | `stage1_modalities/alphaearth/processor.py` — AlphaEarth TIFF→H3 |
 | **Class** | Location, base class, key methods | `AlphaEarthProcessor(ModalityProcessor)` at `stage1_modalities/alphaearth/processor.py` |
 | **Function** | Location, signature, input→output shapes | `process(raw_data_path, regions_gdf) → GeoDataFrame[region_id, A00..A66]` |
-| **Data artifact** | Path pattern, format, index type, shape | `data/study_areas/*/embeddings/alphaearth/*.parquet` — h3_index column, 67 float cols |
+| **Data artifact** | Path pattern, format, index type, shape | `data/study_areas/*/stage1_unimodal/alphaearth/*.parquet` — region_id index, 67 float cols |
 | **Config** | Path, key parameters, what reads it | `configs/netherlands_pipeline.yaml` — read by pipeline runner |
 | **Index contract** | Name, dtype, where enforced | `region_id` — str (H3 hex), enforced at SRAI regionalizer output |
 

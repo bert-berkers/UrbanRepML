@@ -18,11 +18,12 @@ paths:
 ## Study-Area Based Processing
 
 All processing is organized by study area. Each area at `data/study_areas/{area_name}/` contains:
-- `area_gdf/` -- study area boundary
+- `area_gdf/` -- study area boundary (pairs with regions_gdf/)
 - `regions_gdf/` -- H3 tessellation (produced by SRAI)
-- `embeddings/` -- per-modality embeddings
-- `urban_embedding/` -- fused results
-- `plots/` -- visualizations
+- `stage1_unimodal/` -- per-modality embeddings
+- `stage2_multimodal/` -- fused results
+- `stage3_analysis/` -- analysis outputs
+- `target/` -- ground truth targets
 
 ## Rules
 

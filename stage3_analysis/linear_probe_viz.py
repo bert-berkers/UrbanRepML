@@ -3,8 +3,8 @@
 """
 Visualization and Interpretability for Linear Probe Results
 
-Creates publication-quality visualizations of ElasticNet linear probe
-regression results [old 2024]: coefficient analysis, prediction quality, and
+Creates publication-quality visualizations of OLS linear probe
+regression results: coefficient analysis, prediction quality, and
 spatial residual maps.
 
 Visualizations:
@@ -51,11 +51,9 @@ class LinearProbeVisualizer:
         output_dir: Path,
         figsize_base: Tuple[float, float] = (10, 6),
         dpi: int = 150,
-        paths: Optional[StudyAreaPaths] = None,
     ):
         self.results = results
         self.output_dir = Path(output_dir)
-        self.paths = paths
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.figsize_base = figsize_base
         self.dpi = dpi
@@ -116,16 +114,8 @@ class LinearProbeVisualizer:
         ax.set_yticklabels(ordered_names, fontsize=8)
         ax.set_xlabel("Coefficient Value")
 
-        # Adapt title based on mode (simple vs elasticnet)
-        if result.best_alpha == 0.0 and result.best_l1_ratio == 0.0:
-            # Simple mode
-            title = (f"Linear Regression Coefficients: {result.target_name} ({target_col})\n"
-                    f"R2={result.overall_r2:.4f}")
-        else:
-            # ElasticNet mode
-            title = (f"ElasticNet Coefficients: {result.target_name} ({target_col})\n"
-                    f"R2={result.overall_r2:.4f} | alpha={result.best_alpha:.4f} | "
-                    f"l1_ratio={result.best_l1_ratio:.3f}")
+        title = (f"OLS Coefficients: {result.target_name} ({target_col})\n"
+                f"R2={result.overall_r2:.4f}")
         ax.set_title(title)
         ax.axvline(x=0, color="black", linewidth=0.5)
 
@@ -204,16 +194,9 @@ class LinearProbeVisualizer:
             row, col = divmod(idx, ncols)
             axes[row, col].set_visible(False)
 
-        # Adapt suptitle based on mode
-        first_result = self.results[targets[0]]
-        if first_result.best_alpha == 0.0 and first_result.best_l1_ratio == 0.0:
-            mode_str = "Linear Regression"
-        else:
-            mode_str = "ElasticNet"
-
         fig.suptitle(
-            f"{mode_str} Coefficients: All Features per Leefbaarometer Indicator\n"
-            f"A00→A63 order | Shared x-axis for direct comparison",
+            "OLS Coefficients: All Features per Leefbaarometer Indicator\n"
+            "A00->A63 order | Shared x-axis for direct comparison",
             fontsize=14,
         )
         plt.tight_layout(rect=[0, 0, 1, 0.95])
@@ -468,19 +451,23 @@ class LinearProbeVisualizer:
         geometry_source: Optional[gpd.GeoDataFrame] = None,
     ) -> Path:
         """
-        Spatial map of predictions and residuals on hex grid.
+        Spatial map of predictions and residuals via centroid rasterization.
 
-        Uses quantile-bin dissolve to merge hexagons into ~20 groups for
-        efficient rendering while showing all data.
+        Converts hex IDs to centroids, maps values through colormaps to
+        RGB arrays, and renders via ``_rasterize_centroids`` + ``imshow``.
+        ~18x faster than the old dissolve approach and avoids "island"
+        artefacts.
 
         Args:
             target_col: Target variable name.
-            geometry_source: GeoDataFrame with region_id index and geometry.
-                             If None, creates geometry from H3 hex boundaries.
+            geometry_source: Accepted for backward compatibility but ignored.
+                Geometry is derived from H3 centroids via SRAI.
 
         Returns:
             Path to saved figure.
         """
+        from shapely import get_geometry, get_num_geometries
+
         result = self.results[target_col]
 
         # Build residual dataframe
@@ -492,86 +479,145 @@ class LinearProbeVisualizer:
             "residual": result.actual_values[valid] - result.oof_predictions[valid],
         }).set_index("region_id")
 
-        # Get geometry
-        if geometry_source is not None:
-            residual_gdf = gpd.GeoDataFrame(
-                residual_df.join(geometry_source[["geometry"]]),
-                crs="EPSG:4326",
-            )
+        n_hexagons = len(residual_df)
+        hex_ids = pd.Index(residual_df.index, name="region_id")
+
+        # ----------------------------------------------------------
+        # Load boundary for background and extent
+        # ----------------------------------------------------------
+        boundary_gdf = None
+        _fallback_paths = StudyAreaPaths("netherlands")
+        boundary_path = _fallback_paths.area_gdf_file()
+        if boundary_path.exists():
+            boundary_gdf = gpd.read_file(boundary_path)
+            logger.info(f"  Loaded boundary from {boundary_path}")
+
+        if boundary_gdf is not None:
+            if boundary_gdf.crs is None:
+                boundary_gdf = boundary_gdf.set_crs("EPSG:4326")
+            boundary_gdf = boundary_gdf.to_crs(epsg=28992)
+
+        # Filter to European Netherlands (exclude Caribbean)
+        if boundary_gdf is not None:
+            geom = boundary_gdf.geometry.iloc[0]
+            n_parts = get_num_geometries(geom)
+            if n_parts > 1:
+                euro_geom = max(
+                    (get_geometry(geom, i) for i in range(n_parts)),
+                    key=lambda g: g.area,
+                )
+                boundary_gdf = gpd.GeoDataFrame(
+                    geometry=[euro_geom], crs=boundary_gdf.crs
+                )
+
+        # Compute extent from boundary (EPSG:28992)
+        if boundary_gdf is not None:
+            extent = boundary_gdf.total_bounds
         else:
-            # Create geometry from H3 hex boundaries
             from srai.h3 import h3_to_geoseries
-            geom = h3_to_geoseries(residual_df.index)
-            geom.index = residual_df.index
-            residual_gdf = gpd.GeoDataFrame(
-                residual_df, geometry=geom, crs="EPSG:4326"
-            )
+            _geom = h3_to_geoseries(hex_ids)
+            _gdf = gpd.GeoDataFrame(geometry=_geom, crs="EPSG:4326").to_crs(epsg=28992)
+            extent = _gdf.total_bounds
+        minx, miny, maxx, maxy = extent
+        pad = (maxx - minx) * 0.03
+        render_extent = (minx - pad, miny - pad, maxx + pad, maxy + pad)
 
-        residual_gdf = residual_gdf.dropna(subset=["geometry"])
-        n_hexagons = len(residual_gdf)
+        # ----------------------------------------------------------
+        # Map predicted values to RGB (viridis, percentile-clipped)
+        # ----------------------------------------------------------
+        predicted = residual_df["predicted"]
+        vmin_pred = float(predicted.quantile(0.02))
+        vmax_pred = float(predicted.quantile(0.98))
+        norm_pred = Normalize(vmin=vmin_pred, vmax=vmax_pred)
+        cmap_pred = cm.get_cmap("viridis")
+        rgba_pred = cmap_pred(norm_pred(predicted.values))
+        rgb_pred = rgba_pred[:, :3].astype(np.float32)
 
-        # Quantile-bin dissolve for efficient rendering
-        n_bins = 20
-        residual_gdf["pred_bin"] = pd.qcut(
-            residual_gdf["predicted"], q=n_bins, labels=False, duplicates="drop"
+        # ----------------------------------------------------------
+        # Map residuals to RGB (RdBu_r, symmetric around 0)
+        # ----------------------------------------------------------
+        residuals = residual_df["residual"]
+        vmax_res = float(residuals.abs().quantile(0.98))
+        if vmax_res == 0:
+            vmax_res = 1.0
+        norm_res = TwoSlopeNorm(vmin=-vmax_res, vcenter=0, vmax=vmax_res)
+        cmap_res = cm.get_cmap("RdBu_r")
+        rgba_res = cmap_res(norm_res(residuals.values))
+        rgb_res = rgba_res[:, :3].astype(np.float32)
+
+        # ----------------------------------------------------------
+        # Rasterize both panels
+        # ----------------------------------------------------------
+        raster_pred = self._rasterize_centroids(
+            hex_ids=hex_ids, rgb_array=rgb_pred,
+            extent=render_extent, width=1200, height=1400,
         )
-        residual_gdf["resid_bin"] = pd.qcut(
-            residual_gdf["residual"], q=n_bins, labels=False, duplicates="drop"
+        raster_res = self._rasterize_centroids(
+            hex_ids=hex_ids, rgb_array=rgb_res,
+            extent=render_extent, width=1200, height=1400,
         )
 
-        # Dissolve by bin — merge hexagons in each quantile group
-        pred_dissolved = residual_gdf.dissolve(by="pred_bin", aggfunc="mean")
-        resid_dissolved = residual_gdf.dissolve(by="resid_bin", aggfunc="mean")
+        logger.info(f"  Rasterized {n_hexagons:,} hexagons (centroid rasterization)")
 
-        logger.info(f"  Dissolved {n_hexagons:,} hexagons into "
-                     f"{len(pred_dissolved)} predicted / {len(resid_dissolved)} residual polygons")
-
-        fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+        # ----------------------------------------------------------
+        # Plot 2-panel layout
+        # ----------------------------------------------------------
+        fig, axes = plt.subplots(1, 2, figsize=(20, 12))
         fig.set_facecolor("white")
 
-        # Predicted values map
-        vmin_pred = residual_gdf["predicted"].quantile(0.02)
-        vmax_pred = residual_gdf["predicted"].quantile(0.98)
-        pred_dissolved.plot(
-            column="predicted",
-            cmap="viridis",
-            vmin=vmin_pred,
-            vmax=vmax_pred,
-            ax=axes[0],
-            legend=True,
-            legend_kwds={"shrink": 0.7, "label": result.target_name},
-            edgecolor="none",
-            rasterized=True,
+        imshow_kwargs = dict(
+            extent=[render_extent[0], render_extent[2],
+                    render_extent[1], render_extent[3]],
+            origin="lower",
+            aspect="equal",
+            interpolation="nearest",
+            zorder=2,
         )
-        axes[0].set_title(f"Predicted {result.target_name}")
 
-        # Residual map
-        vmax_res = residual_gdf["residual"].abs().quantile(0.98)
-        resid_dissolved.plot(
-            column="residual",
-            cmap="RdBu_r",
-            vmin=-vmax_res,
-            vmax=vmax_res,
-            ax=axes[1],
-            legend=True,
-            legend_kwds={"shrink": 0.7, "label": "Residual (actual - predicted)"},
-            edgecolor="none",
-            rasterized=True,
-        )
-        axes[1].set_title(f"Residuals: {result.target_name}")
-
-        # White background, lat/lon gridlines, axis ticks
-        for ax in axes:
+        for ax_idx, (ax, raster, title_text) in enumerate([
+            (axes[0], raster_pred, f"Predicted {result.target_name}"),
+            (axes[1], raster_res, f"Residuals: {result.target_name}"),
+        ]):
             ax.set_facecolor("white")
+
+            # Background boundary
+            if boundary_gdf is not None:
+                boundary_gdf.plot(
+                    ax=ax, facecolor="#f0f0f0", edgecolor="#cccccc",
+                    linewidth=0.5,
+                )
+
+            ax.imshow(raster, **imshow_kwargs)
+            ax.set_xlim(render_extent[0], render_extent[2])
+            ax.set_ylim(render_extent[1], render_extent[3])
+            ax.set_title(title_text)
             ax.grid(True, linewidth=0.5, alpha=0.5, color="gray")
             ax.tick_params(labelsize=8)
-            ax.set_xlabel("Longitude")
-            ax.set_ylabel("Latitude")
+            ax.set_xlabel("Easting (m)")
+            ax.set_ylabel("Northing (m)")
+
+            # Cartographic elements
+            self._add_scale_bar(ax, length_km=50)
+            self._add_north_arrow(ax)
+
+        # ----------------------------------------------------------
+        # Colorbars via ScalarMappable
+        # ----------------------------------------------------------
+        sm_pred = cm.ScalarMappable(cmap=cmap_pred, norm=norm_pred)
+        sm_pred.set_array([])
+        fig.colorbar(sm_pred, ax=axes[0], shrink=0.7, label=result.target_name)
+
+        sm_res = cm.ScalarMappable(cmap=cmap_res, norm=norm_res)
+        sm_res.set_array([])
+        fig.colorbar(
+            sm_res, ax=axes[1], shrink=0.7,
+            label="Residual (actual - predicted)",
+        )
 
         fig.suptitle(
             f"Spatial Maps: {result.target_name} ({target_col})\n"
             f"R2={result.overall_r2:.4f} | n={n_hexagons:,} hexagons "
-            f"({n_bins} quantile bins)",
+            f"(centroid rasterized) | EPSG:28992",
             fontsize=14,
         )
 
@@ -760,13 +806,10 @@ class LinearProbeVisualizer:
         # 2. Load only needed columns from embeddings parquet
         # ----------------------------------------------------------
         if embeddings_path is None:
-            if self.paths is not None:
-                embeddings_path = self.paths.embedding_file("alphaearth", 10, 2022)
-            else:
-                # Construct via StudyAreaPaths rather than navigating up from
-                # output_dir, which breaks when output_dir is a run subdirectory.
-                _fallback_paths = StudyAreaPaths("netherlands")
-                embeddings_path = _fallback_paths.embedding_file("alphaearth", 10, 2022)
+            # Construct via StudyAreaPaths rather than navigating up from
+            # output_dir, which breaks when output_dir is a run subdirectory.
+            _fallback_paths = StudyAreaPaths("netherlands")
+            embeddings_path = _fallback_paths.embedding_file("alphaearth", 10, 2022)
 
         embeddings_path = Path(embeddings_path)
         if not embeddings_path.exists():
@@ -822,13 +865,10 @@ class LinearProbeVisualizer:
         # 6. Load boundary if not provided
         # ----------------------------------------------------------
         if boundary_gdf is None:
-            if self.paths is not None:
-                boundary_path = self.paths.boundary_file()
-            else:
-                # Construct via StudyAreaPaths rather than navigating up from
-                # output_dir, which breaks when output_dir is a run subdirectory.
-                _fallback_paths = StudyAreaPaths("netherlands")
-                boundary_path = _fallback_paths.boundary_file()
+            # Construct via StudyAreaPaths rather than navigating up from
+            # output_dir, which breaks when output_dir is a run subdirectory.
+            _fallback_paths = StudyAreaPaths("netherlands")
+            boundary_path = _fallback_paths.area_gdf_file()
             if boundary_path.exists():
                 boundary_gdf = gpd.read_file(boundary_path)
                 logger.info(f"  Loaded boundary from {boundary_path}")
@@ -978,11 +1018,8 @@ class LinearProbeVisualizer:
         # ----------------------------------------------------------
         # Title
         # ----------------------------------------------------------
-        # Detect probe type from coefficients
-        is_regularized = (result.best_alpha or 0) > 0
-        probe_label = "ElasticNet" if is_regularized else "OLS"
         title_lines = [
-            f"Linear Probe ({probe_label}): {result.target_name} ({target_col})",
+            f"Linear Probe (OLS): {result.target_name} ({target_col})",
             f"Top-3 coefficients mapped to RGB | "
             f"R={channel_names[0]} ({channel_coefs[0]:+.4f})  "
             f"G={channel_names[1]} ({channel_coefs[1]:+.4f})  "

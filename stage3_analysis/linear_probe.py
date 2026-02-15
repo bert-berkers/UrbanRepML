@@ -3,13 +3,11 @@
 """
 Linear Probe Regression: AlphaEarth Embeddings -> Leefbaarometer
 
-Fits ElasticNet regression with Optuna hyperparameter optimization and
-spatial block cross-validation to evaluate whether AlphaEarth embeddings
-encode Dutch liveability (leefbaarometer) signals.
+Fits plain OLS (LinearRegression) with spatial block cross-validation to
+evaluate whether AlphaEarth embeddings encode Dutch liveability
+(leefbaarometer) signals.
 
-Follows the approach from JohnKilbride/GEE_MediumBlog_Logic:
-    - ElasticNet (L1+L2 regularization)
-    - Optuna Bayesian hyperparameter optimization (alpha + l1_ratio)
+    - Ordinary Least Squares (no regularization)
     - Spatial block cross-validation via spatialkfold
     - Per-target training with out-of-fold predictions
 
@@ -25,9 +23,8 @@ from typing import Dict, List, Optional, Tuple
 
 import geopandas as gpd
 import numpy as np
-import optuna
 import pandas as pd
-from sklearn.linear_model import ElasticNet, LinearRegression
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler
 from spatialkfold.blocks import spatial_blocks
@@ -62,16 +59,9 @@ class LinearProbeConfig:
 
     # Spatial block CV
     n_folds: int = 5
-    block_width: int = 25_000   # meters
-    block_height: int = 25_000  # meters
+    block_width: int = 10_000   # meters (10km blocks for better fold mixing)
+    block_height: int = 10_000  # meters
     random_state: int = 42
-
-    # Optuna
-    n_trials: int = 50
-    alpha_low: float = 1e-5
-    alpha_high: float = 10.0
-    l1_ratio_low: float = 0.0
-    l1_ratio_high: float = 1.0
 
     # Data paths (relative to project root)
     embeddings_path: Optional[str] = None
@@ -82,7 +72,7 @@ class LinearProbeConfig:
     # Run-level provenance: if non-empty, a dated run directory is created
     # under stage3_analysis/linear_probe/{run_id}/ instead of writing to the
     # flat analysis directory.  When empty (default), behaviour is unchanged.
-    run_descriptor: str = ""
+    run_descriptor: str = "default"
 
     def __post_init__(self):
         paths = StudyAreaPaths(self.study_area)
@@ -141,10 +131,10 @@ class TargetResult:
 
 class LinearProbeRegressor:
     """
-    ElasticNet linear probe with spatial block CV and Optuna optimization.
+    OLS linear probe with spatial block cross-validation.
 
     Evaluates whether AlphaEarth embeddings encode liveability signals by
-    fitting regularized linear models to predict leefbaarometer scores.
+    fitting plain LinearRegression to predict leefbaarometer scores.
     Spatial block cross-validation prevents spatial autocorrelation leakage.
     """
 
@@ -294,99 +284,7 @@ class LinearProbeRegressor:
 
         return folds
 
-    def _optuna_objective(
-        self,
-        trial: optuna.Trial,
-        X: np.ndarray,
-        y: np.ndarray,
-        folds: np.ndarray,
-        unique_folds: np.ndarray,
-    ) -> float:
-        """Optuna objective: minimize mean RMSE across spatial folds."""
-        alpha = trial.suggest_float("alpha", self.config.alpha_low,
-                                    self.config.alpha_high, log=True)
-        l1_ratio = trial.suggest_float("l1_ratio", self.config.l1_ratio_low,
-                                       self.config.l1_ratio_high)
-
-        rmse_scores = []
-        for fold_id in unique_folds:
-            test_mask = folds == fold_id
-            train_mask = ~test_mask
-
-            X_train, X_test = X[train_mask], X[test_mask]
-            y_train, y_test = y[train_mask], y[test_mask]
-
-            # Standardize features per fold
-            scaler = StandardScaler()
-            X_train_s = scaler.fit_transform(X_train)
-            X_test_s = scaler.transform(X_test)
-
-            model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio,
-                               max_iter=1000, random_state=self.config.random_state)
-            model.fit(X_train_s, y_train)
-            y_pred = model.predict(X_test_s)
-
-            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-            rmse_scores.append(rmse)
-
-        return np.mean(rmse_scores)
-
     def _train_and_evaluate_cv(
-        self,
-        X: np.ndarray,
-        y: np.ndarray,
-        folds: np.ndarray,
-        unique_folds: np.ndarray,
-        alpha: float,
-        l1_ratio: float,
-    ) -> Tuple[np.ndarray, List[FoldMetrics]]:
-        """
-        Train and evaluate with spatial CV using optimal hyperparameters.
-
-        Returns:
-            Out-of-fold predictions and per-fold metrics.
-        """
-        oof_predictions = np.full(len(y), np.nan)
-        fold_metrics_list = []
-
-        for fold_id in unique_folds:
-            test_mask = folds == fold_id
-            train_mask = ~test_mask
-
-            X_train, X_test = X[train_mask], X[test_mask]
-            y_train, y_test = y[train_mask], y[test_mask]
-
-            # Standardize features per fold
-            scaler = StandardScaler()
-            X_train_s = scaler.fit_transform(X_train)
-            X_test_s = scaler.transform(X_test)
-
-            model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio,
-                               max_iter=1000, random_state=self.config.random_state)
-            model.fit(X_train_s, y_train)
-            y_pred = model.predict(X_test_s)
-
-            oof_predictions[test_mask] = y_pred
-
-            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-            mae = mean_absolute_error(y_test, y_pred)
-            r2 = r2_score(y_test, y_pred)
-
-            fold_metrics_list.append(FoldMetrics(
-                fold=int(fold_id),
-                rmse=rmse,
-                mae=mae,
-                r2=r2,
-                n_train=int(train_mask.sum()),
-                n_test=int(test_mask.sum()),
-            ))
-
-            logger.info(f"    Fold {fold_id}: R2={r2:.4f}, RMSE={rmse:.4f}, MAE={mae:.4f} "
-                         f"(train={train_mask.sum():,}, test={test_mask.sum():,})")
-
-        return oof_predictions, fold_metrics_list
-
-    def _train_and_evaluate_cv_linear(
         self,
         X: np.ndarray,
         y: np.ndarray,
@@ -437,113 +335,13 @@ class LinearProbeRegressor:
 
         return oof_predictions, fold_metrics_list
 
-    def _train_final_model(
-        self,
-        X: np.ndarray,
-        y: np.ndarray,
-        alpha: float,
-        l1_ratio: float,
-    ) -> ElasticNet:
-        """Train final model on all data with optimal hyperparameters."""
-        scaler = StandardScaler()
-        X_s = scaler.fit_transform(X)
-
-        model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio,
-                           max_iter=1000, random_state=self.config.random_state)
-        model.fit(X_s, y)
-        return model
-
-    def run_for_target(
-        self,
-        target_col: str,
-        X: np.ndarray,
-        y_all: pd.DataFrame,
-        folds: np.ndarray,
-        region_ids: np.ndarray,
-    ) -> TargetResult:
-        """
-        Run full optimization and evaluation pipeline for one target variable.
-
-        Args:
-            target_col: Target column name (e.g. 'lbm')
-            X: Feature matrix (n_samples, n_features)
-            y_all: DataFrame with all target columns
-            folds: Spatial fold assignments
-            region_ids: Region IDs for each row
-
-        Returns:
-            TargetResult with metrics, coefficients, and predictions.
-        """
-        y = y_all[target_col].values
-        unique_folds = np.unique(folds)
-        target_name = TARGET_NAMES.get(target_col, target_col)
-
-        logger.info(f"\n--- Target: {target_col} ({target_name}) ---")
-        logger.info(f"  y range: [{y.min():.4f}, {y.max():.4f}], mean={y.mean():.4f}")
-
-        # Optuna hyperparameter optimization
-        logger.info(f"  Running Optuna optimization ({self.config.n_trials} trials)...")
-        optuna.logging.set_verbosity(optuna.logging.WARNING)
-
-        study = optuna.create_study(direction="minimize",
-                                    sampler=optuna.samplers.TPESampler(
-                                        seed=self.config.random_state))
-        study.optimize(
-            lambda trial: self._optuna_objective(trial, X, y, folds, unique_folds),
-            n_trials=self.config.n_trials,
-            show_progress_bar=False,
-        )
-
-        best_alpha = study.best_params["alpha"]
-        best_l1_ratio = study.best_params["l1_ratio"]
-        logger.info(f"  Best: alpha={best_alpha:.6f}, l1_ratio={best_l1_ratio:.4f}, "
-                     f"RMSE={study.best_value:.4f}")
-
-        # Out-of-fold evaluation with best hyperparameters
-        logger.info(f"  Evaluating with spatial CV...")
-        oof_predictions, fold_metrics = self._train_and_evaluate_cv(
-            X, y, folds, unique_folds, best_alpha, best_l1_ratio
-        )
-
-        # Overall metrics from OOF predictions
-        valid_mask = ~np.isnan(oof_predictions)
-        overall_r2 = r2_score(y[valid_mask], oof_predictions[valid_mask])
-        overall_rmse = np.sqrt(mean_squared_error(y[valid_mask], oof_predictions[valid_mask]))
-        overall_mae = mean_absolute_error(y[valid_mask], oof_predictions[valid_mask])
-
-        logger.info(f"  Overall OOF: R2={overall_r2:.4f}, RMSE={overall_rmse:.4f}, "
-                     f"MAE={overall_mae:.4f}")
-
-        # Train final model on all data for coefficients
-        final_model = self._train_final_model(X, y, best_alpha, best_l1_ratio)
-
-        result = TargetResult(
-            target=target_col,
-            target_name=target_name,
-            best_alpha=best_alpha,
-            best_l1_ratio=best_l1_ratio,
-            fold_metrics=fold_metrics,
-            overall_r2=overall_r2,
-            overall_rmse=overall_rmse,
-            overall_mae=overall_mae,
-            coefficients=final_model.coef_,
-            intercept=final_model.intercept_,
-            feature_names=self.feature_names,
-            oof_predictions=oof_predictions,
-            actual_values=y,
-            region_ids=region_ids,
-        )
-
-        self.results[target_col] = result
-        return result
-
     def run_simple(self, use_pca: bool = False) -> Dict[str, TargetResult]:
         """
         Run simple LinearRegression without regularization or CV.
 
         Fits plain LinearRegression on all data, computes in-sample metrics.
-        No hyperparameter optimization, no spatial cross-validation.
-        Useful as a baseline to compare against ElasticNet's regularization.
+        No spatial cross-validation.
+        Useful as a quick sanity check.
 
         Args:
             use_pca: If True, use PCA-16 embeddings instead of full 64-dim.
@@ -621,9 +419,9 @@ class LinearProbeRegressor:
 
         return self.results
 
-    def run_linear_cv(self, use_pca: bool = False) -> Dict[str, TargetResult]:
+    def run(self, use_pca: bool = False) -> Dict[str, TargetResult]:
         """
-        Run plain LinearRegression with spatial block CV (no regularization, no Optuna).
+        Run plain LinearRegression with spatial block CV (no regularization).
 
         OLS regression with spatial cross-validation to get honest
         out-of-fold R² estimates.
@@ -635,7 +433,7 @@ class LinearProbeRegressor:
             Dictionary mapping target column to TargetResult.
         """
         emb_type = "PCA-16" if use_pca else f"full {len(self.feature_names) or '?'}-dim"
-        logger.info(f"=== Linear Probe Regression (Linear CV Mode, {emb_type}) ===")
+        logger.info(f"=== Linear Probe Regression (OLS + Spatial CV, {emb_type}) ===")
         logger.info(f"Study area: {self.config.study_area}")
         logger.info(f"Year: {self.config.year}")
         logger.info("Mode: Plain LinearRegression with spatial block CV")
@@ -659,7 +457,7 @@ class LinearProbeRegressor:
             logger.info(f"\n--- Target: {target_col} ({target_name}) ---")
             logger.info(f"  y range: [{y.min():.4f}, {y.max():.4f}], mean={y.mean():.4f}")
 
-            oof_predictions, fold_metrics = self._train_and_evaluate_cv_linear(
+            oof_predictions, fold_metrics = self._train_and_evaluate_cv(
                 X, y, folds, unique_folds
             )
 
@@ -704,47 +502,6 @@ class LinearProbeRegressor:
 
         return self.results
 
-    def run(self, use_pca: bool = False) -> Dict[str, TargetResult]:
-        """
-        Run the full linear probe pipeline for all target variables.
-
-        Args:
-            use_pca: If True, use PCA-16 embeddings instead of full 64-dim.
-
-        Returns:
-            Dictionary mapping target column to TargetResult.
-        """
-        emb_type = "PCA-16" if use_pca else f"full {len(self.feature_names) or '?'}-dim"
-        logger.info(f"=== Linear Probe Regression ({emb_type}) ===")
-        logger.info(f"Study area: {self.config.study_area}")
-        logger.info(f"Year: {self.config.year}")
-
-        # Load and join data
-        gdf = self.load_and_join_data(use_pca=use_pca)
-
-        # Create spatial blocks
-        folds = self.create_spatial_blocks(gdf)
-
-        # Extract feature matrix
-        X = gdf[self.feature_names].values
-        y_all = gdf[self.config.target_cols]
-        region_ids = gdf.index.values
-
-        logger.info(f"\nFeature matrix: {X.shape}")
-        logger.info(f"Targets: {self.config.target_cols}")
-
-        # Run for each target
-        for target_col in self.config.target_cols:
-            self.run_for_target(target_col, X, y_all, folds, region_ids)
-
-        # Summary
-        logger.info("\n=== Summary ===")
-        for target_col, result in self.results.items():
-            logger.info(f"  {target_col} ({result.target_name}): "
-                         f"R2={result.overall_r2:.4f}, RMSE={result.overall_rmse:.4f}")
-
-        return self.results
-
     def save_results(self, output_dir: Optional[Path] = None) -> Path:
         """Save all results to disk."""
         out_dir = output_dir or (self.project_root / self.config.output_dir)
@@ -763,7 +520,7 @@ class LinearProbeRegressor:
                 "overall_mae": result.overall_mae,
                 "n_features": len(result.feature_names),
             }
-            # Only add fold metrics if they exist (ElasticNet mode has them, simple mode doesn't)
+            # Only add fold metrics if they exist (CV mode has them, simple mode doesn't)
             if result.fold_metrics:
                 for fm in result.fold_metrics:
                     row[f"fold{fm.fold}_r2"] = fm.r2
@@ -808,7 +565,6 @@ class LinearProbeRegressor:
             "n_folds": self.config.n_folds,
             "block_width": self.config.block_width,
             "block_height": self.config.block_height,
-            "n_trials": self.config.n_trials,
             "random_state": self.config.random_state,
             "n_features": len(self.feature_names),
             "feature_names": self.feature_names,
@@ -818,12 +574,16 @@ class LinearProbeRegressor:
 
         # Write run-level provenance when using a run directory
         if self.config.run_id is not None:
+            # Auto-detect upstream run
+            _paths = StudyAreaPaths(self.config.study_area)
+            _latest = _paths.latest_run(_paths.stage1("alphaearth"))
+            _upstream_label = _latest.name if _latest else "flat"
             write_run_info(
                 out_dir,
                 stage="stage3",
                 study_area=self.config.study_area,
                 config=config_dict,
-                upstream_runs={"stage1/alphaearth": "unknown"},
+                upstream_runs={"stage1/alphaearth": _upstream_label},
             )
             logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
 
@@ -837,11 +597,9 @@ def main():
     parser = argparse.ArgumentParser(description="Linear Probe: AlphaEarth -> Leefbaarometer")
     parser.add_argument("--study-area", default="netherlands")
     parser.add_argument("--pca", action="store_true", help="Use PCA-16 embeddings")
-    parser.add_argument("--mode", choices=["elasticnet", "simple", "linear"], default="elasticnet",
-                        help="Regression mode: elasticnet (regularized with CV), simple (no regularization, no CV), "
-                             "or linear (plain OLS with spatial CV)")
-    parser.add_argument("--n-trials", type=int, default=50, help="Optuna trials (ElasticNet mode only)")
-    parser.add_argument("--n-folds", type=int, default=5, help="Spatial CV folds (ElasticNet mode only)")
+    parser.add_argument("--n-folds", type=int, default=5, help="Spatial CV folds")
+    parser.add_argument("--block-size", type=int, default=10000,
+                        help="Spatial block size in meters (default: 10000)")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -851,19 +609,13 @@ def main():
 
     config = LinearProbeConfig(
         study_area=args.study_area,
-        n_trials=args.n_trials,
         n_folds=args.n_folds,
+        block_width=args.block_size,
+        block_height=args.block_size,
     )
 
     regressor = LinearProbeRegressor(config)
-
-    if args.mode == "simple":
-        regressor.run_simple(use_pca=args.pca)
-    elif args.mode == "linear":
-        regressor.run_linear_cv(use_pca=args.pca)
-    else:
-        regressor.run(use_pca=args.pca)
-
+    regressor.run(use_pca=args.pca)
     regressor.save_results()
 
 

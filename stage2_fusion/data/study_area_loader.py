@@ -54,7 +54,7 @@ class StudyAreaLoader:
 
         # Define standard paths (delegating to StudyAreaPaths where possible)
         self.paths = {
-            'boundaries': self._study_area_paths.boundaries(),
+            'boundaries': self._study_area_paths.area_gdf(),
             'regions': self._study_area_paths.regions(),
             'models': self.base_path / 'models',
             'metadata': self.base_path / 'metadata'

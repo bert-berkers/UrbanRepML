@@ -1,23 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-DNN Probe: Graph Neural Network Probe for Liveability Prediction
+DNN Probe: MLP Probe for Liveability Prediction
 
-Trains a shallow GCN/GAT probe on the H3 adjacency graph to test whether
-spatially-aware non-linear transformations of AlphaEarth embeddings improve
-liveability prediction over the existing linear probe.
+Trains a multi-layer perceptron (MLP) probe to test whether non-linear
+transformations of AlphaEarth embeddings improve liveability prediction
+over the existing linear probe.
 
 Key differences from the linear probe:
-    - Operates on the H3 adjacency graph (message passing between hexagon neighbours)
-    - Uses GCN or GAT convolutional layers (2-3 layers, local receptive field)
-    - Transductive node masking for spatial block CV (full graph always intact)
-    - Optuna HPO over GNN architecture and training hyperparameters
+    - Uses a multi-layer MLP with residual connections, LayerNorm, and GELU
+    - Early stopping with cosine annealing LR schedule
+    - Each hexagon is an independent sample (no graph structure)
 
 Produces TargetResult-compatible output so existing LinearProbeVisualizer works.
 
 Usage:
     python -m stage3_analysis.dnn_probe --study-area netherlands
-    python -m stage3_analysis.dnn_probe --study-area netherlands --skip-hpo
+    python -m stage3_analysis.dnn_probe --study-area netherlands --hidden-dim 256 --num-layers 3
     python -m stage3_analysis.dnn_probe --study-area netherlands --compare data/study_areas/netherlands/analysis/linear_probe
 """
 
@@ -30,15 +29,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import geopandas as gpd
 import numpy as np
-import optuna
 import pandas as pd
 import torch
 import torch.nn as nn
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler
 from spatialkfold.blocks import spatial_blocks
-from torch_geometric.data import Data
-from torch_geometric.nn import GATConv, GCNConv
 
 from stage3_analysis.linear_probe import (
     TARGET_COLS,
@@ -58,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DNNProbeConfig:
-    """Configuration for DNN graph probe regression."""
+    """Configuration for DNN MLP probe regression."""
 
     # Study area
     study_area: str = "netherlands"
@@ -68,38 +64,24 @@ class DNNProbeConfig:
 
     # Spatial block CV (same defaults as LinearProbeConfig)
     n_folds: int = 5
-    block_width: int = 25_000   # meters
-    block_height: int = 25_000  # meters
+    block_width: int = 10_000   # meters (10km blocks for better fold mixing)
+    block_height: int = 10_000  # meters
     random_state: int = 42
 
-    # GNN architecture
-    conv_type: str = "gcn"          # "gcn" or "gat"
-    hidden_dim: int = 128           # Hidden dimension
-    num_layers: int = 2             # Number of GCN/GAT layers (2 or 3)
-    num_heads: int = 4              # GAT attention heads (ignored for GCN)
-    dropout: float = 0.1
-    use_residual: bool = True       # Residual connections
-    use_layer_norm: bool = True     # LayerNorm after each conv
+    # MLP architecture
+    hidden_dim: int = 32            # First hidden dimension (halves per layer)
+    num_layers: int = 3             # Number of narrowing layers
+    dropout: float = 0.0            # Disabled -- replaced by progressive batch size
+    use_layer_norm: bool = True     # LayerNorm after each layer
 
     # Training
-    learning_rate: float = 1e-3
+    learning_rate: float = 5e-4
+    initial_batch_size: int = 4096          # Starting mini-batch size
+    batch_size_ramp_epochs: int = 10        # Double batch size every N epochs
     weight_decay: float = 1e-4
     max_epochs: int = 300
     patience: int = 30              # Early stopping patience
     min_delta: float = 1e-5         # Minimum improvement for early stopping
-
-    # Optuna HPO
-    n_trials: int = 30
-
-    # Optuna search ranges
-    hidden_dim_choices: List[int] = field(default_factory=lambda: [64, 128, 256])
-    lr_low: float = 1e-4
-    lr_high: float = 1e-2
-    dropout_low: float = 0.0
-    dropout_high: float = 0.3
-    weight_decay_low: float = 1e-6
-    weight_decay_high: float = 1e-3
-    num_layers_choices: List[int] = field(default_factory=lambda: [2, 3])
 
     # Data paths (relative to project root)
     embeddings_path: Optional[str] = None
@@ -109,7 +91,7 @@ class DNNProbeConfig:
     # Run-level provenance: if non-empty, a dated run directory is created
     # under stage3_analysis/dnn_probe/{run_id}/ instead of writing to the
     # flat analysis directory.  When empty (default), behaviour is unchanged.
-    run_descriptor: str = ""
+    run_descriptor: str = "default"
 
     # Device
     device: str = "auto"  # "auto", "cuda", "cpu"
@@ -136,15 +118,19 @@ class DNNProbeConfig:
 
 
 # ---------------------------------------------------------------------------
-# GNN Model
+# MLP Model
 # ---------------------------------------------------------------------------
 
-class GNNProbeModel(nn.Module):
+class MLPProbeModel(nn.Module):
     """
-    Shallow GCN/GAT probe for per-hexagon regression.
+    Multi-layer perceptron probe for per-hexagon regression.
 
-    Not a full U-Net -- just 2-3 message-passing layers with residual
-    connections on a single-resolution H3 adjacency graph.
+    Architecture: progressively narrowing funnel from input_dim down to 1.
+    Each layer halves the dimension: input_dim -> hidden_dim -> hidden_dim//2
+    -> ... -> linear head -> 1.
+
+    Each hexagon is treated as an independent sample -- no message passing
+    or graph structure is used.
     """
 
     def __init__(
@@ -152,49 +138,34 @@ class GNNProbeModel(nn.Module):
         input_dim: int,
         hidden_dim: int,
         num_layers: int,
-        conv_type: str,
-        num_heads: int = 4,
         dropout: float = 0.1,
-        use_residual: bool = True,
         use_layer_norm: bool = True,
     ):
         super().__init__()
-        self.use_residual = use_residual
         self.use_layer_norm = use_layer_norm
         self.num_layers = num_layers
 
-        # Input projection
-        self.input_proj = nn.Linear(input_dim, hidden_dim)
-        self.input_norm = nn.LayerNorm(hidden_dim) if use_layer_norm else nn.Identity()
+        # Build progressively narrowing dimensions:
+        # input_dim -> hidden_dim -> hidden_dim//2 -> ... -> head -> 1
+        dims = [input_dim, hidden_dim]
+        for _ in range(num_layers - 1):
+            dims.append(max(dims[-1] // 2, 8))  # floor at 8
 
-        # Convolutional layers
-        self.convs = nn.ModuleList()
+        self.layers = nn.ModuleList()
         self.norms = nn.ModuleList()
-        for _ in range(num_layers):
-            if conv_type == "gat":
-                conv = GATConv(
-                    hidden_dim,
-                    hidden_dim,
-                    heads=num_heads,
-                    concat=False,
-                    dropout=dropout,
-                )
-            elif conv_type == "gcn":
-                conv = GCNConv(hidden_dim, hidden_dim)
-            else:
-                raise ValueError(f"Unknown conv_type: {conv_type!r}. Use 'gcn' or 'gat'.")
-            self.convs.append(conv)
+        for i in range(len(dims) - 1):
+            self.layers.append(nn.Linear(dims[i], dims[i + 1]))
             self.norms.append(
-                nn.LayerNorm(hidden_dim) if use_layer_norm else nn.Identity()
+                nn.LayerNorm(dims[i + 1]) if use_layer_norm else nn.Identity()
             )
 
         self.dropout = nn.Dropout(dropout)
         self.activation = nn.GELU()
 
-        # Regression head
-        self.head = nn.Linear(hidden_dim, 1)
+        # Regression head from final hidden dim
+        self.head = nn.Linear(dims[-1], 1)
 
-    def forward(self, x: torch.Tensor, edge_index: torch.LongTensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass.
 
@@ -204,31 +175,23 @@ class GNNProbeModel(nn.Module):
         a warning is logged.
 
         Args:
-            x: Node features [N, input_dim].
-            edge_index: Edge indices [2, E].
+            x: Feature matrix [N, input_dim].
 
         Returns:
-            Per-node predictions [N, 1].
+            Per-sample predictions [N, 1].
         """
         # Safety guard: replace NaN inputs to avoid silent propagation
         if torch.isnan(x).any():
             logger.warning("NaN detected in input features, replacing with 0.0")
             x = torch.nan_to_num(x, nan=0.0)
 
-        # Input projection
-        h = self.input_proj(x)
-        h = self.input_norm(h)
-        h = self.activation(h)
-
-        # Message-passing layers with residual connections
-        for i in range(self.num_layers):
-            h_in = h
-            h = self.convs[i](h, edge_index)
+        # Progressive narrowing through layers
+        h = x
+        for i in range(len(self.layers)):
+            h = self.layers[i](h)
             h = self.norms[i](h)
             h = self.activation(h)
             h = self.dropout(h)
-            if self.use_residual:
-                h = h + h_in
 
         # Regression head
         return self.head(h)
@@ -240,14 +203,15 @@ class GNNProbeModel(nn.Module):
 
 class DNNProbeRegressor:
     """
-    GNN probe with spatial block CV and Optuna optimization.
+    MLP probe with spatial block CV.
 
-    Evaluates whether spatially-aware (graph-based) transformations of
-    AlphaEarth embeddings improve liveability prediction over linear probes.
+    Evaluates whether non-linear transformations of AlphaEarth embeddings
+    improve liveability prediction over linear probes. Each hexagon is an
+    independent sample -- no graph structure is used.
 
     Visualization compatibility:
         Produces TargetResult objects compatible with LinearProbeVisualizer,
-        but because the GNN has no linear coefficients (``coefficients`` is
+        but because the MLP has no linear coefficients (``coefficients`` is
         a zero vector), only a subset of visualizer methods produce
         meaningful output.
 
@@ -346,69 +310,6 @@ class DNNProbeRegressor:
         return joined
 
     # ------------------------------------------------------------------
-    # Graph construction
-    # ------------------------------------------------------------------
-
-    def build_h3_graph(self, region_ids: np.ndarray) -> Data:
-        """
-        Build H3 adjacency graph using SRAI H3Neighbourhood.
-
-        Uses H3Neighbourhood.get_neighbours() to find the 1-ring (k=1)
-        neighbours for each hexagon, then constructs a PyG Data object
-        with bidirectional edge_index.
-
-        Args:
-            region_ids: Array of H3 hex ID strings.
-
-        Returns:
-            PyG Data with edge_index [2, E] and num_nodes.
-        """
-        import time
-
-        from srai.neighbourhoods import H3Neighbourhood
-
-        n = len(region_ids)
-        logger.info(f"Building H3 adjacency graph for {n:,} hexagons...")
-
-        neighbourhood = H3Neighbourhood()
-        hex_to_idx: Dict[str, int] = {h: i for i, h in enumerate(region_ids)}
-
-        src_list: List[int] = []
-        dst_list: List[int] = []
-
-        t0 = time.time()
-        log_interval = max(1, n // 10)  # log progress ~10 times
-
-        for i, hex_id in enumerate(region_ids):
-            neighbours = neighbourhood.get_neighbours(hex_id)
-            for nbr in neighbours:
-                nbr_idx = hex_to_idx.get(nbr)
-                if nbr_idx is not None:
-                    src_list.append(i)
-                    dst_list.append(nbr_idx)
-            if (i + 1) % log_interval == 0:
-                elapsed = time.time() - t0
-                rate = (i + 1) / elapsed if elapsed > 0 else 0
-                eta = (n - i - 1) / rate if rate > 0 else 0
-                logger.info(
-                    f"  Graph construction: {i + 1:,}/{n:,} hexagons "
-                    f"({100 * (i + 1) / n:.0f}%) -- "
-                    f"{rate:.0f} hex/s, ETA {eta:.0f}s"
-                )
-
-        elapsed = time.time() - t0
-        edge_index = torch.tensor([src_list, dst_list], dtype=torch.long)
-        graph_data = Data(edge_index=edge_index, num_nodes=n)
-
-        logger.info(
-            f"  Graph built in {elapsed:.1f}s: "
-            f"{n:,} nodes, {edge_index.shape[1]:,} edges, "
-            f"avg degree {edge_index.shape[1] / n:.1f}"
-        )
-
-        return graph_data
-
-    # ------------------------------------------------------------------
     # Spatial blocking (mirrors LinearProbeRegressor)
     # ------------------------------------------------------------------
 
@@ -481,66 +382,62 @@ class DNNProbeRegressor:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        edge_index: torch.LongTensor,
-        num_nodes: int,
         train_mask: np.ndarray,
         val_mask: np.ndarray,
         hparams: Dict[str, Any],
-    ) -> Tuple[GNNProbeModel, float, StandardScaler, List[float]]:
+    ) -> Tuple[MLPProbeModel, float, StandardScaler, StandardScaler, List[float]]:
         """
-        Train GNN for one fold with early stopping.
+        Train MLP for one fold with early stopping.
 
-        Per-fold feature standardization: fit scaler on train_mask nodes,
-        transform all nodes. Train on full graph, compute loss only on
-        train_mask. Early stopping based on val_mask loss.
+        Per-fold feature AND target standardization: fit scalers on training
+        samples, transform both train and validation independently. The model
+        trains on standardized targets; predictions are inverse-transformed
+        back to the original scale before being returned.
+
+        Uses progressive mini-batch training: the batch size starts at
+        ``initial_batch_size`` and doubles every ``batch_size_ramp_epochs``
+        epochs, providing implicit regularization through gradient noise that
+        decreases as training progresses.
 
         Args:
             X: Feature matrix [N, D] (numpy, raw -- standardized here).
             y: Target vector [N] (numpy).
-            edge_index: Edge indices [2, E] (torch, on CPU).
-            num_nodes: Number of nodes.
-            train_mask: Boolean array [N] for training nodes.
-            val_mask: Boolean array [N] for validation nodes.
-            hparams: Dict with keys: hidden_dim, num_layers, conv_type,
-                     num_heads, dropout, use_residual, use_layer_norm,
-                     learning_rate, weight_decay.
+            train_mask: Boolean array [N] for training samples.
+            val_mask: Boolean array [N] for validation samples.
+            hparams: Dict with keys: hidden_dim, num_layers, dropout,
+                     use_layer_norm, learning_rate, weight_decay,
+                     initial_batch_size, batch_size_ramp_epochs.
 
         Returns:
-            (trained_model on CPU, best_val_loss, fitted_scaler, val_loss_history)
+            (trained_model on CPU, best_val_loss, fitted_feature_scaler,
+             fitted_target_scaler, val_loss_history)
         """
         device = torch.device(self.config.device)
 
-        # Per-fold standardization
+        # Per-fold feature standardization
         scaler = StandardScaler()
-        X_scaled = np.empty_like(X, dtype=np.float32)
-        X_scaled[train_mask] = scaler.fit_transform(X[train_mask]).astype(np.float32)
-        X_scaled[val_mask] = scaler.transform(X[val_mask]).astype(np.float32)
-        # For nodes in neither mask (should not happen with binary folds, but be safe)
-        other_mask = ~(train_mask | val_mask)
-        if other_mask.any():
-            X_scaled[other_mask] = scaler.transform(X[other_mask]).astype(np.float32)
+        X_train = scaler.fit_transform(X[train_mask]).astype(np.float32)
+        X_val = scaler.transform(X[val_mask]).astype(np.float32)
 
-        # Build PyG Data object for this fold
-        data = Data(
-            x=torch.tensor(X_scaled, dtype=torch.float32),
-            y=torch.tensor(y, dtype=torch.float32),
-            edge_index=edge_index,
-            num_nodes=num_nodes,
-        )
-        data = data.to(device)
+        # Per-fold target standardization
+        y_scaler = StandardScaler()
+        y_train_raw = y[train_mask].reshape(-1, 1)
+        y_val_raw = y[val_mask].reshape(-1, 1)
+        y_train_std = y_scaler.fit_transform(y_train_raw).ravel().astype(np.float32)
+        y_val_std = y_scaler.transform(y_val_raw).ravel().astype(np.float32)
 
-        train_mask_t = torch.tensor(train_mask, dtype=torch.bool, device=device)
-        val_mask_t = torch.tensor(val_mask, dtype=torch.bool, device=device)
+        # Build tensors
+        x_train_t = torch.tensor(X_train, dtype=torch.float32, device=device)
+        y_train_t = torch.tensor(y_train_std, dtype=torch.float32, device=device)
+        x_val_t = torch.tensor(X_val, dtype=torch.float32, device=device)
+        y_val_t = torch.tensor(y_val_std, dtype=torch.float32, device=device)
 
         # Create model
-        model = GNNProbeModel(
+        model = MLPProbeModel(
             input_dim=X.shape[1],
             hidden_dim=hparams["hidden_dim"],
             num_layers=hparams["num_layers"],
-            conv_type=hparams["conv_type"],
-            num_heads=hparams.get("num_heads", self.config.num_heads),
             dropout=hparams["dropout"],
-            use_residual=hparams.get("use_residual", self.config.use_residual),
             use_layer_norm=hparams.get("use_layer_norm", self.config.use_layer_norm),
         ).to(device)
 
@@ -556,27 +453,39 @@ class DNNProbeRegressor:
 
         criterion = nn.MSELoss()
 
+        # Progressive batch size parameters
+        batch_size = hparams.get("initial_batch_size", 4096)
+        batch_ramp = hparams.get("batch_size_ramp_epochs", 10)
+        n_train = x_train_t.shape[0]
+
         best_val_loss = float("inf")
         patience_counter = 0
         best_state: Optional[Dict] = None
         val_loss_history: List[float] = []
 
         for epoch in range(self.config.max_epochs):
-            # -- Train --
+            # Progressive batch size: double every batch_ramp epochs
+            current_bs = min(batch_size * (2 ** (epoch // batch_ramp)), n_train)
+
+            # -- Mini-batch training --
             model.train()
-            optimizer.zero_grad()
-            out = model(data.x, data.edge_index)  # [N, 1]
-            loss = criterion(out[train_mask_t].squeeze(-1), data.y[train_mask_t])
-            loss.backward()
-            optimizer.step()
+            perm = torch.randperm(n_train, device=device)
+            for start in range(0, n_train, current_bs):
+                idx = perm[start : start + current_bs]
+                optimizer.zero_grad()
+                out = model(x_train_t[idx])
+                loss = criterion(out.squeeze(-1), y_train_t[idx])
+                loss.backward()
+                optimizer.step()
+
             scheduler.step()
 
-            # -- Validate --
+            # -- Validate (full-batch inference) --
             model.eval()
             with torch.no_grad():
-                out = model(data.x, data.edge_index)
+                val_out = model(x_val_t)
                 val_loss = criterion(
-                    out[val_mask_t].squeeze(-1), data.y[val_mask_t]
+                    val_out.squeeze(-1), y_val_t
                 ).item()
 
             val_loss_history.append(val_loss)
@@ -595,72 +504,7 @@ class DNNProbeRegressor:
             model.load_state_dict(best_state)
 
         model = model.cpu()
-        return model, best_val_loss, scaler, val_loss_history
-
-    # ------------------------------------------------------------------
-    # Optuna HPO
-    # ------------------------------------------------------------------
-
-    def _optuna_objective(
-        self,
-        trial: optuna.Trial,
-        X: np.ndarray,
-        y: np.ndarray,
-        folds: np.ndarray,
-        unique_folds: np.ndarray,
-        edge_index: torch.LongTensor,
-        num_nodes: int,
-    ) -> float:
-        """Optuna objective: minimize mean val RMSE across spatial folds."""
-        hparams = {
-            "hidden_dim": trial.suggest_categorical(
-                "hidden_dim", self.config.hidden_dim_choices
-            ),
-            "num_layers": trial.suggest_categorical(
-                "num_layers", self.config.num_layers_choices
-            ),
-            "learning_rate": trial.suggest_float(
-                "learning_rate",
-                self.config.lr_low,
-                self.config.lr_high,
-                log=True,
-            ),
-            "dropout": trial.suggest_float(
-                "dropout",
-                self.config.dropout_low,
-                self.config.dropout_high,
-            ),
-            "weight_decay": trial.suggest_float(
-                "weight_decay",
-                self.config.weight_decay_low,
-                self.config.weight_decay_high,
-                log=True,
-            ),
-            "conv_type": trial.suggest_categorical("conv_type", ["gcn", "gat"]),
-            "num_heads": self.config.num_heads,
-            "use_residual": self.config.use_residual,
-            "use_layer_norm": self.config.use_layer_norm,
-        }
-
-        fold_rmses: List[float] = []
-        for fold_idx, fold_id in enumerate(unique_folds):
-            val_mask = folds == fold_id
-            train_mask = ~val_mask
-
-            _, best_val_loss, _, _ = self._train_one_fold(
-                X, y, edge_index, num_nodes, train_mask, val_mask, hparams
-            )
-            # val_loss is MSE, convert to RMSE
-            fold_rmses.append(np.sqrt(best_val_loss))
-
-            # Per-fold pruning: report running mean RMSE so Optuna can
-            # prune unpromising trials before all folds complete.
-            running_mean_rmse = float(np.mean(fold_rmses[: fold_idx + 1]))
-            trial.report(running_mean_rmse, step=fold_idx)
-            if trial.should_prune():
-                raise optuna.TrialPruned()
-
-        return float(np.mean(fold_rmses))
+        return model, best_val_loss, scaler, y_scaler, val_loss_history
 
     # ------------------------------------------------------------------
     # Per-target pipeline
@@ -673,11 +517,11 @@ class DNNProbeRegressor:
         y_all: pd.DataFrame,
         folds: np.ndarray,
         region_ids: np.ndarray,
-        graph_data: Data,
-        skip_hpo: bool = False,
     ) -> TargetResult:
         """
-        Run full HPO + CV pipeline for one target variable.
+        Run spatial CV pipeline for one target variable.
+
+        Uses config defaults for all hyperparameters.
 
         Args:
             target_col: Target column name (e.g. 'lbm').
@@ -685,8 +529,6 @@ class DNNProbeRegressor:
             y_all: DataFrame with all target columns.
             folds: Spatial fold assignments.
             region_ids: Region IDs for each row.
-            graph_data: PyG Data with edge_index.
-            skip_hpo: If True, use default hyperparameters (no Optuna).
 
         Returns:
             TargetResult with metrics and predictions.
@@ -698,69 +540,28 @@ class DNNProbeRegressor:
         logger.info(f"\n--- Target: {target_col} ({target_name}) ---")
         logger.info(f"  y range: [{y.min():.4f}, {y.max():.4f}], mean={y.mean():.4f}")
 
-        edge_index = graph_data.edge_index
-        num_nodes = graph_data.num_nodes
+        # Use config defaults
+        hparams = {
+            "hidden_dim": self.config.hidden_dim,
+            "num_layers": self.config.num_layers,
+            "learning_rate": self.config.learning_rate,
+            "dropout": self.config.dropout,
+            "weight_decay": self.config.weight_decay,
+            "use_layer_norm": self.config.use_layer_norm,
+            "initial_batch_size": self.config.initial_batch_size,
+            "batch_size_ramp_epochs": self.config.batch_size_ramp_epochs,
+        }
+        logger.info(
+            f"  Using config defaults: "
+            f"hidden={hparams['hidden_dim']}, "
+            f"layers={hparams['num_layers']}, "
+            f"lr={hparams['learning_rate']}"
+        )
 
-        if skip_hpo:
-            # Use default config hyperparameters
-            best_hparams = {
-                "hidden_dim": self.config.hidden_dim,
-                "num_layers": self.config.num_layers,
-                "learning_rate": self.config.learning_rate,
-                "dropout": self.config.dropout,
-                "weight_decay": self.config.weight_decay,
-                "conv_type": self.config.conv_type,
-                "num_heads": self.config.num_heads,
-                "use_residual": self.config.use_residual,
-                "use_layer_norm": self.config.use_layer_norm,
-            }
-            logger.info(
-                f"  Skipping HPO, using defaults: "
-                f"conv={best_hparams['conv_type']}, "
-                f"hidden={best_hparams['hidden_dim']}, "
-                f"layers={best_hparams['num_layers']}, "
-                f"lr={best_hparams['learning_rate']}"
-            )
-        else:
-            # Optuna hyperparameter optimization
-            logger.info(
-                f"  Running Optuna optimization ({self.config.n_trials} trials)..."
-            )
-            optuna.logging.set_verbosity(optuna.logging.WARNING)
+        self.best_hparams[target_col] = hparams
 
-            study = optuna.create_study(
-                direction="minimize",
-                sampler=optuna.samplers.TPESampler(seed=self.config.random_state),
-                pruner=optuna.pruners.MedianPruner(),
-            )
-            study.optimize(
-                lambda trial: self._optuna_objective(
-                    trial, X, y, folds, unique_folds, edge_index, num_nodes
-                ),
-                n_trials=self.config.n_trials,
-                show_progress_bar=False,
-            )
-
-            best_hparams = {
-                **study.best_params,
-                "num_heads": self.config.num_heads,
-                "use_residual": self.config.use_residual,
-                "use_layer_norm": self.config.use_layer_norm,
-            }
-            logger.info(
-                f"  Best HPO: conv={best_hparams['conv_type']}, "
-                f"hidden={best_hparams['hidden_dim']}, "
-                f"layers={best_hparams['num_layers']}, "
-                f"lr={best_hparams['learning_rate']:.6f}, "
-                f"dropout={best_hparams['dropout']:.3f}, "
-                f"wd={best_hparams['weight_decay']:.6f}, "
-                f"RMSE={study.best_value:.4f}"
-            )
-
-        self.best_hparams[target_col] = best_hparams
-
-        # ----- Final CV evaluation with best hyperparameters -----
-        logger.info("  Evaluating with spatial CV (best hyperparameters)...")
+        # ----- Spatial CV evaluation -----
+        logger.info("  Evaluating with spatial CV...")
         oof_predictions = np.full(len(y), np.nan)
         fold_metrics_list: List[FoldMetrics] = []
         training_curves: Dict[int, List[float]] = {}
@@ -769,45 +570,33 @@ class DNNProbeRegressor:
             val_mask = folds == fold_id
             train_mask = ~val_mask
 
-            model, best_val_loss, fold_scaler, val_history = self._train_one_fold(
-                X, y, edge_index, num_nodes, train_mask, val_mask, best_hparams
+            model, best_val_loss, fold_scaler, fold_y_scaler, val_history = (
+                self._train_one_fold(X, y, train_mask, val_mask, hparams)
             )
             training_curves[int(fold_id)] = val_history
 
-            # Get predictions on validation set using the scaler fitted during
-            # training (reuse fold_scaler to avoid train/predict misalignment).
+            # Get predictions on validation set (in standardized space)
             device = torch.device(self.config.device)
 
-            X_scaled = np.empty_like(X, dtype=np.float32)
-            X_scaled[train_mask] = fold_scaler.transform(X[train_mask]).astype(
-                np.float32
-            )
-            X_scaled[val_mask] = fold_scaler.transform(X[val_mask]).astype(np.float32)
-            other_mask = ~(train_mask | val_mask)
-            if other_mask.any():
-                X_scaled[other_mask] = fold_scaler.transform(X[other_mask]).astype(
-                    np.float32
-                )
-
-            data = Data(
-                x=torch.tensor(X_scaled, dtype=torch.float32),
-                y=torch.tensor(y, dtype=torch.float32),
-                edge_index=edge_index,
-                num_nodes=num_nodes,
-            ).to(device)
+            X_val_scaled = fold_scaler.transform(X[val_mask]).astype(np.float32)
+            x_val_t = torch.tensor(X_val_scaled, dtype=torch.float32, device=device)
 
             model = model.to(device)
             model.eval()
             with torch.no_grad():
-                out = model(data.x, data.edge_index).squeeze(-1).cpu().numpy()
+                val_pred_std = model(x_val_t).squeeze(-1).cpu().numpy()
 
-            oof_predictions[val_mask] = out[val_mask]
+            # Inverse-transform predictions back to original target scale
+            val_pred = fold_y_scaler.inverse_transform(
+                val_pred_std.reshape(-1, 1)
+            ).ravel()
+
+            oof_predictions[val_mask] = val_pred
 
             y_val = y[val_mask]
-            y_pred_val = out[val_mask]
-            rmse = float(np.sqrt(mean_squared_error(y_val, y_pred_val)))
-            mae = float(mean_absolute_error(y_val, y_pred_val))
-            r2 = float(r2_score(y_val, y_pred_val))
+            rmse = float(np.sqrt(mean_squared_error(y_val, val_pred)))
+            mae = float(mean_absolute_error(y_val, val_pred))
+            r2 = float(r2_score(y_val, val_pred))
 
             fold_metrics_list.append(
                 FoldMetrics(
@@ -828,7 +617,7 @@ class DNNProbeRegressor:
 
             # Free GPU memory
             model = model.cpu()
-            del data
+            del x_val_t
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
@@ -853,13 +642,13 @@ class DNNProbeRegressor:
         result = TargetResult(
             target=target_col,
             target_name=target_name,
-            best_alpha=0.0,       # Not applicable for GNN
-            best_l1_ratio=0.0,    # Not applicable for GNN
+            best_alpha=0.0,       # Not applicable for MLP
+            best_l1_ratio=0.0,    # Not applicable for MLP
             fold_metrics=fold_metrics_list,
             overall_r2=overall_r2,
             overall_rmse=overall_rmse,
             overall_mae=overall_mae,
-            coefficients=np.zeros(len(self.feature_names)),  # GNN has no linear coefficients
+            coefficients=np.zeros(len(self.feature_names)),  # MLP has no linear coefficients
             intercept=0.0,
             feature_names=self.feature_names,
             oof_predictions=oof_predictions,
@@ -874,34 +663,27 @@ class DNNProbeRegressor:
     # Full pipeline
     # ------------------------------------------------------------------
 
-    def run(self, skip_hpo: bool = False) -> Dict[str, TargetResult]:
+    def run(self) -> Dict[str, TargetResult]:
         """
         Run the full DNN probe pipeline for all target variables.
-
-        Args:
-            skip_hpo: If True, use default hyperparameters (no Optuna).
 
         Returns:
             Dictionary mapping target column to TargetResult.
         """
-        mode = "default HPs" if skip_hpo else f"Optuna ({self.config.n_trials} trials)"
-        logger.info(f"=== DNN Probe Regression ({mode}) ===")
+        logger.info("=== DNN Probe Regression (MLP) ===")
         logger.info(f"Study area: {self.config.study_area}")
         logger.info(f"Year: {self.config.year}")
         logger.info(f"Device: {self.config.device}")
         logger.info(
-            f"Architecture: {self.config.conv_type.upper()}, "
+            f"Architecture: MLP, "
             f"hidden={self.config.hidden_dim}, layers={self.config.num_layers}"
         )
 
         # Load and join data
         gdf = self.load_and_join_data()
 
-        # Build H3 adjacency graph
-        region_ids = gdf.index.values
-        graph_data = self.build_h3_graph(region_ids)
-
         # Create spatial blocks
+        region_ids = gdf.index.values
         folds = self.create_spatial_blocks(gdf)
 
         # Extract feature matrix
@@ -914,8 +696,7 @@ class DNNProbeRegressor:
         # Run for each target
         for target_col in self.config.target_cols:
             self.run_for_target(
-                target_col, X, y_all, folds, region_ids, graph_data,
-                skip_hpo=skip_hpo,
+                target_col, X, y_all, folds, region_ids,
             )
 
         # Summary
@@ -927,14 +708,6 @@ class DNNProbeRegressor:
             )
 
         return self.results
-
-    def run_simple(self) -> Dict[str, TargetResult]:
-        """
-        Run DNN probe with default hyperparameters, no Optuna.
-
-        Convenience alias for ``run(skip_hpo=True)``.
-        """
-        return self.run(skip_hpo=True)
 
     # ------------------------------------------------------------------
     # Save results
@@ -997,7 +770,6 @@ class DNNProbeRegressor:
             "n_folds": self.config.n_folds,
             "block_width": self.config.block_width,
             "block_height": self.config.block_height,
-            "n_trials": self.config.n_trials,
             "random_state": self.config.random_state,
             "n_features": len(self.feature_names),
             "feature_names": self.feature_names,
@@ -1021,12 +793,16 @@ class DNNProbeRegressor:
 
         # Write run-level provenance when using a run directory
         if self.config.run_id is not None:
+            # Auto-detect upstream run
+            _paths = StudyAreaPaths(self.config.study_area)
+            _latest = _paths.latest_run(_paths.stage1("alphaearth"))
+            _upstream_label = _latest.name if _latest else "flat"
             write_run_info(
                 out_dir,
                 stage="stage3",
                 study_area=self.config.study_area,
                 config=config_dict,
-                upstream_runs={"stage1/alphaearth": "unknown"},
+                upstream_runs={"stage1/alphaearth": _upstream_label},
             )
             logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
 
@@ -1163,21 +939,9 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="DNN Probe: GNN-based AlphaEarth -> Leefbaarometer"
+        description="DNN Probe: MLP-based AlphaEarth -> Leefbaarometer"
     )
     parser.add_argument("--study-area", default="netherlands")
-    parser.add_argument(
-        "--conv-type",
-        choices=["gcn", "gat"],
-        default="gcn",
-        help="GNN convolution type (default: gcn)",
-    )
-    parser.add_argument(
-        "--n-trials",
-        type=int,
-        default=30,
-        help="Optuna trials (default: 30)",
-    )
     parser.add_argument(
         "--n-folds",
         type=int,
@@ -1194,24 +958,25 @@ def main():
         "--hidden-dim",
         type=int,
         default=None,
-        help="Hidden dimension (skips HPO for this param if set)",
+        help="Hidden dimension (default: 128)",
     )
     parser.add_argument(
         "--num-layers",
         type=int,
         default=None,
-        help="Number of GCN/GAT layers (skips HPO for this param if set)",
+        help="Number of MLP layers (default: 2)",
+    )
+    parser.add_argument(
+        "--block-size",
+        type=int,
+        default=10000,
+        help="Spatial block size in meters (default: 10000)",
     )
     parser.add_argument(
         "--device",
         choices=["cuda", "cpu", "auto"],
         default="auto",
         help="Device (default: auto)",
-    )
-    parser.add_argument(
-        "--skip-hpo",
-        action="store_true",
-        help="Use default hyperparameters, skip Optuna",
     )
     parser.add_argument(
         "--compare",
@@ -1224,6 +989,11 @@ def main():
         action="store_true",
         help="Generate DNN probe visualizations after saving results",
     )
+    parser.add_argument(
+        "--quick-viz",
+        action="store_true",
+        help="Generate only fast plots (skip spatial maps)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -1233,23 +1003,20 @@ def main():
 
     config = DNNProbeConfig(
         study_area=args.study_area,
-        conv_type=args.conv_type,
-        n_trials=args.n_trials,
         n_folds=args.n_folds,
         max_epochs=args.max_epochs,
+        block_width=args.block_size,
+        block_height=args.block_size,
         device=args.device,
     )
 
-    # If user fixes hidden_dim or num_layers via CLI, narrow the HPO search
     if args.hidden_dim is not None:
         config.hidden_dim = args.hidden_dim
-        config.hidden_dim_choices = [args.hidden_dim]
     if args.num_layers is not None:
         config.num_layers = args.num_layers
-        config.num_layers_choices = [args.num_layers]
 
     regressor = DNNProbeRegressor(config)
-    regressor.run(skip_hpo=args.skip_hpo)
+    regressor.run()
     out_dir = regressor.save_results()
 
     # Comparison with linear probe
@@ -1277,6 +1044,7 @@ def main():
         )
         plot_paths = viz.plot_all(
             linear_results=linear_results,
+            skip_spatial=args.quick_viz,
         )
         logger.info(f"Generated {len(plot_paths)} plots to {viz_dir}")
 

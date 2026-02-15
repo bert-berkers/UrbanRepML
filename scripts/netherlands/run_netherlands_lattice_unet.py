@@ -162,7 +162,7 @@ def main():
         logger.info("2. Build hexagonal lattice graph")
         logger.info("3. Train Lattice U-Net model")
         logger.info("4. Generate urban embeddings")
-        logger.info("5. Perform clustering and analysis")
+        logger.info("5. Perform kmeans_clustering_1layer and analysis")
 
         embeddings = pipeline.run()
 

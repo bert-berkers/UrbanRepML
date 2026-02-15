@@ -36,6 +36,9 @@ import h3 as _h3
 import warnings
 warnings.filterwarnings('ignore')
 
+from utils import StudyAreaPaths
+from utils.paths import write_run_info
+
 logger = logging.getLogger(__name__)
 
 
@@ -53,7 +56,7 @@ class ClusterMetrics:
 
 @dataclass
 class HierarchicalClusterResult:
-    """Results from hierarchical clustering analysis"""
+    """Results from hierarchical kmeans_clustering_1layer analysis"""
     resolution: int
     cluster_labels: np.ndarray
     cluster_centers: np.ndarray
@@ -65,7 +68,7 @@ class HierarchicalClusterResult:
 
 class HierarchicalClusterAnalyzer:
     """
-    Analyzes spatial patterns through clustering across multiple H3 resolutions.
+    Analyzes spatial patterns through kmeans_clustering_1layer across multiple H3 resolutions.
     Reveals beautiful multi-scale spatial structures.
     """
 
@@ -73,11 +76,18 @@ class HierarchicalClusterAnalyzer:
         self,
         resolutions: List[int] = [5, 6, 7, 8, 9, 10, 11],
         primary_resolution: int = 8,
-        clustering_methods: List[str] = ['kmeans', 'gaussian_mixture', 'hierarchical']
+        clustering_methods: List[str] = ['kmeans', 'gaussian_mixture', 'hierarchical'],
+        paths: Optional[StudyAreaPaths] = None,
+        run_descriptor: str = "default",
     ):
         self.resolutions = sorted(resolutions)
         self.primary_resolution = primary_resolution
         self.clustering_methods = clustering_methods
+        self.paths = paths
+        self.run_id: Optional[str] = None
+
+        if paths is not None and run_descriptor:
+            self.run_id = paths.create_run_id(run_descriptor)
 
         # Storage for results [old 2024]
         self.hierarchical_embeddings = {}
@@ -111,7 +121,7 @@ class HierarchicalClusterAnalyzer:
         scale_features: bool = True
     ) -> Tuple[np.ndarray, List[str]]:
         """
-        Prepare features for clustering analysis.
+        Prepare features for kmeans_clustering_1layer analysis.
 
         Args:
             resolution: H3 resolution to analyze
@@ -187,7 +197,7 @@ class HierarchicalClusterAnalyzer:
             scaler = StandardScaler()
             feature_matrix = scaler.fit_transform(feature_matrix)
 
-        logger.info(f"Prepared {len(unique_features)} features for resolution {resolution} clustering")
+        logger.info(f"Prepared {len(unique_features)} features for resolution {resolution} kmeans_clustering_1layer")
 
         return feature_matrix, unique_names
 
@@ -228,7 +238,7 @@ class HierarchicalClusterAnalyzer:
                     clustering = AgglomerativeClustering(n_clusters=n_clusters)
                     labels = clustering.fit_predict(features)
                 else:
-                    raise ValueError(f"Unknown clustering method: {method}")
+                    raise ValueError(f"Unknown kmeans_clustering_1layer method: {method}")
 
                 # Calculate silhouette score
                 if len(set(labels)) > 1:  # Need at least 2 clusters
@@ -238,7 +248,7 @@ class HierarchicalClusterAnalyzer:
                     scores.append(-1.0)
 
             except Exception as e:
-                logger.warning(f"Error clustering with {n_clusters} clusters: {e}")
+                logger.warning(f"Error kmeans_clustering_1layer with {n_clusters} clusters: {e}")
                 scores.append(-1.0)
 
         # Find optimal number of clusters
@@ -262,7 +272,7 @@ class HierarchicalClusterAnalyzer:
         feature_categories: Optional[List[str]] = None
     ) -> HierarchicalClusterResult:
         """
-        Perform clustering analysis for a specific resolution.
+        Perform kmeans_clustering_1layer analysis for a specific resolution.
 
         Args:
             resolution: H3 resolution to analyze
@@ -273,7 +283,7 @@ class HierarchicalClusterAnalyzer:
         Returns:
             Hierarchical cluster result
         """
-        logger.info(f"Performing {method} clustering for resolution {resolution}")
+        logger.info(f"Performing {method} kmeans_clustering_1layer for resolution {resolution}")
 
         # Prepare features
         features, feature_names = self.prepare_clustering_features(
@@ -284,7 +294,7 @@ class HierarchicalClusterAnalyzer:
         if n_clusters is None:
             n_clusters, _ = self.find_optimal_clusters(features, method)
 
-        # Perform clustering
+        # Perform kmeans_clustering_1layer
         if method == 'kmeans':
             clustering = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
             labels = clustering.fit_predict(features)
@@ -332,9 +342,9 @@ class HierarchicalClusterAnalyzer:
             inertia = None
 
         else:
-            raise ValueError(f"Unknown clustering method: {method}")
+            raise ValueError(f"Unknown kmeans_clustering_1layer method: {method}")
 
-        # Calculate clustering metrics
+        # Calculate kmeans_clustering_1layer metrics
         metrics = self._calculate_cluster_metrics(features, labels, inertia)
 
         # Calculate feature importance
@@ -377,7 +387,7 @@ class HierarchicalClusterAnalyzer:
         labels: np.ndarray,
         inertia: Optional[float]
     ) -> ClusterMetrics:
-        """Calculate comprehensive clustering metrics."""
+        """Calculate comprehensive kmeans_clustering_1layer metrics."""
 
         n_clusters = len(set(labels))
         if -1 in labels:  # DBSCAN noise
@@ -420,7 +430,7 @@ class HierarchicalClusterAnalyzer:
         labels: np.ndarray,
         feature_names: List[str]
     ) -> Dict[str, float]:
-        """Calculate feature importance for clustering."""
+        """Calculate feature importance for kmeans_clustering_1layer."""
 
         # Use variance ratio as proxy for feature importance
         n_clusters = len(set(labels))
@@ -505,7 +515,7 @@ class HierarchicalClusterAnalyzer:
         resolution: int,
         labels: np.ndarray
     ) -> Optional[float]:
-        """Calculate consistency with clustering at parent resolution."""
+        """Calculate consistency with kmeans_clustering_1layer at parent resolution."""
 
         parent_resolution = resolution - 1
 
@@ -514,12 +524,12 @@ class HierarchicalClusterAnalyzer:
             parent_resolution not in self.hierarchical_embeddings):
             return None
 
-        # Get parent clustering results [old 2024]
+        # Get parent kmeans_clustering_1layer results [old 2024]
         parent_results = self.cluster_results[parent_resolution]
         if not parent_results:
             return None
 
-        # Use first available clustering method for parent
+        # Use first available kmeans_clustering_1layer method for parent
         parent_method = list(parent_results.keys())[0]
         parent_labels = parent_results[parent_method].cluster_labels
 
@@ -562,7 +572,7 @@ class HierarchicalClusterAnalyzer:
         feature_categories: Optional[List[str]] = None
     ) -> Dict[int, Dict[str, HierarchicalClusterResult]]:
         """
-        Perform clustering analysis across all resolutions.
+        Perform kmeans_clustering_1layer analysis across all resolutions.
 
         Args:
             methods: Clustering methods to use
@@ -574,7 +584,7 @@ class HierarchicalClusterAnalyzer:
         if methods is None:
             methods = self.clustering_methods
 
-        logger.info(f"Analyzing clustering across {len(self.resolutions)} resolutions with methods: {methods}")
+        logger.info(f"Analyzing kmeans_clustering_1layer across {len(self.resolutions)} resolutions with methods: {methods}")
 
         results = {}
 
@@ -593,12 +603,12 @@ class HierarchicalClusterAnalyzer:
                     )
                     results[resolution][method] = result
                 except Exception as e:
-                    logger.error(f"Error clustering resolution {resolution} with {method}: {e}")
+                    logger.error(f"Error kmeans_clustering_1layer resolution {resolution} with {method}: {e}")
 
         return results
 
     def create_cluster_summary(self) -> pd.DataFrame:
-        """Create summary table of clustering results [old 2024] across all resolutions."""
+        """Create summary table of kmeans_clustering_1layer results [old 2024] across all resolutions."""
 
         summary_rows = []
 
@@ -631,7 +641,7 @@ class HierarchicalClusterAnalyzer:
         return summary_df
 
     def get_best_clustering_per_resolution(self) -> Dict[int, HierarchicalClusterResult]:
-        """Get the best clustering result for each resolution based on silhouette score."""
+        """Get the best kmeans_clustering_1layer result for each resolution based on silhouette score."""
 
         best_results = {}
 
@@ -652,8 +662,18 @@ class HierarchicalClusterAnalyzer:
 
         return best_results
 
-    def save_cluster_assignments(self, output_dir: Path) -> None:
-        """Save cluster assignments for each resolution and method."""
+    def save_cluster_assignments(self, output_dir: Optional[Path] = None) -> None:
+        """Save cluster assignments for each resolution and method.
+
+        Args:
+            output_dir: Directory for output files. When None and ``paths``
+                plus ``run_id`` are set, defaults to a dated run directory
+                under ``stage3_analysis/hierarchical_clustering/{run_id}/``.
+        """
+        if output_dir is None and self.paths is not None and self.run_id is not None:
+            output_dir = self.paths.stage3_run("hierarchical_clustering", self.run_id)
+        elif output_dir is None:
+            raise ValueError("output_dir is required when paths/run_id are not set")
 
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -678,6 +698,20 @@ class HierarchicalClusterAnalyzer:
                     df.to_parquet(filepath)
 
                     logger.info(f"Saved cluster assignments: {filepath}")
+
+        # Write run-level provenance when using a run directory
+        if self.paths is not None and self.run_id is not None:
+            write_run_info(
+                output_dir,
+                stage="stage3",
+                study_area=self.paths.study_area,
+                config={
+                    "resolutions": self.resolutions,
+                    "primary_resolution": self.primary_resolution,
+                    "clustering_methods": self.clustering_methods,
+                },
+            )
+            logger.info(f"Saved run_info.json to {output_dir / 'run_info.json'}")
 
 
 def main():

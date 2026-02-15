@@ -1,6 +1,6 @@
 """
 Process raw AlphaEarth 2022 TIFFs for Netherlands to H3 resolution 8
-with K-means clustering and static cartographic visualization
+with K-means kmeans_clustering_1layer and static cartographic visualization
 """
 
 import sys
@@ -85,9 +85,9 @@ def process_alphaearth_2022():
 
 
 def apply_clustering(gdf, k_values=[8, 10, 12]):
-    """Apply K-means clustering to embeddings."""
+    """Apply K-means kmeans_clustering_1layer to embeddings."""
     
-    print("\n2. Applying K-means clustering...")
+    print("\n2. Applying K-means kmeans_clustering_1layer...")
     
     # Extract embedding columns
     embedding_cols = [col for col in gdf.columns if col.startswith('A') and col[1:].isdigit()]
@@ -266,7 +266,7 @@ def main():
         # Process AlphaEarth data
         gdf = process_alphaearth_2022()
         
-        # Apply clustering
+        # Apply kmeans_clustering_1layer
         k_values = [8, 10, 12]
         gdf_clustered, clustering_results = apply_clustering(gdf, k_values)
         

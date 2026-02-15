@@ -172,11 +172,11 @@ class TestStage3Imports:
         from stage3_analysis.dnn_probe import (
             DNNProbeRegressor,
             DNNProbeConfig,
-            GNNProbeModel,
+            MLPProbeModel,
         )
         assert DNNProbeRegressor is not None
         assert DNNProbeConfig is not None
-        assert GNNProbeModel is not None
+        assert MLPProbeModel is not None
 
     def test_import_dnn_probe_from_package_init(self):
         """DNNProbeRegressor and DNNProbeConfig are re-exported from __init__."""
@@ -187,43 +187,47 @@ class TestStage3Imports:
 
 
 class TestDNNProbeForwardPass:
-    """Verify GNNProbeModel forward pass shapes for GCN and GAT variants."""
+    """Verify MLPProbeModel forward pass shapes."""
 
-    @pytest.mark.parametrize("conv_type", ["gcn", "gat"])
-    def test_forward_output_shape(self, conv_type):
+    def test_forward_output_shape(self):
         """Forward pass with random input produces [N, 1] output."""
-        from stage3_analysis.dnn_probe import GNNProbeModel
+        from stage3_analysis.dnn_probe import MLPProbeModel
 
-        model = GNNProbeModel(
+        model = MLPProbeModel(
             input_dim=16,
             hidden_dim=32,
             num_layers=2,
-            conv_type=conv_type,
         )
         model.eval()
 
         x = torch.randn(10, 16)
-        edge_index = torch.randint(0, 10, (2, 20))
 
         with torch.no_grad():
-            out = model(x, edge_index)
+            out = model(x)
 
         assert out.shape == (10, 1), (
             f"Expected output shape (10, 1) but got {out.shape}"
         )
         assert not torch.isnan(out).any(), "Output contains NaN values"
 
-    def test_forward_invalid_conv_type_raises(self):
-        """Unknown conv_type raises ValueError at construction."""
-        from stage3_analysis.dnn_probe import GNNProbeModel
+    def test_forward_nan_input_handling(self):
+        """NaN inputs are replaced with 0.0 without propagating."""
+        from stage3_analysis.dnn_probe import MLPProbeModel
 
-        with pytest.raises(ValueError, match="Unknown conv_type"):
-            GNNProbeModel(
-                input_dim=16,
-                hidden_dim=32,
-                num_layers=2,
-                conv_type="invalid",
-            )
+        model = MLPProbeModel(
+            input_dim=16,
+            hidden_dim=32,
+            num_layers=2,
+        )
+        model.eval()
+
+        x = torch.randn(10, 16)
+        x[0, 0] = float("nan")
+
+        with torch.no_grad():
+            out = model(x)
+
+        assert not torch.isnan(out).any(), "NaN propagated through model"
 
 
 class TestDNNProbeConfig:
@@ -233,19 +237,19 @@ class TestDNNProbeConfig:
         from stage3_analysis.dnn_probe import DNNProbeConfig
 
         config = DNNProbeConfig()
-        assert config.hidden_dim == 128
+        assert config.hidden_dim == 32
 
-    def test_default_conv_type(self):
+    def test_default_use_layer_norm(self):
         from stage3_analysis.dnn_probe import DNNProbeConfig
 
         config = DNNProbeConfig()
-        assert config.conv_type == "gcn"
+        assert config.use_layer_norm is True
 
     def test_default_num_layers(self):
         from stage3_analysis.dnn_probe import DNNProbeConfig
 
         config = DNNProbeConfig()
-        assert config.num_layers == 2
+        assert config.num_layers == 3
 
     def test_device_resolves_to_cuda_or_cpu(self):
         """Auto device should resolve to 'cuda' or 'cpu', never remain 'auto'."""

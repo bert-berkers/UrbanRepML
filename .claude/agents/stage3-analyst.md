@@ -1,6 +1,6 @@
 ---
 name: stage3-analyst
-description: "Post-training analysis specialist. Triggers: clustering, regression, visualization, interpretability, evaluation metrics, embedding analysis, spatial pattern discovery, UMAP/t-SNE projections, cluster assignments, map generation."
+description: "Post-training analysis specialist. Triggers: kmeans_clustering_1layer, regression, visualization, interpretability, evaluation metrics, embedding analysis, spatial pattern discovery, UMAP/t-SNE projections, cluster assignments, map generation."
 model: opus
 color: teal
 ---
@@ -18,7 +18,7 @@ You consume Stage 2 output. You do not modify models or training pipelines.
 ## What You Consume
 
 - **Stage 2 embeddings**: `region_id`-indexed parquet files from `stage2_fusion/` models
-  - Located in `data/study_areas/{area}/urban_embedding/` or `data/study_areas/{area}/embeddings/`
+  - Located in `data/study_areas/{area}/stage2_multimodal/` or `data/study_areas/{area}/stage1_unimodal/`
   - Always indexed by `region_id` (SRAI convention, never `h3_index`)
   - Columns are embedding dimensions (`emb_0`, `emb_1`, ... or `A00`, `A01`, ...)
 - **Regions GeoDataFrames**: H3 tessellations from SRAI `H3Regionalizer`

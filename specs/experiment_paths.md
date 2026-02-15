@@ -43,7 +43,7 @@ data/study_areas/{study_area}/
     parent_to_children_res{p}_to_{t}.pkl
   regions_gdf/                              # H3 tessellation
     {study_area}_res{res}.parquet
-  boundaries/                               # Study area geometry
+  area_gdf/                                 # Study area boundary geometry
     {study_area}_boundary.geojson
   target/{target_name}/                     # Ground truth targets
     {target_name}_h3res{res}_{year}.parquet
@@ -78,13 +78,13 @@ paths.training_logs("lattice_unet_cones")            # -> .../training_logs/
 # Stage 3
 paths.stage3("linear_probe")                         # -> .../stage3_analysis/linear_probe/
 paths.stage3("dnn_probe")                            # -> .../stage3_analysis/dnn_probe/
-paths.stage3("clustering")                           # -> .../stage3_analysis/clustering/
+paths.stage3("kmeans_clustering_1layer")                           # -> .../stage3_analysis/kmeans_clustering_1layer/
 
 # Shared / stage-independent
 paths.regions()                                      # -> .../regions_gdf/
 paths.region_file(10)                                # -> .../regions_gdf/netherlands_res10.parquet
-paths.boundaries()                                   # -> .../boundaries/
-paths.boundary_file()                                # -> .../boundaries/netherlands_boundary.geojson
+paths.area_gdf()                                     # -> .../area_gdf/
+paths.area_gdf_file()                                # -> .../area_gdf/netherlands_boundary.geojson
 paths.target("leefbaarometer")                       # -> .../target/leefbaarometer/
 paths.target_file("leefbaarometer", 10, 2022)        # -> leefbaarometer_h3res10_2022.parquet
 paths.cones()                                        # -> .../cones/

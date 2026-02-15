@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-DNN Probe Visualization: GNN-specific Analysis Plots
+DNN Probe Visualization: MLP-specific Analysis Plots
 
-Extends LinearProbeVisualizer for GNN probe results [old 2024]. Coefficient-based
+Extends LinearProbeVisualizer for MLP probe results. Coefficient-based
 visualizations (meaningless for neural networks) are gracefully skipped,
 while prediction-based plots are inherited unchanged. Adds DNN-specific
 visualizations: training curves, linear-vs-DNN comparison bars,
@@ -36,10 +36,10 @@ logger = logging.getLogger(__name__)
 
 class DNNProbeVisualizer(LinearProbeVisualizer):
     """
-    Visualization for DNN (GNN) probe regression results [old 2024].
+    Visualization for DNN (MLP) probe regression results.
 
     Inherits from LinearProbeVisualizer. Coefficient-based methods are
-    overridden to return None with an info log, since GNN probes have
+    overridden to return None with an info log, since MLP probes have
     no meaningful linear coefficients. Prediction-based methods
     (scatter, spatial residuals, fold metrics) are inherited unchanged.
 
@@ -71,27 +71,27 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         self.training_curves = training_curves or {}
 
     # ------------------------------------------------------------------
-    # Override coefficient-based methods (not meaningful for GNN)
+    # Override coefficient-based methods (not meaningful for MLP)
     # ------------------------------------------------------------------
 
     def plot_coefficient_bars(self, target_col: str, top_n: int = 15) -> None:
-        """Skipped -- coefficients are not meaningful for GNN probe."""
+        """Skipped -- coefficients are not meaningful for MLP probe."""
         logger.info(
-            "Skipping plot_coefficient_bars -- not meaningful for GNN probe"
+            "Skipping plot_coefficient_bars -- not meaningful for MLP probe"
         )
         return None
 
     def plot_coefficient_bars_faceted(self) -> None:
-        """Skipped -- coefficients are not meaningful for GNN probe."""
+        """Skipped -- coefficients are not meaningful for MLP probe."""
         logger.info(
-            "Skipping plot_coefficient_bars_faceted -- not meaningful for GNN probe"
+            "Skipping plot_coefficient_bars_faceted -- not meaningful for MLP probe"
         )
         return None
 
     def plot_coefficient_heatmap(self) -> None:
-        """Skipped -- coefficients are not meaningful for GNN probe."""
+        """Skipped -- coefficients are not meaningful for MLP probe."""
         logger.info(
-            "Skipping plot_coefficient_heatmap -- not meaningful for GNN probe"
+            "Skipping plot_coefficient_heatmap -- not meaningful for MLP probe"
         )
         return None
 
@@ -102,16 +102,16 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         boundary_gdf: Optional[gpd.GeoDataFrame] = None,
         max_hexagons: int = 600_000,
     ) -> None:
-        """Skipped -- coefficient-ranked RGB channels are not meaningful for GNN probe."""
+        """Skipped -- coefficient-ranked RGB channels are not meaningful for MLP probe."""
         logger.info(
-            "Skipping plot_rgb_top3_map -- not meaningful for GNN probe"
+            "Skipping plot_rgb_top3_map -- not meaningful for MLP probe"
         )
         return None
 
     def plot_cross_target_correlation(self) -> None:
-        """Skipped -- coefficient correlation is not meaningful for GNN probe."""
+        """Skipped -- coefficient correlation is not meaningful for MLP probe."""
         logger.info(
-            "Skipping plot_cross_target_correlation -- not meaningful for GNN probe"
+            "Skipping plot_cross_target_correlation -- not meaningful for MLP probe"
         )
         return None
 
@@ -276,7 +276,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
 
         Args:
             linear_results: Linear probe TargetResult dictionary.
-            dnn_results: DNN probe results [old 2024]. Defaults to self.results [old 2024].
+            dnn_results: DNN probe results. Defaults to self.results.
 
         Returns:
             Path to saved figure, or None if no overlapping targets.
@@ -289,7 +289,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         ]
         if not targets:
             logger.warning(
-                "No overlapping targets between linear and DNN results [old 2024], "
+                "No overlapping targets between linear and DNN results, "
                 "skipping comparison bars"
             )
             return None
@@ -313,7 +313,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         )
         bars_dnn = ax.bar(
             x + width / 2, dnn_r2, width,
-            label="DNN (GNN)", color="coral", edgecolor="white"
+            label="DNN (MLP)", color="coral", edgecolor="white"
         )
 
         # Value labels on top of bars
@@ -361,7 +361,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         )
         bars_dnn = ax.bar(
             x + width / 2, dnn_rmse, width,
-            label="DNN (GNN)", color="coral", edgecolor="white"
+            label="DNN (MLP)", color="coral", edgecolor="white"
         )
 
         for bar in bars_lin:
@@ -551,20 +551,24 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
 
         Metric: |linear_residual| - |dnn_residual| per hexagon.
         Positive = DNN is better (smaller absolute error).
-        Uses the same qcut+dissolve+rasterized+EPSG:28992 approach as
-        plot_spatial_residuals.
+        Uses centroid rasterization via ``_rasterize_centroids`` for fast
+        rendering (~18x faster than dissolve approach).
 
         Args:
             target_col: Target variable name.
             linear_results: Linear probe TargetResult dictionary.
-            geometry_source: GeoDataFrame with region_id index and geometry.
+            geometry_source: Accepted for backward compatibility but ignored.
+                Geometry is derived from H3 centroids via SRAI.
 
         Returns:
             Path to saved figure, or None if insufficient data.
         """
+        from shapely import get_geometry, get_num_geometries
+        from utils import StudyAreaPaths
+
         if target_col not in linear_results:
             logger.warning(
-                f"Target {target_col} not in linear results [old 2024], "
+                f"Target {target_col} not in linear results, "
                 "skipping spatial improvement"
             )
             return None
@@ -604,73 +608,98 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         # Positive means DNN is better, negative means linear is better
         merged["improvement"] = merged["lin_abs_resid"] - merged["dnn_abs_resid"]
 
-        # Get geometry
-        if geometry_source is not None:
-            improve_gdf = gpd.GeoDataFrame(
-                merged.join(geometry_source[["geometry"]]),
-                crs="EPSG:4326",
-            )
+        n_hexagons = len(merged)
+        hex_ids = pd.Index(merged.index, name="region_id")
+
+        # ----------------------------------------------------------
+        # Load boundary for background and extent
+        # ----------------------------------------------------------
+        boundary_gdf = None
+        _fallback_paths = StudyAreaPaths("netherlands")
+        boundary_path = _fallback_paths.area_gdf_file()
+        if boundary_path.exists():
+            boundary_gdf = gpd.read_file(boundary_path)
+            logger.info(f"  Loaded boundary from {boundary_path}")
+
+        if boundary_gdf is not None:
+            if boundary_gdf.crs is None:
+                boundary_gdf = boundary_gdf.set_crs("EPSG:4326")
+            boundary_gdf = boundary_gdf.to_crs(epsg=28992)
+
+        # Filter to European Netherlands (exclude Caribbean)
+        if boundary_gdf is not None:
+            geom = boundary_gdf.geometry.iloc[0]
+            n_parts = get_num_geometries(geom)
+            if n_parts > 1:
+                euro_geom = max(
+                    (get_geometry(geom, i) for i in range(n_parts)),
+                    key=lambda g: g.area,
+                )
+                boundary_gdf = gpd.GeoDataFrame(
+                    geometry=[euro_geom], crs=boundary_gdf.crs
+                )
+
+        # Compute extent
+        if boundary_gdf is not None:
+            extent = boundary_gdf.total_bounds
         else:
             from srai.h3 import h3_to_geoseries
+            _geom = h3_to_geoseries(hex_ids)
+            _gdf = gpd.GeoDataFrame(geometry=_geom, crs="EPSG:4326").to_crs(epsg=28992)
+            extent = _gdf.total_bounds
+        minx, miny, maxx, maxy = extent
+        pad = (maxx - minx) * 0.03
+        render_extent = (minx - pad, miny - pad, maxx + pad, maxy + pad)
 
-            geom = h3_to_geoseries(merged.index)
-            geom.index = merged.index
-            improve_gdf = gpd.GeoDataFrame(
-                merged, geometry=geom, crs="EPSG:4326"
-            )
+        # ----------------------------------------------------------
+        # Map improvement values to RGB (RdBu, symmetric around 0)
+        # ----------------------------------------------------------
+        improvement = merged["improvement"]
+        vmax = float(improvement.abs().quantile(0.98))
+        if vmax == 0:
+            vmax = 1.0
 
-        improve_gdf = improve_gdf.dropna(subset=["geometry"])
-        n_hexagons = len(improve_gdf)
+        norm = TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
+        cmap = cm.get_cmap("RdBu")
+        rgba = cmap(norm(improvement.values))
+        rgb = rgba[:, :3].astype(np.float32)
 
-        if n_hexagons == 0:
-            logger.warning(
-                f"No hexagons with geometry for {target_col}, "
-                "skipping spatial improvement"
-            )
-            return None
-
-        # Reproject to RD New
-        improve_gdf = improve_gdf.to_crs(epsg=28992)
-
-        # Quantile-bin dissolve
-        n_bins = 20
-        improve_gdf["improve_bin"] = pd.qcut(
-            improve_gdf["improvement"],
-            q=n_bins,
-            labels=False,
-            duplicates="drop",
-        )
-        dissolved = improve_gdf.dissolve(by="improve_bin", aggfunc="mean")
-
-        logger.info(
-            f"  Dissolved {n_hexagons:,} hexagons into "
-            f"{len(dissolved)} improvement bins"
+        # ----------------------------------------------------------
+        # Rasterize
+        # ----------------------------------------------------------
+        raster_image = self._rasterize_centroids(
+            hex_ids=hex_ids, rgb_array=rgb,
+            extent=render_extent, width=2000, height=2400,
         )
 
+        logger.info(f"  Rasterized {n_hexagons:,} hexagons (centroid rasterization)")
+
+        # ----------------------------------------------------------
+        # Plot
+        # ----------------------------------------------------------
         fig, ax = plt.subplots(figsize=(12, 14))
         fig.set_facecolor("white")
         ax.set_facecolor("white")
 
-        # Diverging colormap: blue = DNN better, red = linear better
-        vmax = improve_gdf["improvement"].abs().quantile(0.98)
-        if vmax == 0:
-            vmax = 1.0
+        # Background boundary
+        if boundary_gdf is not None:
+            boundary_gdf.plot(
+                ax=ax, facecolor="#f0f0f0", edgecolor="#cccccc",
+                linewidth=0.5,
+            )
 
-        dissolved.plot(
-            column="improvement",
-            cmap="RdBu",
-            vmin=-vmax,
-            vmax=vmax,
-            ax=ax,
-            legend=True,
-            legend_kwds={
-                "shrink": 0.7,
-                "label": "|Linear resid| - |DNN resid|\n(+ = DNN better)",
-            },
-            edgecolor="none",
-            rasterized=True,
+        ax.imshow(
+            raster_image,
+            extent=[render_extent[0], render_extent[2],
+                    render_extent[1], render_extent[3]],
+            origin="lower",
+            aspect="equal",
+            interpolation="nearest",
+            zorder=2,
         )
 
+        ax.set_xlim(render_extent[0], render_extent[2])
+        ax.set_ylim(render_extent[1], render_extent[3])
         ax.grid(True, linewidth=0.5, alpha=0.5, color="gray")
         ax.tick_params(labelsize=8)
         ax.set_xlabel("Easting (m)")
@@ -680,10 +709,18 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         self._add_scale_bar(ax, length_km=50)
         self._add_north_arrow(ax)
 
+        # Colorbar via ScalarMappable
+        sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        fig.colorbar(
+            sm, ax=ax, shrink=0.7,
+            label="|Linear resid| - |DNN resid|\n(+ = DNN better)",
+        )
+
         # Statistics
-        n_dnn_better = int((improve_gdf["improvement"] > 0).sum())
-        n_lin_better = int((improve_gdf["improvement"] < 0).sum())
-        mean_improvement = float(improve_gdf["improvement"].mean())
+        n_dnn_better = int((improvement > 0).sum())
+        n_lin_better = int((improvement < 0).sum())
+        mean_improvement = float(improvement.mean())
 
         target_name = TARGET_NAMES.get(target_col, target_col)
         title_lines = [
@@ -691,8 +728,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
             f"Blue = DNN better ({n_dnn_better:,} hex) | "
             f"Red = Linear better ({n_lin_better:,} hex)",
             f"Mean improvement: {mean_improvement:+.5f} | "
-            f"n={n_hexagons:,} hexagons ({len(dissolved)} dissolved bins) | "
-            f"EPSG:28992",
+            f"n={n_hexagons:,} hexagons (centroid rasterized) | EPSG:28992",
         ]
         ax.set_title("\n".join(title_lines), fontsize=11, pad=10)
 
@@ -715,6 +751,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         training_curves: Optional[Dict[str, Dict[int, List[float]]]] = None,
         embeddings_path: Optional[Path] = None,
         boundary_gdf: Optional[gpd.GeoDataFrame] = None,
+        skip_spatial: bool = False,
     ) -> List[Path]:
         """
         Generate all DNN probe visualizations.
@@ -724,11 +761,14 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
 
         Args:
             geometry_source: GeoDataFrame for spatial maps.
-            linear_results: Linear probe results [old 2024] for comparison plots.
+            linear_results: Linear probe results for comparison plots.
             training_curves: Override training curves (uses self.training_curves
                 if None).
             embeddings_path: Not used by DNN visualizer (kept for API compat).
             boundary_gdf: Not used by DNN visualizer (kept for API compat).
+            skip_spatial: If True, skip spatial residual maps and spatial
+                improvement maps. Scatter plots, fold metrics, training
+                curves, and comparison bars/scatter are still generated.
 
         Returns:
             List of paths to all saved figures.
@@ -737,6 +777,8 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
             self.training_curves = training_curves
 
         logger.info(f"Generating DNN probe visualizations to {self.output_dir}")
+        if skip_spatial:
+            logger.info("  skip_spatial=True -- skipping spatial maps")
         paths: List[Path] = []
 
         # -- Per-target plots (inherited, work correctly) --
@@ -744,9 +786,10 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
             paths.append(
                 self.plot_scatter_predicted_vs_actual(target_col)
             )
-            paths.append(
-                self.plot_spatial_residuals(target_col, geometry_source)
-            )
+            if not skip_spatial:
+                paths.append(
+                    self.plot_spatial_residuals(target_col, geometry_source)
+                )
 
         # -- Cross-target plots (inherited) --
         fold_path = self.plot_fold_metrics()
@@ -777,12 +820,13 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
                 paths.append(comp_scatter)
 
             # Spatial improvement per target
-            for target_col in self.results:
-                imp_path = self.plot_spatial_improvement(
-                    target_col, linear_results, geometry_source
-                )
-                if imp_path is not None:
-                    paths.append(imp_path)
+            if not skip_spatial:
+                for target_col in self.results:
+                    imp_path = self.plot_spatial_improvement(
+                        target_col, linear_results, geometry_source
+                    )
+                    if imp_path is not None:
+                        paths.append(imp_path)
 
         # Filter out None values
         paths = [p for p in paths if p is not None]

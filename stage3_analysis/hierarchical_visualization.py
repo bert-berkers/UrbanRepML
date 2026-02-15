@@ -4,7 +4,7 @@
 Hierarchical Landscape Visualization System
 
 Creates beautiful multi-resolution plots showing:
-- Individual clustering for each H3 resolution layer
+- Individual kmeans_clustering_1layer for each H3 resolution layer
 - Combined holographic landscape smoothing all resolutions
 - Spatial embedding patterns across the hierarchical screen layers
 """
@@ -29,6 +29,9 @@ from scipy.interpolate import griddata
 import warnings
 warnings.filterwarnings('ignore')
 
+from utils import StudyAreaPaths
+from utils.paths import write_run_info
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,8 +41,23 @@ class HierarchicalLandscapeVisualizer:
     multiple H3 resolution layers - the holographic screen layers of space.
     """
 
-    def __init__(self, output_dir: str = "hierarchical_visualizations"):
-        self.output_dir = Path(output_dir)
+    def __init__(
+        self,
+        output_dir: str = "hierarchical_visualizations",
+        paths: Optional[StudyAreaPaths] = None,
+        run_descriptor: str = "default",
+    ):
+        self.paths = paths
+        self.run_id: Optional[str] = None
+
+        # When paths and run_descriptor are set, route output to a run directory
+        if paths is not None and run_descriptor:
+            self.run_id = paths.create_run_id(run_descriptor)
+            self.output_dir = paths.stage3_run(
+                "hierarchical_visualization", self.run_id
+            )
+        else:
+            self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Color schemes for different resolutions
@@ -77,7 +95,7 @@ class HierarchicalLandscapeVisualizer:
 
         df = hierarchical_embeddings[resolution]
 
-        # Get best clustering result
+        # Get best kmeans_clustering_1layer result
         best_method = None
         best_score = -1
         for method, result in cluster_results[resolution].items():
@@ -86,7 +104,7 @@ class HierarchicalLandscapeVisualizer:
                 best_method = method
 
         if best_method is None:
-            logger.warning(f"No clustering results for resolution {resolution}")
+            logger.warning(f"No kmeans_clustering_1layer results for resolution {resolution}")
             return
 
         cluster_labels = cluster_results[resolution][best_method].cluster_labels
@@ -349,7 +367,7 @@ class HierarchicalLandscapeVisualizer:
             ax.text(0.5, 0.5, f'Res {resolution}\nNo clusters', ha='center', va='center', transform=ax.transAxes)
             return
 
-        # Get best clustering
+        # Get best kmeans_clustering_1layer
         best_method = max(cluster_results.keys(),
                          key=lambda k: cluster_results[k].metrics.silhouette_score)
         cluster_labels = cluster_results[best_method].cluster_labels
@@ -534,6 +552,18 @@ class HierarchicalLandscapeVisualizer:
 
         # The masterpiece: combined holographic landscape
         self.create_combined_holographic_landscape(hierarchical_embeddings, cluster_results, bounds)
+
+        # Write run-level provenance when using a run directory
+        if self.paths is not None and self.run_id is not None:
+            write_run_info(
+                self.output_dir,
+                stage="stage3",
+                study_area=self.paths.study_area,
+                config={
+                    "resolutions": sorted(hierarchical_embeddings.keys()),
+                },
+            )
+            logger.info(f"Saved run_info.json to {self.output_dir / 'run_info.json'}")
 
         logger.info(f"ALL VISUALIZATIONS COMPLETE! Check: {self.output_dir}")
 

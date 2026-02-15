@@ -1,5 +1,5 @@
 ---
-name: stage1-stage1-modality-encoder
+name: stage1-modality-encoder
 description: "Stage 1 modality processor developer. Triggers: implementing/modifying AlphaEarth, POI, roads, GTFS, aerial imagery processors, TIFF-to-H3 pipeline, rioxarray/rasterio patterns. Enforces data-code separation."
 model: opus
 color: orange
@@ -70,18 +70,20 @@ Consistently average embeddings for ALL hexagons (including single-tile ones) to
 ## Study Area Data Layout
 ```
 data/study_areas/{area_name}/
-├── area_gdf/           # Study area boundary
-├── regions_gdf/        # H3 tessellation
-└── embeddings/
-    ├── alphaearth/     # AlphaEarth embeddings (region_id indexed)
-    ├── poi/            # POI density features
-    ├── roads/          # Road network metrics
-    └── gtfs/           # Transit accessibility
+├── area_gdf/              # Study area boundary (pairs with regions_gdf/)
+├── regions_gdf/           # H3 tessellation
+└── stage1_unimodal/       # Per-modality embeddings
+    ├── alphaearth/        # AlphaEarth embeddings (region_id indexed)
+    ├── poi/               # POI density features
+    ├── roads/             # Road network metrics
+    └── gtfs/              # Transit accessibility
 ```
+
+**Canonical path helper**: `from utils import StudyAreaPaths` — use this to get paths programmatically rather than hardcoding.
 
 ## Scratchpad Protocol (MANDATORY)
 
-You MUST write to `.claude/scratchpad/modality-encoder/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
+You MUST write to `.claude/scratchpad/stage1-modality-encoder/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
 **On start**: Read coordinator's and ego's scratchpads for context. Read own previous day's scratchpad for continuity.
 **During work**: Log processing runs, data quality issues, modality-specific decisions.
