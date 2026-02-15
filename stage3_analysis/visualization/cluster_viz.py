@@ -135,7 +135,7 @@ def find_study_area_data(study_area: str, resolution: int) -> Path:
 
 def load_and_prepare_embeddings(data_path: Path) -> Tuple[gpd.GeoDataFrame, np.ndarray]:
     """
-    Load embeddings and prepare for clustering.
+    Load embeddings and prepare for kmeans_clustering_1layer.
 
     Supports both SRAI region_id format and legacy h3_index format.
     Returns (GeoDataFrame with geometry, embedding numpy array).
@@ -190,17 +190,17 @@ def perform_minibatch_clustering(
     standardize: bool = False,
 ) -> Dict[int, np.ndarray]:
     """
-    Apply MiniBatchKMeans clustering efficiently.
+    Apply MiniBatchKMeans kmeans_clustering_1layer efficiently.
 
     Args:
         embeddings_reduced: Pre-processed embedding matrix
         n_clusters_list: List of cluster counts to compute
-        standardize: Whether to standardize before clustering
+        standardize: Whether to standardize before kmeans_clustering_1layer
 
     Returns:
         Dict mapping n_clusters -> cluster label array
     """
-    print(f"MiniBatchKMeans clustering with {len(n_clusters_list)} configurations...")
+    print(f"MiniBatchKMeans kmeans_clustering_1layer with {len(n_clusters_list)} configurations...")
 
     data = embeddings_reduced
     if standardize:
@@ -413,7 +413,7 @@ def create_hierarchical_subplot(
 
     if output_path is None:
         paths = StudyAreaPaths(study_area)
-        output_path = paths.stage3("clustering") / "hierarchical_fast"
+        output_path = paths.stage3("kmeans_clustering_1layer") / "hierarchical_fast"
     output_path.mkdir(parents=True, exist_ok=True)
 
     n_res = len(resolutions)

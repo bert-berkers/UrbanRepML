@@ -121,7 +121,7 @@ def find_study_area_data(study_area: str) -> Path:
 
 
 def load_and_prepare_embeddings(data_path: Path) -> Tuple[gpd.GeoDataFrame, np.ndarray]:
-    """Load embeddings and prepare for clustering."""
+    """Load embeddings and prepare for kmeans_clustering_1layer."""
 
     print(f"Loading embeddings from {data_path.name}...")
 
@@ -180,9 +180,9 @@ def apply_pca_reduction(embeddings: np.ndarray, n_components: int = 16) -> Tuple
 
 def perform_minibatch_clustering(embeddings_reduced: np.ndarray,
                                 n_clusters_list: List[int]) -> Dict[int, np.ndarray]:
-    """Apply MiniBatchKMeans clustering efficiently."""
+    """Apply MiniBatchKMeans kmeans_clustering_1layer efficiently."""
 
-    print(f"MiniBatchKMeans clustering with {len(n_clusters_list)} configurations...")
+    print(f"MiniBatchKMeans kmeans_clustering_1layer with {len(n_clusters_list)} configurations...")
     print(f"Using {os.cpu_count()} CPU cores")
 
     def cluster_single_k(k: int) -> Tuple[int, np.ndarray, float]:
@@ -208,7 +208,7 @@ def perform_minibatch_clustering(embeddings_reduced: np.ndarray,
 
         return k, clusters, 0  # Skip silhouette for speed
 
-    # Parallel clustering
+    # Parallel kmeans_clustering_1layer
     results = Parallel(n_jobs=-1, backend='loky')(
         delayed(cluster_single_k)(k) for k in n_clusters_list
     )
@@ -429,7 +429,7 @@ def main():
     else:
         embeddings_for_clustering, pca = apply_pca_reduction(embeddings, args.pca_components)
 
-    # Perform clustering
+    # Perform kmeans_clustering_1layer
     cluster_results = perform_minibatch_clustering(embeddings_for_clustering, cluster_counts)
 
     # Create visualizations

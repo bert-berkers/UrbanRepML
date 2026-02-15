@@ -29,6 +29,7 @@ from srai.regionalizers import H3Regionalizer
 from shapely.validation import make_valid
 
 from utils import StudyAreaPaths
+from utils.paths import write_run_info
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +52,15 @@ class LeefbaarometerConfig:
     output_path: Optional[str] = None
     regions_gdf_path: Optional[str] = None
 
+    # Run-level provenance: when non-empty, output goes to a dated run
+    # directory under stage3_analysis/leefbaarometer_target/{run_id}/ and
+    # a run_info.json is written.  Empty default keeps current flat-file
+    # behavior (target prep is less iterative than analysis probes).
+    run_descriptor: str = ""
+
     def __post_init__(self):
         paths = StudyAreaPaths(self.study_area)
+        self.run_id: Optional[str] = None
         if self.scores_csv is None:
             self.scores_csv = str(
                 paths.target("leefbaarometer")
@@ -65,9 +73,16 @@ class LeefbaarometerConfig:
                 / "geometrie-lbm3-2024" / "geometrie-lbm3-2024" / "grid 2024.gpkg"
             )
         if self.output_path is None:
-            self.output_path = str(
-                paths.target_file("leefbaarometer", self.h3_resolution, self.year)
-            )
+            if self.run_descriptor:
+                self.run_id = paths.create_run_id(self.run_descriptor)
+                run_dir = paths.stage3_run("leefbaarometer_target", self.run_id)
+                self.output_path = str(
+                    run_dir / f"leefbaarometer_h3res{self.h3_resolution}_{self.year}.parquet"
+                )
+            else:
+                self.output_path = str(
+                    paths.target_file("leefbaarometer", self.h3_resolution, self.year)
+                )
         if self.regions_gdf_path is None:
             self.regions_gdf_path = str(
                 paths.region_file(self.h3_resolution)
@@ -328,6 +343,22 @@ class LeefbaarometerTargetBuilder:
         logger.info(f"Saved target data to {out}")
         logger.info(f"  Shape: {target_df.shape}")
         logger.info(f"  Index: {target_df.index.name}")
+
+        # Write run-level provenance when using a run directory
+        if self.config.run_id is not None:
+            write_run_info(
+                out.parent,
+                stage="stage3",
+                study_area=self.config.study_area,
+                config={
+                    "year": self.config.year,
+                    "h3_resolution": self.config.h3_resolution,
+                    "target_cols": self.config.target_cols,
+                    "n_hexagons": len(target_df),
+                },
+            )
+            logger.info(f"Saved run_info.json to {out.parent / 'run_info.json'}")
+
         return out
 
     def run(self) -> gpd.GeoDataFrame:

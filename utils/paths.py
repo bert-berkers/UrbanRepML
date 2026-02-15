@@ -109,13 +109,13 @@ class StudyAreaPaths:
         """Parquet file for H3 regions at a given resolution."""
         return self.regions() / f"{self.study_area}_res{resolution}.parquet"
 
-    def boundaries(self) -> Path:
+    def area_gdf(self) -> Path:
         """Directory containing study area boundary files."""
-        return self.root / "boundaries"
+        return self.root / "area_gdf"
 
-    def boundary_file(self, fmt: str = "geojson") -> Path:
+    def area_gdf_file(self, fmt: str = "geojson") -> Path:
         """Boundary file for the study area."""
-        return self.boundaries() / f"{self.study_area}_boundary.{fmt}"
+        return self.area_gdf() / f"{self.study_area}_boundary.{fmt}"
 
     def target(self, target_name: str) -> Path:
         """Base directory for a target dataset (e.g. leefbaarometer)."""

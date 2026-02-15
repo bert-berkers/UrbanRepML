@@ -72,9 +72,9 @@ h3.cell_to_boundary(hex_id)       # Use srai.h3.h3_to_geoseries()
 
 ```
 data/study_areas/{area_name}/
-├── area_gdf/       # Study area boundary polygon
-├── regions_gdf/    # H3 tessellation output (region_id indexed)
-└── embeddings/     # Per-modality results (region_id indexed)
+├── area_gdf/            # Study area boundary (pairs with regions_gdf/)
+├── regions_gdf/         # H3 tessellation output (region_id indexed)
+└── stage1_unimodal/     # Per-modality embeddings (region_id indexed)
 ```
 
 ## Common Patterns

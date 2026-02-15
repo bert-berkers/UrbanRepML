@@ -35,7 +35,7 @@ Two multi-resolution U-Net architectures fuse modality embeddings using H3 hiera
 
 Post-training analysis, probing, and visualization:
 
-- **Linear Probe** — fits linear models (LinearRegression or ElasticNet with Optuna) from embeddings to external targets. Currently probing against 6 [Leefbaarometer](https://www.leefbaarometer.nl/) livability indicators across the Netherlands.
+- **Linear Probe** — fits OLS linear regression with spatial block cross-validation from embeddings to external targets. Currently probing against 6 [Leefbaarometer](https://www.leefbaarometer.nl/) livability indicators across the Netherlands.
 - **Linear Probe Viz** — coefficient bar charts, heatmaps, faceted cross-target comparisons, spatial residual maps (quantile-binned dissolve), RGB top-3 coefficient maps.
 - **Clustering** — hierarchical multi-scale clustering across H3 resolutions with landscape visualization.
 

@@ -135,7 +135,7 @@ def main():
             logger.info("\nNext steps:")
             logger.info("1. Generate roads embeddings: python scripts/generate_roads_netherlands.py")
             logger.info("2. Run full pipeline with model training")
-            logger.info("3. Perform clustering and analysis")
+            logger.info("3. Perform kmeans_clustering_1layer and analysis")
         else:
             logger.error("\n✗ Pipeline test failed")
             

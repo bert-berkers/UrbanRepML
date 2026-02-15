@@ -14,6 +14,7 @@ from datetime import datetime
 from shapely.ops import unary_union
 
 from utils import StudyAreaPaths
+from utils.paths import write_run_info
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class UrbanEmbeddingAnalyzer:
             dpi: int = 600,
             figsize: tuple = (12, 12),
             paths: Optional[StudyAreaPaths] = None,
+            run_descriptor: str = "default",
     ):
         """
         Initialize the analyzer.
@@ -41,15 +43,25 @@ class UrbanEmbeddingAnalyzer:
             paths: Optional StudyAreaPaths for centralized path management.
                    If provided, overrides output_dir-based path construction
                    for embeddings and analysis output.
+            run_descriptor: Run descriptor for provenance. When non-empty and
+                   paths is provided, output goes to a dated run directory
+                   under stage3_analysis/analytics/{run_id}/.
         """
-        self.output_dir = output_dir
         self.city_name = city_name
         self.cmap = cmap
         self.dpi = dpi
         self.figsize = figsize
         self.paths = paths
+        self.run_id: Optional[str] = None
 
-        self.plot_dir = output_dir / "plots" / city_name
+        # When paths and run_descriptor are set, route output to a run directory
+        if paths is not None and run_descriptor:
+            self.run_id = paths.create_run_id(run_descriptor)
+            self.output_dir = paths.stage3_run("analytics", self.run_id)
+        else:
+            self.output_dir = output_dir
+
+        self.plot_dir = self.output_dir / "plots" / city_name
         self.plot_dir.mkdir(parents=True, exist_ok=True)
 
     def save_embeddings(
@@ -110,6 +122,21 @@ class UrbanEmbeddingAnalyzer:
             saved_paths[res] = output_path
             logger.info(f"Saved embeddings for resolution {res} to {output_path}")
 
+        # Write run-level provenance when using a run directory
+        if self.run_id is not None and self.paths is not None:
+            write_run_info(
+                self.output_dir,
+                stage="stage3",
+                study_area=self.paths.study_area,
+                config={
+                    "city_name": self.city_name,
+                    "resolutions": list(embeddings.keys()),
+                    "cmap": self.cmap,
+                    "dpi": self.dpi,
+                },
+            )
+            logger.info(f"Saved run_info.json to {self.output_dir / 'run_info.json'}")
+
         return saved_paths
 
 
@@ -157,7 +184,7 @@ class UrbanEmbeddingAnalyzer:
                 # Determine number of clusters for current resolution
                 n_clusters_res = n_clusters.get(resolution, 5)  # Default to 5 if not specified
 
-                # Perform clustering
+                # Perform kmeans_clustering_1layer
                 kmeans = KMeans(n_clusters=n_clusters_res, random_state=42)
                 labels = kmeans.fit_predict(valid_embeddings)
 
@@ -256,7 +283,7 @@ class UrbanEmbeddingAnalyzer:
             valid_regions = regions[regions['in_study_area'] == True]
             valid_embeddings = emb[valid_regions.index]
 
-            # Perform clustering using KMeans
+            # Perform kmeans_clustering_1layer using KMeans
             kmeans = KMeans(n_clusters=n_clusters, random_state=42)
             labels = kmeans.fit_predict(valid_embeddings)
 
@@ -281,7 +308,7 @@ class UrbanEmbeddingAnalyzer:
 
         # Save statistics
         if self.paths is not None:
-            output_path = self.paths.stage3("clustering") / 'cluster_statistics.parquet'
+            output_path = self.paths.stage3("kmeans_clustering_1layer") / 'cluster_statistics.parquet'
         else:
             output_path = self.output_dir / 'analysis' / self.city_name / 'cluster_statistics.parquet'
         output_path.parent.mkdir(parents=True, exist_ok=True)

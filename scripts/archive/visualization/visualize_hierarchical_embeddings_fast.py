@@ -91,7 +91,7 @@ def load_resolution_embeddings(study_area: str, resolution: int, year: str = "20
 
 def perform_fast_clustering(embeddings: np.ndarray, n_clusters: int, use_pca: bool = True,
                            pca_components: int = 16) -> Tuple[np.ndarray, float]:
-    """Perform fast MiniBatch K-Means clustering."""
+    """Perform fast MiniBatch K-Means kmeans_clustering_1layer."""
 
     # Optional PCA for speed
     if use_pca and embeddings.shape[1] > pca_components:
@@ -199,7 +199,7 @@ def visualize_hierarchical_fast(
     crs: str = 'EPSG:28992'
 ):
     """
-    Main visualization pipeline for hierarchical multi-resolution clustering.
+    Main visualization pipeline for hierarchical multi-resolution kmeans_clustering_1layer.
 
     Args:
         study_area: Study area name (e.g., 'netherlands')

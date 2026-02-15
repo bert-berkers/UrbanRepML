@@ -2,7 +2,7 @@
 Stage 3: Analysis Package
 =========================
 
-Analysis, clustering, visualization, and validation utilities for urban embeddings.
+Analysis, kmeans_clustering_1layer, visualization, and validation utilities for urban embeddings.
 """
 
 from .analytics import UrbanEmbeddingAnalyzer

@@ -22,6 +22,7 @@ from typing import Dict, List, Tuple, Optional
 import numpy as np
 
 from utils import StudyAreaPaths
+from utils.paths import write_run_info
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +34,18 @@ class EmbeddingValidator:
         self,
         base_dir: str = "data/processed",
         paths: Optional[StudyAreaPaths] = None,
+        run_descriptor: str = "",
     ):
         # NOTE: This class uses legacy directory layout (data/processed/).
         # When a StudyAreaPaths is provided, paths.root is used instead.
+        self.paths = paths
+        self.run_id: Optional[str] = None
+        self.run_dir: Optional[Path] = None
+
+        if paths is not None and run_descriptor:
+            self.run_id = paths.create_run_id(run_descriptor)
+            self.run_dir = paths.stage3_run("validation", self.run_id)
+
         if paths is not None:
             self.base_dir = paths.root
         else:
@@ -216,7 +226,20 @@ class EmbeddingValidator:
         return results
 
     def generate_report(self, output_path: Optional[str] = None):
-        """Generate a comprehensive validation report."""
+        """Generate a comprehensive validation report.
+
+        When ``paths`` and ``run_descriptor`` were provided at construction,
+        the report is written to the run directory and ``run_info.json`` is
+        saved alongside it.
+
+        Args:
+            output_path: Override output path. When None and a run directory
+                is configured, defaults to ``{run_dir}/validation_report.txt``.
+        """
+        # Default output_path to run directory when configured
+        if output_path is None and self.run_dir is not None:
+            output_path = str(self.run_dir / "validation_report.txt")
+
         logger.info("Generating validation report...")
 
         report = []
@@ -285,6 +308,18 @@ class EmbeddingValidator:
             output_file.parent.mkdir(parents=True, exist_ok=True)
             output_file.write_text(report_text, encoding='utf-8')
             logger.info(f"Report saved to {output_file}")
+
+        # Write run-level provenance when using a run directory
+        if self.run_dir is not None and self.paths is not None:
+            write_run_info(
+                self.run_dir,
+                stage="stage3",
+                study_area=self.paths.study_area,
+                config={
+                    "modalities_checked": available_modalities,
+                },
+            )
+            logger.info(f"Saved run_info.json to {self.run_dir / 'run_info.json'}")
 
         print(report_text)
         return report_text
