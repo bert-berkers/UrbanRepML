@@ -112,7 +112,7 @@ def create_netherlands_config():
         },
 
         # Output directory
-        'output_dir': 'results/netherlands_lattice_unet',
+        'output_dir': 'results [old 2024]/netherlands_lattice_unet',
 
         # Cache directory
         'cache_dir': 'cache',

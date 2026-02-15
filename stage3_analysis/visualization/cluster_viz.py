@@ -39,6 +39,8 @@ except ImportError:
 # SRAI for H3 geometry creation (never use h3 directly)
 from srai.h3 import h3_to_geoseries
 
+from utils import StudyAreaPaths
+
 matplotlib.use('Agg')
 warnings.filterwarnings('ignore')
 
@@ -60,6 +62,7 @@ COLORMAP_COMBINATIONS = [
 ]
 
 # Study area configurations — merged from all three original scripts
+# data_dir and output_dir are now derived from StudyAreaPaths at runtime.
 STUDY_AREA_CONFIG = {
     'netherlands': {
         'file_pattern_by_res': {
@@ -67,8 +70,6 @@ STUDY_AREA_CONFIG = {
             9: 'netherlands_res9_*.parquet',
             10: 'netherlands_res10_*.parquet',
         },
-        'data_dir': 'data/study_areas/netherlands/embeddings/alphaearth',
-        'output_dir': 'results/visualizations/netherlands_clusters',
         'crs': 'EPSG:28992',
         'title_prefix': 'Netherlands',
     },
@@ -77,8 +78,6 @@ STUDY_AREA_CONFIG = {
             8: 'cascadia_coastal_forests_2021_res8_final.parquet',
             10: 'cascadia_res10_*.parquet',
         },
-        'data_dir': 'data/study_areas/cascadia/embeddings/alphaearth',
-        'output_dir': 'results/visualizations/cascadia_clusters',
         'crs': 'EPSG:3857',
         'title_prefix': 'Cascadia',
     },
@@ -87,8 +86,6 @@ STUDY_AREA_CONFIG = {
             8: 'prd_res8_*.parquet',
             10: 'prd_res10_2023_FIXED_*.parquet',
         },
-        'data_dir': 'data/study_areas/pearl_river_delta/embeddings/alphaearth',
-        'output_dir': 'results/visualizations/prd_clusters',
         'crs': 'EPSG:3857',
         'title_prefix': 'Pearl River Delta',
     },
@@ -113,8 +110,8 @@ def find_study_area_data(study_area: str, resolution: int) -> Path:
         raise ValueError(f"Study area '{study_area}' not supported. Available: {available}")
 
     config = STUDY_AREA_CONFIG[study_area]
-    project_root = Path(__file__).parent.parent.parent
-    data_dir = project_root / config['data_dir']
+    paths = StudyAreaPaths(study_area)
+    data_dir = paths.stage1("alphaearth")
 
     # Try resolution-specific pattern first
     patterns = config.get('file_pattern_by_res', {})
@@ -415,7 +412,8 @@ def create_hierarchical_subplot(
         n_clusters_dict = {r: DEFAULT_HIERARCHICAL_CLUSTERS.get(r, 10) for r in resolutions}
 
     if output_path is None:
-        output_path = Path(f'results/visualizations/hierarchical_fast/{study_area}')
+        paths = StudyAreaPaths(study_area)
+        output_path = paths.stage3("clustering") / "hierarchical_fast"
     output_path.mkdir(parents=True, exist_ok=True)
 
     n_res = len(resolutions)

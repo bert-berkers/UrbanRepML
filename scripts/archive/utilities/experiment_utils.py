@@ -114,7 +114,7 @@ class ExperimentManager:
 ```
 ├── config.yaml              # Experiment configuration
 ├── data/                     # Experiment-specific data
-├── analysis/                 # Analysis results and metrics  
+├── analysis/                 # Analysis results [old 2024] and metrics  
 ├── plots/                    # All visualizations
 ├── logs/                     # Processing logs
 └── models/                   # Trained models and checkpoints
@@ -130,7 +130,7 @@ with open('config.yaml', 'r') as f:
 
 ## Notes
 - All outputs should be saved within this experiment folder
-- Update this README with key findings and results
+- Update this README with key findings and results [old 2024]
 """
         
         with open(exp_path / "README.md", 'w') as f:
@@ -142,8 +142,8 @@ def get_experiment_config(exp_path: str) -> Dict:
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
-def save_results(exp_path: str, results: Dict, filename: str = "results.yaml"):
-    """Save results to experiment folder."""
+def save_results(exp_path: str, results: Dict, filename: str = "results [old 2024].yaml"):
+    """Save results [old 2024] to experiment folder."""
     results_path = Path(exp_path) / "analysis" / filename
     with open(results_path, 'w') as f:
         yaml.dump(results, f, default_flow_style=False, indent=2)

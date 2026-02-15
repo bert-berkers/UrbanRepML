@@ -8,7 +8,7 @@ Validates the fix from 2026-02-13:
 - Dissolve optimization for faster rendering
 - 8 color levels per channel (512 max bins)
 
-Loads existing linear probe results (predictions + coefficients)
+Loads existing linear probe results [old 2024] (predictions + coefficients)
 and regenerates ONLY the rgb_top3 maps.
 """
 
@@ -91,9 +91,9 @@ def main():
     logger.info(f"Embeddings: {EMBEDDINGS_PATH}")
     logger.info(f"Boundary: {BOUNDARY_PATH}")
 
-    # Load existing results
+    # Load existing results [old 2024]
     results = load_results_from_disk()
-    logger.info(f"Loaded results for {len(results)} targets: {list(results.keys())}")
+    logger.info(f"Loaded results [old 2024] for {len(results)} targets: {list(results.keys())}")
 
     # Load boundary
     boundary_gdf = gpd.read_parquet(BOUNDARY_PATH)

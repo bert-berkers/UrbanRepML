@@ -321,7 +321,7 @@ class DNNProbeRegressor:
         ...
 
     def save_results(self, output_dir: Optional[Path] = None) -> Path:
-        """Save results in same format as linear probe."""
+        """Save results [old 2024] in same format as linear probe."""
         ...
 
     def compare_with_linear(

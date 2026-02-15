@@ -3,7 +3,7 @@
 """
 DNN Probe Visualization: GNN-specific Analysis Plots
 
-Extends LinearProbeVisualizer for GNN probe results. Coefficient-based
+Extends LinearProbeVisualizer for GNN probe results [old 2024]. Coefficient-based
 visualizations (meaningless for neural networks) are gracefully skipped,
 while prediction-based plots are inherited unchanged. Adds DNN-specific
 visualizations: training curves, linear-vs-DNN comparison bars,
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 class DNNProbeVisualizer(LinearProbeVisualizer):
     """
-    Visualization for DNN (GNN) probe regression results.
+    Visualization for DNN (GNN) probe regression results [old 2024].
 
     Inherits from LinearProbeVisualizer. Coefficient-based methods are
     overridden to return None with an info log, since GNN probes have
@@ -276,7 +276,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
 
         Args:
             linear_results: Linear probe TargetResult dictionary.
-            dnn_results: DNN probe results. Defaults to self.results.
+            dnn_results: DNN probe results [old 2024]. Defaults to self.results [old 2024].
 
         Returns:
             Path to saved figure, or None if no overlapping targets.
@@ -289,7 +289,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         ]
         if not targets:
             logger.warning(
-                "No overlapping targets between linear and DNN results, "
+                "No overlapping targets between linear and DNN results [old 2024], "
                 "skipping comparison bars"
             )
             return None
@@ -564,7 +564,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         """
         if target_col not in linear_results:
             logger.warning(
-                f"Target {target_col} not in linear results, "
+                f"Target {target_col} not in linear results [old 2024], "
                 "skipping spatial improvement"
             )
             return None
@@ -724,7 +724,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
 
         Args:
             geometry_source: GeoDataFrame for spatial maps.
-            linear_results: Linear probe results for comparison plots.
+            linear_results: Linear probe results [old 2024] for comparison plots.
             training_curves: Override training curves (uses self.training_curves
                 if None).
             embeddings_path: Not used by DNN visualizer (kept for API compat).

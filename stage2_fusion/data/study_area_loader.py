@@ -16,6 +16,8 @@ import torch
 import json
 from datetime import datetime
 
+from utils.paths import StudyAreaPaths
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,30 +26,37 @@ class StudyAreaLoader:
     Unified loader for study area data.
 
     Provides consistent interface for loading regions, embeddings,
-    and saving processed results.
+    and saving processed results [old 2024].
     """
 
-    def __init__(self, study_area: str, base_path: str = "data/study_areas"):
+    def __init__(self, study_area: str, base_path: str = "data/study_areas",
+                 study_area_paths: Optional[StudyAreaPaths] = None):
         """
         Initialize loader for specific study area.
 
         Args:
             study_area: Name of study area (e.g., 'netherlands')
-            base_path: Base path to study areas directory
+            base_path: Base path to study areas directory (ignored if study_area_paths provided)
+            study_area_paths: Optional pre-constructed StudyAreaPaths instance
         """
         self.study_area = study_area
-        self.base_path = Path(base_path) / study_area
+
+        # Use provided StudyAreaPaths or construct one
+        if study_area_paths is not None:
+            self._study_area_paths = study_area_paths
+        else:
+            self._study_area_paths = StudyAreaPaths(study_area)
+
+        self.base_path = self._study_area_paths.root
 
         if not self.base_path.exists():
             raise ValueError(f"Study area path does not exist: {self.base_path}")
 
-        # Define standard paths
+        # Define standard paths (delegating to StudyAreaPaths where possible)
         self.paths = {
-            'boundaries': self.base_path / 'boundaries',
-            'regions': self.base_path / 'regions_gdf',
-            'embeddings': self.base_path / 'embeddings',
+            'boundaries': self._study_area_paths.boundaries(),
+            'regions': self._study_area_paths.regions(),
             'models': self.base_path / 'models',
-            'results': self.base_path / 'results',
             'metadata': self.base_path / 'metadata'
         }
 
@@ -127,7 +136,7 @@ class StudyAreaLoader:
         Returns:
             DataFrame with embeddings
         """
-        embeddings_dir = self.paths['embeddings'] / modality
+        embeddings_dir = self._study_area_paths.stage1(modality)
 
         if not embeddings_dir.exists():
             raise FileNotFoundError(f"Embeddings directory not found: {embeddings_dir}")
@@ -168,7 +177,7 @@ class StudyAreaLoader:
             metadata: Optional metadata to save alongside
         """
         # Create output directory
-        output_dir = self.paths['embeddings'] / model_name
+        output_dir = self._study_area_paths.model_embeddings(model_name)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Convert to DataFrame if needed
@@ -324,7 +333,7 @@ class StudyAreaLoader:
 
         # Check each modality
         for modality in ['alphaearth', 'poi', 'roads', 'gtfs', 'lattice_unet']:
-            modality_dir = self.paths['embeddings'] / modality
+            modality_dir = self._study_area_paths.stage1(modality)
             if modality_dir.exists():
                 files = list(modality_dir.glob("*.parquet"))
                 summary['stage1_modalities'][modality] = {

@@ -46,6 +46,8 @@ from stage3_analysis.linear_probe import (
     FoldMetrics,
     TargetResult,
 )
+from utils import StudyAreaPaths
+from utils.paths import write_run_info
 
 logger = logging.getLogger(__name__)
 
@@ -104,24 +106,31 @@ class DNNProbeConfig:
     target_path: Optional[str] = None
     output_dir: Optional[str] = None
 
+    # Run-level provenance: if non-empty, a dated run directory is created
+    # under stage3_analysis/dnn_probe/{run_id}/ instead of writing to the
+    # flat analysis directory.  When empty (default), behaviour is unchanged.
+    run_descriptor: str = ""
+
     # Device
     device: str = "auto"  # "auto", "cuda", "cpu"
 
     def __post_init__(self):
+        paths = StudyAreaPaths(self.study_area)
+        self.run_id: Optional[str] = None
         if self.embeddings_path is None:
-            self.embeddings_path = (
-                f"data/study_areas/{self.study_area}/embeddings/alphaearth/"
-                f"{self.study_area}_res{self.h3_resolution}_{self.year}.parquet"
+            self.embeddings_path = str(
+                paths.embedding_file("alphaearth", self.h3_resolution, self.year)
             )
         if self.target_path is None:
-            self.target_path = (
-                f"data/study_areas/{self.study_area}/target/leefbaarometer/"
-                f"leefbaarometer_h3res{self.h3_resolution}_{self.year}.parquet"
+            self.target_path = str(
+                paths.target_file("leefbaarometer", self.h3_resolution, self.year)
             )
         if self.output_dir is None:
-            self.output_dir = (
-                f"data/study_areas/{self.study_area}/analysis/dnn_probe"
-            )
+            if self.run_descriptor:
+                self.run_id = paths.create_run_id(self.run_descriptor)
+                self.output_dir = str(paths.stage3_run("dnn_probe", self.run_id))
+            else:
+                self.output_dir = str(paths.stage3("dnn_probe"))
         if self.device == "auto":
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -288,7 +297,8 @@ class DNNProbeRegressor:
 
         # Identify embedding feature columns (A00, A01, ..., A63)
         self.feature_names = [
-            c for c in emb_df.columns if c.startswith("A") and c[1:].isdigit()
+            c for c in emb_df.columns
+            if (c.startswith("A") and c[1:].isdigit()) or c.startswith("emb_")
         ]
         if not self.feature_names:
             # Fallback: numeric columns excluding metadata
@@ -1008,6 +1018,17 @@ class DNNProbeRegressor:
             json.dump(config_dict, f, indent=2)
 
         logger.info(f"Saved config to {out_dir / 'config.json'}")
+
+        # Write run-level provenance when using a run directory
+        if self.config.run_id is not None:
+            write_run_info(
+                out_dir,
+                stage="stage3",
+                study_area=self.config.study_area,
+                config=config_dict,
+                upstream_runs={"stage1/alphaearth": "unknown"},
+            )
+            logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
 
         # ----- Training curves per target/fold -----
         if self.training_curves:

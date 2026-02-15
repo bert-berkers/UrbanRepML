@@ -192,7 +192,7 @@ def visualize_hierarchical_fast(
     resolutions: List[int] = [5, 6, 7, 8, 9, 10],
     n_clusters_dict: Dict[int, int] = None,
     colormap: str = 'tab20',
-    output_dir: str = 'results/visualizations/hierarchical_fast',
+    output_dir: str = 'results [old 2024]/visualizations/hierarchical_fast',
     year: str = "2022",
     use_pca: bool = True,
     pca_components: int = 16,
@@ -315,7 +315,7 @@ def create_individual_resolution_maps(
     resolutions: List[int] = [5, 6, 7, 8, 9, 10],
     n_clusters_dict: Dict[int, int] = None,
     colormap: str = 'tab20',
-    output_dir: str = 'results/visualizations/hierarchical_fast',
+    output_dir: str = 'results [old 2024]/visualizations/hierarchical_fast',
     year: str = "2022",
     use_pca: bool = True,
     pca_components: int = 16,
@@ -389,7 +389,7 @@ def main():
                        help='Comma-separated cluster counts per resolution')
     parser.add_argument('--colormap', type=str, default='tab20',
                        help='Matplotlib colormap')
-    parser.add_argument('--output-dir', type=str, default='results/visualizations/hierarchical_fast',
+    parser.add_argument('--output-dir', type=str, default='results [old 2024]/visualizations/hierarchical_fast',
                        help='Output directory')
     parser.add_argument('--year', type=str, default='2022',
                        help='Data year')

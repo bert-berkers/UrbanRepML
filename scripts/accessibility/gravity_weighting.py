@@ -182,7 +182,7 @@ if __name__ == "__main__":
         args.exponent
     )
     
-    # Save results
+    # Save results [old 2024]
     output_path = f"data/study_areas/{args.study_area}/urban_embedding/graphs/gravity_weighted_res{args.resolution}.parquet"
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     weighted_graph.to_parquet(output_path)

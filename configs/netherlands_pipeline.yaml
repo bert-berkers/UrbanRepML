@@ -95,7 +95,7 @@ model:
     spatial_weight: 0.1
 
 output:
-  base_dir: data/study_areas/netherlands/stage2_fusion/results
+  base_dir: data/study_areas/netherlands/stage2_fusion/results [old 2024]
   save_intermediate: true
   intermediate_dir: data/study_areas/netherlands/stage2_fusion/intermediate
   save:

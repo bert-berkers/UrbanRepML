@@ -99,5 +99,5 @@ if __name__ == "__main__":
         rebuild_delft_data()
     
     print("\n🎉 Pipeline rebuild completed!")
-    print("   All results organized in experiments/ folder")
+    print("   All results [old 2024] organized in experiments/ folder")
     print("   See PROJECT_REBUILD_GUIDE.md for usage instructions")

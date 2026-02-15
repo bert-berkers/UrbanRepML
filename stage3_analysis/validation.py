@@ -21,14 +21,25 @@ import h3 as _h3
 from typing import Dict, List, Tuple, Optional
 import numpy as np
 
+from utils import StudyAreaPaths
+
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingValidator:
     """Validate embeddings across different modalities."""
 
-    def __init__(self, base_dir: str = "data/processed"):
-        self.base_dir = Path(base_dir)
+    def __init__(
+        self,
+        base_dir: str = "data/processed",
+        paths: Optional[StudyAreaPaths] = None,
+    ):
+        # NOTE: This class uses legacy directory layout (data/processed/).
+        # When a StudyAreaPaths is provided, paths.root is used instead.
+        if paths is not None:
+            self.base_dir = paths.root
+        else:
+            self.base_dir = Path(base_dir)
         self.embeddings_dir = self.base_dir / "embeddings"
         self.intermediate_dir = self.base_dir / "intermediate embeddings stage1_modalities"
 

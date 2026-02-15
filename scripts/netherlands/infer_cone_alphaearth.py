@@ -13,7 +13,7 @@ Key Strategy:
 
 Usage:
     python scripts/netherlands/infer_cone_alphaearth.py \
-        --checkpoint data/study_areas/netherlands/results/cone_alphaearth/checkpoints/best.pth
+        --checkpoint data/study_areas/netherlands/results [old 2024]/cone_alphaearth/checkpoints/best.pth
 """
 
 import sys
@@ -92,7 +92,7 @@ class ConeInferenceAggregator:
 
         # Setup output directory
         if output_dir is None:
-            output_dir = f"data/study_areas/{study_area}/results/cone_alphaearth/embeddings"
+            output_dir = f"data/study_areas/{study_area}/results [old 2024]/cone_alphaearth/embeddings"
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 

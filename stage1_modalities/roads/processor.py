@@ -35,6 +35,7 @@ warnings.filterwarnings('ignore', category=UserWarning)
 
 
 from stage1_modalities.base import ModalityProcessor
+from utils import StudyAreaPaths
 
 
 # Default road types to consider
@@ -72,7 +73,8 @@ class RoadsProcessor(ModalityProcessor):
         
         # Intermediate data saving
         self.save_intermediate = config.get('save_intermediate', False)
-        self.intermediate_dir = Path(config.get('intermediate_dir', 'data/study_areas/default/embeddings/intermediate/roads'))
+        _roads_paths = StudyAreaPaths(config.get('study_area', 'default'))
+        self.intermediate_dir = Path(config.get('intermediate_dir', str(_roads_paths.intermediate("roads"))))
         
         logger.info(f"Initialized RoadsProcessor with Highway2Vec (embedding_size={self.embedding_size})")
         logger.info(f"Highway2Vec epochs: {self.highway2vec_epochs}, batch_size: {self.highway2vec_batch_size}")
@@ -376,7 +378,7 @@ class RoadsProcessor(ModalityProcessor):
         regions_gdf.to_parquet(regions_path)
         logger.info(f"Saved regions_gdf to {regions_path}")
         
-        # Save joint (spatial join results)
+        # Save joint (spatial join results [old 2024])
         joint_path = joint_dir / f"{base_name}_joint.parquet"
         joint_gdf.to_parquet(joint_path)
         logger.info(f"Saved joint_gdf to {joint_path}")
@@ -392,7 +394,8 @@ class RoadsProcessor(ModalityProcessor):
         
         # Use configured output dir if not specified
         if output_dir is None:
-            output_dir = self.config.get('output_dir', 'data/study_areas/default/embeddings/roads')
+            _roads_paths = StudyAreaPaths(self.config.get('study_area', 'default'))
+            output_dir = self.config.get('output_dir', str(_roads_paths.stage1("roads")))
         
         # Load study area
         if isinstance(study_area, str):

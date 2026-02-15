@@ -486,7 +486,7 @@ def merge_results_with_regions(
 
 def validate_and_save(gdf: gpd.GeoDataFrame, metadata: Dict, study_area: str, h3_resolution: int,
                       year_filter: Optional[str], logger: logging.Logger) -> bool:
-    logger.info("Validating results...")
+    logger.info("Validating results [old 2024]...")
     if len(gdf) == 0:
         logger.error("Validation Failed: No data generated.")
         return False
@@ -499,7 +499,7 @@ def validate_and_save(gdf: gpd.GeoDataFrame, metadata: Dict, study_area: str, h3
         logger.error("Validation Failed: NaN values found in embeddings.")
         return False
 
-    logger.info("Validation passed. Saving results...")
+    logger.info("Validation passed. Saving results [old 2024]...")
     output_dir = f"data/study_areas/{study_area}/embeddings/alphaearth"
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

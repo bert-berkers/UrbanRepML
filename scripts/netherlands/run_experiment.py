@@ -3,7 +3,7 @@
 South Holland FSI 99% Experiment.
 
 This experiment focuses on the top 1% densest urban areas in South Holland,
-optimized for faster runtime while maintaining high quality results.
+optimized for faster runtime while maintaining high quality results [old 2024].
 """
 
 import sys

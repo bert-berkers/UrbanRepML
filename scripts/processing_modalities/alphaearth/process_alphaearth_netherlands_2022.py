@@ -271,10 +271,10 @@ def main():
         gdf_clustered, clustering_results = apply_clustering(gdf, k_values)
         
         # Create output directories
-        results_dir = Path('results/plots/netherlands')
+        results_dir = Path('results [old 2024]/plots/netherlands')
         results_dir.mkdir(parents=True, exist_ok=True)
         
-        embeddings_dir = Path('results/embeddings/netherlands')
+        embeddings_dir = Path('results [old 2024]/embeddings/netherlands')
         embeddings_dir.mkdir(parents=True, exist_ok=True)
         
         # Create visualizations
@@ -297,7 +297,7 @@ def main():
         print(f"  - Processed hexagons: {len(gdf)}")
         print(f"  - H3 resolution: 8")
         print(f"  - Embedding dimensions: 64")
-        print(f"  - Clustering results:")
+        print(f"  - Clustering results [old 2024]:")
         for k, results in clustering_results.items():
             print(f"    K={k}: Silhouette={results['silhouette']:.3f}")
         print(f"\nOutput files:")

@@ -23,12 +23,12 @@ Superseded By: train_lattice_unet_res10_cones.py (cone-based training)
 
 Original Description:
 Trains a Graph Convolutional UNet on hexagonal lattice with 5-ring connectivity.
-Uses SRAI for all spatial operations and stores results in data folder.
+Uses SRAI for all spatial operations and stores results [old 2024] in data folder.
 
 Usage:
     python scripts/netherlands/train_lattice_unet_res10.py  [LEGACY - use cone version]
 
-Outputs saved to: data/study_areas/netherlands/results/lattice_unet_res10/
+Outputs saved to: data/study_areas/netherlands/results [old 2024]/lattice_unet_res10/
 """
 
 import sys
@@ -123,7 +123,7 @@ class LatticeUNetTrainer:
         logger.info(f"  Device: {self.device}")
 
         # Setup paths
-        self.output_dir = Path(f"data/study_areas/{study_area}/results/lattice_unet_res{resolution}")
+        self.output_dir = Path(f"data/study_areas/{study_area}/results [old 2024]/lattice_unet_res{resolution}")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         (self.output_dir / "checkpoints").mkdir(exist_ok=True)

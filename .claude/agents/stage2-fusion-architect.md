@@ -1,5 +1,5 @@
 ---
-name: stage2-fusion-architect
+name: stage2-stage2-fusion-architect
 description: "Stage 2 model developer. Triggers: U-Net models (FullAreaUNet, ConeBatchingUNet, AccessibilityUNet), cone-based training, graph construction, loss functions, training pipeline architecture, PyTorch Geometric patterns, multi-resolution processing."
 model: opus
 color: red

@@ -383,7 +383,7 @@ def main():
         logger.info("Next steps:")
         logger.info("1. Review the high-resolution processed embeddings")
         logger.info("2. Create cartographic visualizations")
-        logger.info("3. Compare with resolution 8 results for analysis")
+        logger.info("3. Compare with resolution 8 results [old 2024] for analysis")
         logger.info("4. Process other stage1_modalities if needed")
 
         return 0

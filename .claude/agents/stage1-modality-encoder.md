@@ -1,5 +1,5 @@
 ---
-name: stage1-modality-encoder
+name: stage1-stage1-modality-encoder
 description: "Stage 1 modality processor developer. Triggers: implementing/modifying AlphaEarth, POI, roads, GTFS, aerial imagery processors, TIFF-to-H3 pipeline, rioxarray/rasterio patterns. Enforces data-code separation."
 model: opus
 color: orange

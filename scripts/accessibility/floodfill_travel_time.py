@@ -134,7 +134,7 @@ if __name__ == "__main__":
         args.cutoff
     )
     
-    # Save results
+    # Save results [old 2024]
     output_path = f"data/study_areas/{args.study_area}/urban_embedding/graphs/travel_times_res{args.resolution}.parquet"
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     travel_times.to_parquet(output_path)

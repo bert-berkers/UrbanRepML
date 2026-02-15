@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class EncodingResult:
-    """Container for encoding results with hierarchical features."""
+    """Container for encoding results [old 2024] with hierarchical features."""
     embeddings: torch.Tensor  # Final embeddings
     patch_features: Optional[torch.Tensor] = None  # Patch-level features
     cls_token: Optional[torch.Tensor] = None  # Global class token
@@ -238,7 +238,7 @@ class DINOv3Encoder:
             with torch.no_grad():
                 if self.extract_hierarchical:
                     batch_results = self._extract_hierarchical_features(batch_tensors)
-                    # Split batch results
+                    # Split batch results [old 2024]
                     for j in range(len(batch)):
                         results.append(EncodingResult(
                             embeddings=batch_results.embeddings[j],
