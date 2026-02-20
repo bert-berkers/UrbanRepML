@@ -5,6 +5,8 @@ paths:
   - "stage3_analysis/**"
   - "scripts/processing_modalities/**"
   - "scripts/accessibility/**"
+  - "scripts/netherlands/**"
+  - "utils/**"
 ---
 
 # SRAI-First Spatial Convention
@@ -18,7 +20,9 @@ paths:
 
 ## NEVER use h3 for
 
-- Tessellation (`h3.polyfill`, `h3.cell_to_boundary`) -- use `srai.regionalizers.H3Regionalizer`
+- Tessellation (`h3.polyfill`) -- use `srai.regionalizers.H3Regionalizer`
+- Converting cells to geometry (`h3.cell_to_boundary`) -- use `SpatialDB` for bulk queries,
+  `srai.h3.h3_to_geoseries` for ad-hoc fallback
 - Neighborhood queries (`h3.grid_disk`, `h3.grid_ring`) -- use `srai.neighbourhoods.H3Neighbourhood`
 - Spatial joins or regionalization -- use SRAI's built-in tools
 

@@ -50,6 +50,11 @@ You consume Stage 2 output. You do not modify models or training pipelines.
 - `stage3_analysis/dnn_probe.py` -- Deep neural network probe with MLP architecture
 - `stage3_analysis/dnn_probe_viz.py` -- Visualization for DNN probe results, including spatial error maps and target visualizations
 - `stage3_analysis/leefbaarometer_target.py` -- Leefbaarometer target data loading and processing
+- `stage3_analysis/classification_probe.py` -- Logistic regression classification probe for urban taxonomy
+- `stage3_analysis/classification_viz.py` -- Visualization for classification probe results
+- `stage3_analysis/dnn_classification_probe.py` -- DNN classification probe with MLP architecture
+- `stage3_analysis/dnn_classification_viz.py` -- Visualization for DNN classification results
+- `stage3_analysis/urban_taxonomy_target.py` -- Urban taxonomy target data (CBS neighborhood types)
 
 ### Visualization modules
 - `stage3_analysis/visualization/__init__.py`
@@ -88,7 +93,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 
 regions_gdf = gpd.read_parquet(f"data/study_areas/{area}/regions_gdf/regions.parquet")
-embeddings = pd.read_parquet(f"data/study_areas/{area}/urban_embedding/")
+embeddings = pd.read_parquet(f"data/study_areas/{area}/stage2_multimodal/")
 
 # Join embeddings to geometry for plotting
 merged = regions_gdf.join(embeddings)

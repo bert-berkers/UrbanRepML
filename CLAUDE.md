@@ -52,6 +52,13 @@ Post-training analysis and clustering (all in `stage3_analysis/`):
 - **HierarchicalClusterAnalyzer** (`hierarchical_cluster_analysis.py`): Multi-scale clustering across H3 resolutions
 - **HierarchicalLandscapeVisualizer** (`hierarchical_visualization.py`): Beautiful multi-resolution plots
 
+**Probe Infrastructure:**
+- **LinearProbeRegressor** (`linear_probe.py`): Ridge/Lasso regression probes for leefbaarometer
+- **DNNProbeRegressor** (`dnn_probe.py`): MLP-based DNN probes with cross-validation
+- **ClassificationProber** (`classification_probe.py`): Logistic regression for urban taxonomy classification
+- **DNNClassificationProber** (`dnn_classification_probe.py`): DNN classification with MLP
+- **Target builders**: `leefbaarometer_target.py`, `urban_taxonomy_target.py`
+
 ## Accessibility Graph Pipeline
 
 1. **Floodfill Travel Time**: Calculate travel times with local cutoff
@@ -74,6 +81,11 @@ cd UrbanRepML
 uv sync              # Install all dependencies
 uv sync --extra dev  # Include dev tools
 ```
+
+## Utility Infrastructure
+
+- **`utils/paths.py`** — `StudyAreaPaths`: single source of truth for all data path construction
+- **`utils/spatial_db.py`** — `SpatialDB`: SedonaDB spatial engine with GeoPandas fallback for bulk H3 geometry queries (centroids, geometry, extent). Preferred over raw `h3_to_geoseries` for all visualization and analysis code.
 
 ## Key Commands
 

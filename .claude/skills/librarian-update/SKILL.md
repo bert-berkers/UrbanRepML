@@ -16,7 +16,8 @@ $ARGUMENTS
 
 ## Protocol
 
-1. Run `git diff HEAD~3..HEAD --stat` to see what files changed recently
+1. Run `git log --oneline -10` to gauge how many commits since last update, then
+   `git diff HEAD~N..HEAD --stat` where N covers all unreviewed commits (default to 5 if unsure)
 2. For significantly changed files, read them to understand the new structure
 3. Read the current `.claude/scratchpad/librarian/codebase_graph.md`
 4. Update the codebase graph with:

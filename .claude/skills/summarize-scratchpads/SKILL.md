@@ -48,5 +48,6 @@ Return a 20-30 line structured summary:
 
 - Keep it under 30 lines. This is a compression tool, not a verbatim copy.
 - Flag agents that should have written scratchpads but didn't (based on recent git activity).
-- If an agent's scratchpad is over 100 lines, that itself is worth noting (scratchpad bloat).
+- Flag stale agents: if an agent has a definition in `.claude/agents/` but its most recent scratchpad is >5 days old, note it. Stale signals decay 2.4x faster (drift research).
+- If an agent's scratchpad is over 80 lines, flag it as bloat (per multi-agent protocol).
 - Prioritize tensions and unresolved items — those drive the next OODA cycle.

@@ -35,3 +35,11 @@ Every agent that does work MUST write a dated entry to `.claude/scratchpad/{agen
 - The ego monitors scratchpads for process health
 - The librarian's `codebase_graph.md` is the shared map
 - Read other agents' scratchpads before starting work to avoid duplication
+
+## Multi-File Creation Protocol
+
+When creating multiple new files in a single wave:
+1. **Assign __init__.py ownership** to ONE agent per package — prevents merge conflicts
+2. **Use filesystem grep for scope audits** — `rg PATTERN dir/` not `git grep` (untracked files are invisible to git grep)
+3. **Include Plan agent's recommendation** in each delegation prompt when applicable
+4. **QAQC produces commit-readiness verdict** — after verification, explicitly state whether working tree is committable
