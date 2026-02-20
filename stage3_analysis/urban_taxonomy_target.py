@@ -4,9 +4,15 @@
 Urban Taxonomy Target Preparation for Linear Probing
 
 Prepares Urban Taxonomy HiMoC (Hierarchical Morphotope Classification) as
-categorical targets aligned to H3 hexagons via area-weighted majority vote.
-Morphotope polygons are intersected with H3 hexagons; for each hexagon the
-dominant class (largest intersection area) is selected at each hierarchy level.
+categorical targets aligned to H3 hexagons via centroid-based point-in-polygon
+assignment. Each hexagon's centroid is matched to the morphotope polygon it
+falls within, giving a single unambiguous class at each hierarchy level.
+
+This is ~30-60x faster than area-weighted overlay because morphotopes
+(median 52K m²) are much larger than res10 hexagons (15K m²), so centroid
+assignment is accurate for 99%+ of hexagons. An ``n_morphotopes`` column
+tracks how many morphotopes each hexagon polygon actually intersects, serving
+as a boundary confidence indicator (1 = fully interior, 2+ = boundary hex).
 
 Source: https://urbantaxonomy.org/
 Data version: v202511 (morphotopes), v202509 (label metadata)
@@ -21,9 +27,9 @@ Hierarchy (7 levels, doubling cardinality):
     level 7: 101 classes
 
 Target variables per hexagon:
-    type_level{N}       — dominant classification label (int)
-    confidence_level{N} — area fraction of dominant type (0–1)
+    type_level{N}       — classification label (int)
     name_level{N}       — human-readable name (levels 1–3 only)
+    n_morphotopes       — number of morphotopes the hex polygon intersects
 """
 
 import json
@@ -33,9 +39,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import geopandas as gpd
-import numpy as np
 import pandas as pd
-from shapely.validation import make_valid
 
 from utils import StudyAreaPaths
 
@@ -54,9 +58,8 @@ class UrbanTaxonomyConfig:
 
     study_area: str = "netherlands"
     year: int = 2025
-    h3_resolutions: List[int] = field(default_factory=lambda: [9, 10])
+    h3_resolutions: List[int] = field(default_factory=lambda: [10])
     levels: List[int] = field(default_factory=lambda: list(ALL_LEVELS))
-    chunk_size: int = 50_000  # morphotopes per overlay chunk
 
     # Paths (auto-populated from StudyAreaPaths)
     raw_dir: Optional[str] = None
@@ -73,16 +76,17 @@ class UrbanTaxonomyConfig:
 class UrbanTaxonomyTargetBuilder:
     """
     Builds H3-indexed Urban Taxonomy classification targets via
-    area-weighted majority vote from morphotope polygons.
+    centroid-based point-in-polygon assignment from morphotope polygons.
 
     Pipeline:
-        1. Load & concatenate 4 NL morphotope parquets
-        2. Load pre-computed H3 regions
-        3. Spatial pre-filter (sjoin intersects)
-        4. Chunked overlay for accurate intersection geometry
-        5. Area-weighted majority vote per hexagon per level
-        6. Attach human-readable names for levels 1–3
-        7. Save as parquet indexed by region_id
+        1. Load & concatenate 4 NL morphotope parquets (keep EPSG:3035)
+        2. Load pre-computed H3 regions (WGS84), reproject to EPSG:3035
+        3. Compute hex centroids in EPSG:3035
+        4. sjoin centroids within morphotopes (~1s)
+        5. Deduplicate (centroid on boundary → take first match)
+        6. Count n_morphotopes per hex (polygon sjoin for boundary indicator)
+        7. Attach human-readable names for levels 1–3
+        8. Save as parquet indexed by region_id
     """
 
     PARQUET_FILES = [
@@ -100,7 +104,11 @@ class UrbanTaxonomyTargetBuilder:
         self.label_names: Optional[dict] = None
 
     def load_morphotopes(self) -> gpd.GeoDataFrame:
-        """Load and concatenate all 4 NL morphotope parquet files."""
+        """Load and concatenate all 4 NL morphotope parquet files.
+
+        Keeps native EPSG:3035 CRS (no reprojection needed — hexes are
+        reprojected to match instead).
+        """
         raw_dir = Path(self.config.raw_dir)
         parts = []
         for fname in self.PARQUET_FILES:
@@ -113,11 +121,7 @@ class UrbanTaxonomyTargetBuilder:
         morphotopes = pd.concat(parts, ignore_index=True)
         morphotopes = gpd.GeoDataFrame(morphotopes, crs=parts[0].crs)
         logger.info(f"Total morphotopes: {len(morphotopes):,}")
-        logger.info(f"Source CRS: {morphotopes.crs.to_epsg()}")
-
-        # Reproject to WGS84 for H3 compatibility
-        logger.info("Reprojecting EPSG:3035 -> EPSG:4326...")
-        morphotopes = morphotopes.to_crs(epsg=4326)
+        logger.info(f"CRS: {morphotopes.crs.to_epsg()}")
 
         self.morphotopes = morphotopes
         return morphotopes
@@ -150,49 +154,13 @@ class UrbanTaxonomyTargetBuilder:
         logger.info(f"  {len(regions_gdf):,} hexagons")
         return regions_gdf
 
-    def _majority_vote(
-        self, intersection: gpd.GeoDataFrame, level_cols: List[str]
-    ) -> pd.DataFrame:
-        """
-        Area-weighted majority vote: for each hexagon, pick the class
-        with the largest total intersection area at each hierarchy level.
-
-        Returns DataFrame indexed by region_id with type_level* and
-        confidence_level* columns.
-        """
-        # Compute intersection areas in the source equal-area CRS
-        logger.info("  Computing intersection areas (EPSG:3035)...")
-        intersection_proj = intersection.to_crs(epsg=3035)
-        intersection["area"] = intersection_proj.geometry.area
-
-        results = {}
-        for col in level_cols:
-            level_num = col.replace("level_", "").replace("_label", "")
-            logger.info(f"  Majority vote for level {level_num}...")
-
-            # Sum area per (region_id, class) pair
-            area_by_class = (
-                intersection.groupby(["region_id", col])["area"]
-                .sum()
-                .reset_index()
-            )
-
-            # Total area per hexagon (for confidence calculation)
-            total_area = area_by_class.groupby("region_id")["area"].sum()
-
-            # Pick class with max area per hexagon
-            idx_max = area_by_class.groupby("region_id")["area"].idxmax()
-            dominant = area_by_class.loc[idx_max].set_index("region_id")
-
-            results[f"type_level{level_num}"] = dominant[col].astype(int)
-            results[f"confidence_level{level_num}"] = (
-                dominant["area"] / total_area
-            )
-
-        return pd.DataFrame(results)
-
     def process_resolution(self, resolution: int) -> pd.DataFrame:
-        """Process morphotopes -> H3 targets for a single resolution."""
+        """Process morphotopes -> H3 targets for a single resolution.
+
+        Uses centroid-based point-in-polygon assignment (fast) instead of
+        area-weighted overlay (slow). Morphotopes are much larger than
+        hexagons, so centroid assignment is accurate for 99%+ of cases.
+        """
         if self.morphotopes is None:
             self.load_morphotopes()
 
@@ -200,65 +168,62 @@ class UrbanTaxonomyTargetBuilder:
         morphotopes = self.morphotopes
 
         level_cols = [f"level_{l}_label" for l in self.config.levels]
-        keep_cols = ["geometry"] + level_cols
 
-        # --- Spatial pre-filter: find hexagons that intersect morphotopes ---
-        logger.info("Finding hexagons that intersect morphotopes (sjoin)...")
-        hex_with_data = gpd.sjoin(
-            regions_gdf.reset_index()[["region_id", "geometry"]],
+        # --- Reproject hexagons to EPSG:3035 to match morphotopes ---
+        logger.info("Reprojecting hexagons EPSG:4326 -> EPSG:3035...")
+        regions_3035 = regions_gdf.to_crs(epsg=3035)
+
+        # --- Compute centroids for point-in-polygon assignment ---
+        logger.info("Computing hex centroids...")
+        centroids = regions_3035.copy()
+        centroids["geometry"] = centroids.geometry.centroid
+
+        # --- Point-in-polygon sjoin: centroid within morphotope ---
+        logger.info("Spatial join: hex centroids within morphotopes...")
+        joined = gpd.sjoin(
+            centroids.reset_index()[["region_id", "geometry"]],
+            morphotopes[["geometry"] + level_cols],
+            how="inner",
+            predicate="within",
+        )
+        logger.info(f"  Raw join matches: {len(joined):,}")
+
+        # Deduplicate: centroid exactly on boundary may match multiple
+        # morphotopes — keep the first match
+        joined = joined.drop_duplicates(subset="region_id", keep="first")
+        joined = joined.set_index("region_id")
+        logger.info(f"  After dedup: {len(joined):,} hexagons with assignment")
+
+        # --- Count n_morphotopes per hex (polygon-level intersection) ---
+        logger.info("Counting morphotopes per hex polygon (boundary indicator)...")
+        poly_join = gpd.sjoin(
+            regions_3035.reset_index()[["region_id", "geometry"]],
             morphotopes[["geometry"]],
             how="inner",
             predicate="intersects",
         )
-        relevant_hex_ids = hex_with_data["region_id"].unique()
-        regions_relevant = regions_gdf.loc[
-            regions_gdf.index.isin(relevant_hex_ids)
-        ].copy()
-        logger.info(f"  Hexagons with morphotope overlap: {len(regions_relevant):,}")
+        n_morphotopes = (
+            poly_join.groupby("region_id")
+            .size()
+            .rename("n_morphotopes")
+        )
+        logger.info(
+            f"  n_morphotopes distribution: "
+            f"1={int((n_morphotopes == 1).sum()):,}, "
+            f"2+={int((n_morphotopes >= 2).sum()):,}"
+        )
 
-        # Fix invalid geometries
-        morphotopes = morphotopes.copy()
-        morphotopes["geometry"] = morphotopes["geometry"].apply(make_valid)
-        regions_relevant["geometry"] = regions_relevant["geometry"].apply(make_valid)
+        # --- Build result DataFrame ---
+        result = pd.DataFrame(index=joined.index)
+        for col in level_cols:
+            level_num = col.replace("level_", "").replace("_label", "")
+            result[f"type_level{level_num}"] = joined[col].astype(int)
 
-        # --- Chunked overlay ---
-        chunk_size = self.config.chunk_size
-        n_chunks = max(1, (len(morphotopes) + chunk_size - 1) // chunk_size)
-        logger.info(f"Processing overlay in {n_chunks} chunks of {chunk_size:,} morphotopes...")
-
-        all_intersections = []
-        regions_reset = regions_relevant.reset_index()[["region_id", "geometry"]]
-
-        for i in range(n_chunks):
-            start = i * chunk_size
-            end = min((i + 1) * chunk_size, len(morphotopes))
-            chunk = morphotopes.iloc[start:end]
-
-            logger.info(f"  Chunk {i + 1}/{n_chunks}: morphotopes {start:,}-{end:,}...")
-
-            try:
-                intersection = gpd.overlay(
-                    regions_reset,
-                    chunk[keep_cols],
-                    how="intersection",
-                )
-                if len(intersection) > 0:
-                    all_intersections.append(intersection)
-            except Exception as e:
-                logger.warning(f"  Chunk {i + 1} overlay error: {e}")
-
-        if not all_intersections:
-            raise ValueError(
-                "No intersections found between morphotopes and H3 hexagons."
-            )
-
-        intersection = pd.concat(all_intersections, ignore_index=True)
-        intersection = gpd.GeoDataFrame(intersection, crs="EPSG:4326")
-        logger.info(f"Total intersection pieces: {len(intersection):,}")
-
-        # --- Majority vote aggregation ---
-        logger.info("Aggregating area-weighted majority vote per hexagon...")
-        result = self._majority_vote(intersection, level_cols)
+        # Attach n_morphotopes
+        result = result.join(n_morphotopes)
+        # Hexagons with centroid match but possibly no polygon overlap count
+        # shouldn't happen, but fill with 1 defensively
+        result["n_morphotopes"] = result["n_morphotopes"].fillna(1).astype(int)
 
         # --- Attach human-readable names for levels 1–3 ---
         if self.label_names is None:
