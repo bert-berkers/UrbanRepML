@@ -21,7 +21,6 @@ import logging
 from pathlib import Path
 from srai.regionalizers import H3Regionalizer
 from srai.neighbourhoods import H3Neighbourhood
-from srai.h3 import h3_to_geoseries
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from scipy.spatial.distance import pdist, squareform
@@ -164,12 +163,20 @@ class HierarchicalLandscapeVisualizer:
         # Track bounds for axis limits
         all_lats, all_lons = [], []
 
-        # Use SRAI to create hexagon geometries from H3 indices
+        # Use SpatialDB (or fallback) to create hexagon geometries from H3 indices
         h3_indices = df.index.tolist()[:len(cluster_labels)]
         try:
-            geo_series = h3_to_geoseries(pd.Series(h3_indices))
+            if self.paths is not None:
+                from utils.spatial_db import SpatialDB
+                gdf = SpatialDB.for_study_area(self.paths.study_area).geometry(
+                    h3_indices, resolution=resolution, crs=4326
+                )
+                geometries = gdf.geometry
+            else:
+                from srai.h3 import h3_to_geoseries
+                geometries = h3_to_geoseries(pd.Series(h3_indices))
 
-            for i, (h3_idx, geom) in enumerate(zip(h3_indices, geo_series)):
+            for i, (h3_idx, geom) in enumerate(zip(h3_indices, geometries)):
                 if i >= len(cluster_labels):
                     break
 
@@ -186,7 +193,7 @@ class HierarchicalLandscapeVisualizer:
                 ax.add_patch(hex_patch)
 
         except Exception as e:
-            logger.warning(f"SRAI geometry creation failed: {e}, using fallback")
+            logger.warning(f"Geometry creation failed: {e}, using fallback")
             for i, (idx, row) in enumerate(df.iterrows()):
                 if i >= len(cluster_labels):
                     break
