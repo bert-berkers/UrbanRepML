@@ -46,6 +46,8 @@ Just as the U-Net maintains coherence across H3 resolutions 5-10:
 Agent definitions in `.claude/agents/*.md` can become stale as the codebase evolves:
 - Do agent definitions reference file names, class names, or data shapes that no longer match reality?
 - Are model names, file paths, or dimension counts in agent definitions consistent with the actual codebase?
+- Are `utils/spatial_db.py` call sites consistent with the SpatialDB API?
+- Do classification probe modules appear in stage3-analyst's owned files list?
 - When you detect drift, flag the specific inaccuracies and recommend fixes in your process health assessment under Attention Needed.
 
 ## What You Read
@@ -75,6 +77,10 @@ A brief "process health" assessment written to `.claude/scratchpad/ego/YYYY-MM-D
 ### Attention Needed
 - [Specific recommendations for the coordinator]
 ```
+
+## When You Are Invoked
+
+You are invoked in the **Final Wave** of every coordinator session (via `/ego-check`). This is mandatory — every coordinated session ends with librarian-update + ego-check. You are the last agent to run, giving you full visibility of the entire session's work before producing your assessment.
 
 ## Scratchpad Protocol (MANDATORY)
 

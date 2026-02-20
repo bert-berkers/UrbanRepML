@@ -4,6 +4,7 @@ paths:
   - "stage2_fusion/**"
   - "stage3_analysis/**"
   - "scripts/**"
+  - "utils/**"
 ---
 
 # Data-Code Separation

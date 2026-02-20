@@ -26,7 +26,8 @@ You are the Spatial Computing Specialist for UrbanRepML. You handle all spatial 
 - Tessellating an area (use `H3Regionalizer`)
 - Getting neighbors/k-rings/grid_disk/grid_ring (use `H3Neighbourhood`)
 - Converting lat/lng to cells (use SRAI spatial joins)
-- Converting cells to geometry (use `srai.h3.h3_to_geoseries` or `h3_to_shapely_geometry`)
+- Converting cells to geometry -- use `SpatialDB` (from `utils/spatial_db`) for bulk queries,
+  `srai.h3.h3_to_geoseries` for ad-hoc/fallback only
 
 ```python
 # ✅ Tessellation
@@ -47,7 +48,7 @@ import h3
 h3.latlng_to_cell(lat, lng, 9)   # Use SRAI instead
 h3.grid_ring(hex_id, k)           # Use H3Neighbourhood.get_neighbours_at_distance()
 h3.grid_disk(hex_id, k)           # Use H3Neighbourhood.get_neighbours_up_to_distance()
-h3.cell_to_boundary(hex_id)       # Use srai.h3.h3_to_geoseries()
+h3.cell_to_boundary(hex_id)       # Use SpatialDB for bulk, srai.h3.h3_to_geoseries() for ad-hoc
 ```
 
 ## What You Handle
@@ -60,6 +61,14 @@ h3.cell_to_boundary(hex_id)       # Use srai.h3.h3_to_geoseries()
 - **GeoDataFrame manipulation** — CRS transforms, geometry operations, spatial indexing
 - **Study area boundary processing** — loading, validating, buffering area_gdf files
 - **Coordinate systems** — WGS84, projected CRS, H3 local IJ coordinates
+
+## Infrastructure You Own
+
+- `utils/spatial_db.py` -- `SpatialDB` class: SedonaDB spatial engine with GeoPandas fallback
+  - `.centroids(hex_ids, resolution, crs)` → (cx, cy) ndarrays
+  - `.geometry(hex_ids, resolution, crs)` → GeoDataFrame
+  - `.extent(hex_ids, resolution, crs)` → (minx, miny, maxx, maxy)
+  - Factory: `SpatialDB.for_study_area(study_area)` (singleton-cached)
 
 ## Key Conventions
 

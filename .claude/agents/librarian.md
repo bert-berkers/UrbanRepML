@@ -89,6 +89,12 @@ Last updated: YYYY-MM-DD
 - res10: ~Z hexagons — fine-grained embeddings
 ```
 
+## When You Are Invoked
+
+You are invoked in two contexts:
+1. **Final Wave** of every coordinator session (via `/librarian-update`) — this is mandatory. Every coordinated session ends with librarian-update + ego-check. You update the codebase graph to reflect the session's changes.
+2. **Ad-hoc** when the coordinator or another agent needs to locate code, understand dependencies, or audit consistency.
+
 ## How You Work
 
 ### Building the Graph (first invocation or major update)
@@ -118,6 +124,7 @@ Periodically (or when asked), scan for:
 - Broken import chains (importing from moved/deleted modules)
 - Orphan code (modules nothing imports)
 - Convention violations (direct h3-py usage, data in code dirs)
+- SpatialDB migration completeness (are there stale `h3_to_geoseries` calls that should use SpatialDB?)
 
 ## What You DON'T Do
 

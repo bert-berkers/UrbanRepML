@@ -28,6 +28,10 @@ Follow the ego agent's standard protocol (defined in `.claude/agents/ego.md`):
 Write to `.claude/scratchpad/ego/YYYY-MM-DD.md` (today's date) with:
 - **Working**: what's going well
 - **Strained**: friction, confusion, conflict
+- **Health Metrics** (lightweight ASI-inspired):
+  - *Scratchpad freshness*: which agents wrote today? Which are >3 days stale?
+  - *Cross-referencing*: are agents reading each other's scratchpads? (look for mentions)
+  - *Recommendation closure*: are previously flagged issues being addressed?
 - **Forward-Look**: recommendations for next session
 
 Then write the forward-look to `.claude/scratchpad/coordinator/YYYY-MM-DD+1.md` (tomorrow's date) to seed the next OODA cycle.
