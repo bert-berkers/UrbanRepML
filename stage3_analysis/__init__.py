@@ -13,6 +13,10 @@ from .linear_probe import LinearProbeRegressor, LinearProbeConfig
 from .linear_probe_viz import LinearProbeVisualizer
 from .dnn_probe import DNNProbeRegressor, DNNProbeConfig
 from .dnn_probe_viz import DNNProbeVisualizer
+from .classification_probe import ClassificationProber, ClassificationProbeConfig
+from .classification_viz import ClassificationVisualizer
+from .dnn_classification_probe import DNNClassificationProber, DNNClassificationConfig
+from .dnn_classification_viz import DNNClassificationVisualizer
 
 __all__ = [
     'UrbanEmbeddingAnalyzer',
@@ -26,4 +30,10 @@ __all__ = [
     'DNNProbeRegressor',
     'DNNProbeConfig',
     'DNNProbeVisualizer',
+    'ClassificationProber',
+    'ClassificationProbeConfig',
+    'ClassificationVisualizer',
+    'DNNClassificationProber',
+    'DNNClassificationConfig',
+    'DNNClassificationVisualizer',
 ]

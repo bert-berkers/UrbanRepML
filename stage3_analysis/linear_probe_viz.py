@@ -33,7 +33,9 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from utils import StudyAreaPaths
 
-from .linear_probe import LinearProbeRegressor, TargetResult, TARGET_NAMES
+from sklearn.metrics import confusion_matrix
+
+from .linear_probe import LinearProbeRegressor, TargetResult, TARGET_NAMES, TAXONOMY_TARGET_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,7 @@ class LinearProbeVisualizer:
         study_area: str = "netherlands",
         figsize_base: Tuple[float, float] = (10, 6),
         dpi: int = 150,
+        h3_resolution: int = 10,
     ):
         self.results = results
         self.output_dir = Path(output_dir)
@@ -59,6 +62,7 @@ class LinearProbeVisualizer:
         self.paths = StudyAreaPaths(study_area)
         self.figsize_base = figsize_base
         self.dpi = dpi
+        self.h3_resolution = h3_resolution
 
         # Set style
         sns.set_style("whitegrid")
@@ -515,10 +519,10 @@ class LinearProbeVisualizer:
         if boundary_gdf is not None:
             extent = boundary_gdf.total_bounds
         else:
-            from srai.h3 import h3_to_geoseries
-            _geom = h3_to_geoseries(hex_ids)
-            _gdf = gpd.GeoDataFrame(geometry=_geom, crs="EPSG:4326").to_crs(epsg=28992)
-            extent = _gdf.total_bounds
+            from utils.spatial_db import SpatialDB
+            extent = SpatialDB.for_study_area(self.paths.study_area).extent(
+                hex_ids, resolution=self.h3_resolution, crs=28992
+            )
         minx, miny, maxx, maxy = extent
         pad = (maxx - minx) * 0.03
         render_extent = (minx - pad, miny - pad, maxx + pad, maxy + pad)
@@ -703,11 +707,11 @@ class LinearProbeVisualizer:
         height: int = 2400,
     ) -> np.ndarray:
         """
-        Rasterize H3 centroids to an RGB image via SRAI.
+        Rasterize H3 centroids to an RGB image via SpatialDB.
 
-        Converts H3 hex IDs to centroids using SRAI's h3_to_geoseries,
-        reprojects to EPSG:28992 (RD New), and writes RGB values into a
-        numpy pixel array.  ~18x faster than dissolve+vector rendering.
+        Looks up centroids from the pre-computed regions parquet via
+        SpatialDB, already in EPSG:28992 (RD New), and writes RGB values
+        into a numpy pixel array.  ~18x faster than dissolve+vector rendering.
 
         Args:
             hex_ids: Index of H3 hex ID strings.
@@ -719,21 +723,20 @@ class LinearProbeVisualizer:
         Returns:
             (height, width, 4) RGBA float32 array with white background.
         """
-        from srai.h3 import h3_to_geoseries
+        from utils.spatial_db import SpatialDB
 
-        hex_geom = h3_to_geoseries(hex_ids)
-        gdf = gpd.GeoDataFrame(geometry=hex_geom, crs="EPSG:4326").to_crs(epsg=28992)
-        centroids = gdf.geometry.centroid
+        db = SpatialDB.for_study_area(self.paths.study_area)
+        all_cx, all_cy = db.centroids(hex_ids, resolution=self.h3_resolution, crs=28992)
 
         minx, miny, maxx, maxy = extent
         mask = (
-            (centroids.x >= minx) & (centroids.x <= maxx)
-            & (centroids.y >= miny) & (centroids.y <= maxy)
+            (all_cx >= minx) & (all_cx <= maxx)
+            & (all_cy >= miny) & (all_cy <= maxy)
         )
 
-        cx = centroids.x[mask].values
-        cy = centroids.y[mask].values
-        rgb_masked = rgb_array[mask.values]
+        cx = all_cx[mask]
+        cy = all_cy[mask]
+        rgb_masked = rgb_array[mask]
 
         # Map to pixel coordinates
         px = ((cx - minx) / (maxx - minx) * (width - 1)).astype(int)
@@ -898,10 +901,11 @@ class LinearProbeVisualizer:
             extent = boundary_gdf.total_bounds
         else:
             # Fallback: compute extent from hex centroids
-            from srai.h3 import h3_to_geoseries
-            _geom = h3_to_geoseries(pd.Index(emb_df.index, name="region_id"))
-            _gdf = gpd.GeoDataFrame(geometry=_geom, crs="EPSG:4326").to_crs(epsg=28992)
-            extent = _gdf.total_bounds
+            from utils.spatial_db import SpatialDB
+            extent = SpatialDB.for_study_area(self.paths.study_area).extent(
+                pd.Index(emb_df.index, name="region_id"),
+                resolution=self.h3_resolution, crs=28992,
+            )
         minx, miny, maxx, maxy = extent
         pad = (maxx - minx) * 0.03
         render_extent = (minx - pad, miny - pad, maxx + pad, maxy + pad)
@@ -1036,23 +1040,33 @@ class LinearProbeVisualizer:
 
     def plot_fold_metrics(self) -> Optional[Path]:
         """
-        Box plot of per-fold R2 across targets.
+        Box plot of per-fold metrics across targets.
 
-        Shows the spread of performance across spatial folds.
-        Returns None if no fold metrics exist (e.g., simple mode).
+        For regression: R2 and RMSE.
+        For classification: Accuracy and F1 (macro).
 
         Returns:
             Path to saved figure, or None if no fold metrics.
         """
         rows = []
+        any_clf = False
         for target_col, result in self.results.items():
+            target_label = (
+                TAXONOMY_TARGET_NAMES.get(target_col)
+                or TARGET_NAMES.get(target_col, target_col)
+            )
             for fm in result.fold_metrics:
-                rows.append({
-                    "target": TARGET_NAMES.get(target_col, target_col),
+                row = {
+                    "target": target_label,
                     "fold": fm.fold,
                     "R2": fm.r2,
                     "RMSE": fm.rmse,
-                })
+                }
+                if fm.accuracy is not None:
+                    row["Accuracy"] = fm.accuracy
+                    row["F1 Macro"] = fm.f1_macro
+                    any_clf = True
+                rows.append(row)
 
         if not rows:
             logger.warning("No fold metrics to plot (simple mode?), skipping fold_metrics plot")
@@ -1060,26 +1074,44 @@ class LinearProbeVisualizer:
 
         metrics_df = pd.DataFrame(rows)
 
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        if any_clf and "Accuracy" in metrics_df.columns:
+            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-        # R2 by target
-        sns.boxplot(data=metrics_df, x="target", y="R2", ax=axes[0],
-                    palette="Set2", hue="target", legend=False)
-        sns.stripplot(data=metrics_df, x="target", y="R2", ax=axes[0],
-                      color="black", size=5, alpha=0.7)
-        axes[0].set_title("R-squared by Spatial Fold")
-        axes[0].set_xticklabels(axes[0].get_xticklabels(), rotation=30, ha="right")
-        axes[0].axhline(y=0, color="red", linewidth=0.5, linestyle="--")
+            sns.boxplot(data=metrics_df, x="target", y="Accuracy", ax=axes[0],
+                        palette="Set2", hue="target", legend=False)
+            sns.stripplot(data=metrics_df, x="target", y="Accuracy", ax=axes[0],
+                          color="black", size=5, alpha=0.7)
+            axes[0].set_title("Accuracy by Spatial Fold")
+            axes[0].set_xticklabels(axes[0].get_xticklabels(), rotation=30, ha="right")
 
-        # RMSE by target
-        sns.boxplot(data=metrics_df, x="target", y="RMSE", ax=axes[1],
-                    palette="Set2", hue="target", legend=False)
-        sns.stripplot(data=metrics_df, x="target", y="RMSE", ax=axes[1],
-                      color="black", size=5, alpha=0.7)
-        axes[1].set_title("RMSE by Spatial Fold")
-        axes[1].set_xticklabels(axes[1].get_xticklabels(), rotation=30, ha="right")
+            sns.boxplot(data=metrics_df, x="target", y="F1 Macro", ax=axes[1],
+                        palette="Set2", hue="target", legend=False)
+            sns.stripplot(data=metrics_df, x="target", y="F1 Macro", ax=axes[1],
+                          color="black", size=5, alpha=0.7)
+            axes[1].set_title("F1 (macro) by Spatial Fold")
+            axes[1].set_xticklabels(axes[1].get_xticklabels(), rotation=30, ha="right")
 
-        fig.suptitle("Linear Probe: Per-Fold Spatial CV Metrics", fontsize=14)
+            fig.suptitle("Classification Probe: Per-Fold Spatial CV Metrics", fontsize=14)
+        else:
+            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+            sns.boxplot(data=metrics_df, x="target", y="R2", ax=axes[0],
+                        palette="Set2", hue="target", legend=False)
+            sns.stripplot(data=metrics_df, x="target", y="R2", ax=axes[0],
+                          color="black", size=5, alpha=0.7)
+            axes[0].set_title("R-squared by Spatial Fold")
+            axes[0].set_xticklabels(axes[0].get_xticklabels(), rotation=30, ha="right")
+            axes[0].axhline(y=0, color="red", linewidth=0.5, linestyle="--")
+
+            sns.boxplot(data=metrics_df, x="target", y="RMSE", ax=axes[1],
+                        palette="Set2", hue="target", legend=False)
+            sns.stripplot(data=metrics_df, x="target", y="RMSE", ax=axes[1],
+                          color="black", size=5, alpha=0.7)
+            axes[1].set_title("RMSE by Spatial Fold")
+            axes[1].set_xticklabels(axes[1].get_xticklabels(), rotation=30, ha="right")
+
+            fig.suptitle("Linear Probe: Per-Fold Spatial CV Metrics", fontsize=14)
+
         plt.tight_layout()
 
         path = self.output_dir / "fold_metrics.png"
@@ -1087,6 +1119,138 @@ class LinearProbeVisualizer:
         plt.close(fig)
 
         logger.info(f"Saved fold metrics plot: {path}")
+        return path
+
+    def plot_confusion_matrix(self, target_col: str) -> Optional[Path]:
+        """
+        Confusion matrix heatmap for classification results.
+
+        Args:
+            target_col: Target variable name.
+
+        Returns:
+            Path to saved figure, or None if not a classification result.
+        """
+        result = self.results[target_col]
+        if result.task_type != "classification":
+            return None
+
+        valid = ~np.isnan(result.oof_predictions)
+        y_true = result.actual_values[valid].astype(int)
+        y_pred = result.oof_predictions[valid].astype(int)
+
+        labels = sorted(np.unique(np.concatenate([y_true, y_pred])))
+        cm = confusion_matrix(y_true, y_pred, labels=labels)
+
+        # Normalize by row (true label) for better visualization
+        cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True)
+        cm_norm = np.nan_to_num(cm_norm)
+
+        n_labels = len(labels)
+        figsize = max(6, n_labels * 0.4)
+        fig, ax = plt.subplots(figsize=(figsize, figsize))
+
+        sns.heatmap(
+            cm_norm,
+            xticklabels=labels,
+            yticklabels=labels,
+            cmap="Blues",
+            vmin=0, vmax=1,
+            annot=n_labels <= 20,
+            fmt=".2f" if n_labels <= 20 else "",
+            linewidths=0.5 if n_labels <= 20 else 0,
+            square=True,
+            ax=ax,
+        )
+
+        target_name = (
+            TARGET_NAMES.get(target_col)
+            or TAXONOMY_TARGET_NAMES.get(target_col)
+            or target_col
+        )
+        ax.set_title(
+            f"Confusion Matrix (normalized): {target_name}\n"
+            f"Acc={result.overall_accuracy:.4f}, F1={result.overall_f1_macro:.4f}, "
+            f"n_classes={result.n_classes}"
+        )
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("Actual")
+
+        plt.tight_layout()
+        path = self.output_dir / f"confusion_matrix_{target_col}.png"
+        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        plt.close(fig)
+
+        logger.info(f"Saved confusion matrix: {path}")
+        return path
+
+    def plot_classification_metrics_comparison(self) -> Optional[Path]:
+        """
+        Bar chart comparing accuracy across classification targets.
+
+        Returns:
+            Path to saved figure, or None if no classification results.
+        """
+        clf_results = {
+            k: v for k, v in self.results.items()
+            if v.task_type == "classification"
+        }
+        if not clf_results:
+            return None
+
+        targets = list(clf_results.keys())
+        target_labels = [
+            TAXONOMY_TARGET_NAMES.get(t, TARGET_NAMES.get(t, t))
+            for t in targets
+        ]
+
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+        x = np.arange(len(targets))
+        width = 0.5
+
+        # Accuracy
+        acc_vals = [clf_results[t].overall_accuracy for t in targets]
+        bars = axes[0].bar(x, acc_vals, width, color="steelblue", edgecolor="white")
+        for bar in bars:
+            h = bar.get_height()
+            axes[0].text(
+                bar.get_x() + bar.get_width() / 2., h + 0.005,
+                f"{h:.3f}", ha="center", va="bottom", fontsize=9,
+            )
+        axes[0].set_ylabel("Accuracy (OOF)")
+        axes[0].set_title("Classification Accuracy per Level")
+        axes[0].set_xticks(x)
+        axes[0].set_xticklabels(target_labels, rotation=30, ha="right")
+        axes[0].set_ylim(0, 1.05)
+
+        # F1 macro
+        f1_vals = [clf_results[t].overall_f1_macro for t in targets]
+        bars = axes[1].bar(x, f1_vals, width, color="coral", edgecolor="white")
+        for bar in bars:
+            h = bar.get_height()
+            axes[1].text(
+                bar.get_x() + bar.get_width() / 2., h + 0.005,
+                f"{h:.3f}", ha="center", va="bottom", fontsize=9,
+            )
+        axes[1].set_ylabel("F1 Macro (OOF)")
+        axes[1].set_title("Classification F1 (macro) per Level")
+        axes[1].set_xticks(x)
+        axes[1].set_xticklabels(target_labels, rotation=30, ha="right")
+        axes[1].set_ylim(0, 1.05)
+
+        fig.suptitle(
+            "Classification Probe: Accuracy & F1 per Hierarchy Level\n"
+            "Spatial Block Cross-Validation",
+            fontsize=14,
+        )
+        plt.tight_layout(rect=[0, 0, 1, 0.92])
+
+        path = self.output_dir / "classification_metrics_comparison.png"
+        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        plt.close(fig)
+
+        logger.info(f"Saved classification metrics comparison: {path}")
         return path
 
     def plot_all(
@@ -1099,9 +1263,13 @@ class LinearProbeVisualizer:
         """
         Generate all visualizations.
 
+        Automatically detects task_type and generates appropriate plots:
+        - Regression: coefficient bars, scatter, spatial residuals, heatmap, etc.
+        - Classification: confusion matrices, accuracy/F1 comparison bars.
+
         Args:
             geometry_source: GeoDataFrame for spatial maps.
-            results_pca: Optional PCA results [old 2024] for comparison.
+            results_pca: Optional PCA results for comparison.
             embeddings_path: Path to embeddings parquet for RGB top-3 maps.
             boundary_gdf: Optional study-area boundary for map backgrounds.
 
@@ -1111,27 +1279,41 @@ class LinearProbeVisualizer:
         logger.info(f"Generating all visualizations to {self.output_dir}")
         paths = []
 
+        # Check if any results are classification
+        any_clf = any(r.task_type == "classification" for r in self.results.values())
+        any_reg = any(r.task_type == "regression" for r in self.results.values())
+
         # Per-target plots
         for target_col in self.results:
-            paths.append(self.plot_coefficient_bars(target_col))
-            paths.append(self.plot_scatter_predicted_vs_actual(target_col))
-            paths.append(self.plot_spatial_residuals(target_col, geometry_source))
-            if embeddings_path is not None:
-                paths.append(self.plot_rgb_top3_map(
-                    target_col, embeddings_path, boundary_gdf
-                ))
+            result = self.results[target_col]
+            if result.task_type == "regression":
+                paths.append(self.plot_coefficient_bars(target_col))
+                paths.append(self.plot_scatter_predicted_vs_actual(target_col))
+                paths.append(self.plot_spatial_residuals(target_col, geometry_source))
+                if embeddings_path is not None:
+                    paths.append(self.plot_rgb_top3_map(
+                        target_col, embeddings_path, boundary_gdf
+                    ))
+            else:
+                # Classification: confusion matrix
+                paths.append(self.plot_confusion_matrix(target_col))
 
         # Cross-target plots
-        paths.append(self.plot_coefficient_heatmap())
-        paths.append(self.plot_cross_target_correlation())
+        if any_reg:
+            paths.append(self.plot_coefficient_heatmap())
+            paths.append(self.plot_cross_target_correlation())
+            paths.append(self.plot_metrics_comparison(
+                results_full=self.results, results_pca=results_pca
+            ))
+            if len(self.results) > 1:
+                paths.append(self.plot_coefficient_bars_faceted())
+
+        if any_clf:
+            paths.append(self.plot_classification_metrics_comparison())
+
         fold_metrics_path = self.plot_fold_metrics()
         if fold_metrics_path is not None:
             paths.append(fold_metrics_path)
-        paths.append(self.plot_metrics_comparison(
-            results_full=self.results, results_pca=results_pca
-        ))
-        if len(self.results) > 1:
-            paths.append(self.plot_coefficient_bars_faceted())
 
         # Filter out None values (e.g., from skipped plots)
         paths = [p for p in paths if p is not None]

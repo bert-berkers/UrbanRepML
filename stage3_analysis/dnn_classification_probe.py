@@ -1,28 +1,33 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-DNN Probe: MLP Probe for Liveability Prediction
+DNN Classification Probe: MLP Probe for Urban Taxonomy Classification
 
-Trains a multi-layer perceptron (MLP) probe to test whether non-linear
-transformations of AlphaEarth embeddings improve liveability prediction
-over the existing linear probe.
+Trains a multi-layer perceptron (MLP) probe to classify H3 hexagons into
+urban taxonomy hierarchy levels using AlphaEarth embeddings. Classification
+only -- no regression code paths.
 
-Key differences from the linear probe:
-    - Uses a multi-layer MLP with residual connections, LayerNorm, and GELU
-    - Early stopping with cosine annealing LR schedule
-    - Each hexagon is an independent sample (no graph structure)
+Key differences from the DNN regression probe (dnn_probe.py):
+    - CrossEntropyLoss only, no MSELoss
+    - No target standardization (labels are discrete integers)
+    - Smooth logarithmic batch size schedule instead of step doubling
+    - Lower max_epochs (100) and patience (15) since classification
+      converges faster than regression
+    - Default target is urban_taxonomy (7 hierarchy levels)
 
-Produces TargetResult-compatible output so existing LinearProbeVisualizer works.
+Produces TargetResult-compatible output so existing classification
+visualizers work.
 
 Usage:
-    python -m stage3_analysis.dnn_probe --study-area netherlands
-    python -m stage3_analysis.dnn_probe --study-area netherlands --hidden-dim 256 --num-layers 3
-    python -m stage3_analysis.dnn_probe --study-area netherlands --compare data/study_areas/netherlands/analysis/linear_probe
+    python -m stage3_analysis.dnn_classification_probe --study-area netherlands
+    python -m stage3_analysis.dnn_classification_probe --study-area netherlands --hidden-dim 64
+    python -m stage3_analysis.dnn_classification_probe --study-area netherlands --visualize
 """
 
 import copy
 import json
 import logging
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -32,24 +37,17 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
-    mean_absolute_error,
-    mean_squared_error,
-    r2_score,
-)
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.preprocessing import StandardScaler
 from spatialkfold.blocks import spatial_blocks
 
 from stage3_analysis.linear_probe import (
-    TARGET_COLS,
-    TARGET_NAMES,
     TAXONOMY_TARGET_COLS,
     TAXONOMY_TARGET_NAMES,
     FoldMetrics,
     TargetResult,
 )
+from stage3_analysis.dnn_probe import MLPProbeModel
 from utils import StudyAreaPaths
 from utils.paths import write_run_info
 
@@ -61,17 +59,15 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 @dataclass
-class DNNProbeConfig:
-    """Configuration for DNN MLP probe regression or classification."""
+class DNNClassificationConfig:
+    """Configuration for DNN MLP classification probe (classification only)."""
 
     # Study area
     study_area: str = "netherlands"
     year: int = 2022
     h3_resolution: int = 10
-    target_name: str = "leefbaarometer"
-    target_cols: List[str] = field(default_factory=lambda: list(TARGET_COLS))
-    task_type: str = "regression"  # "regression" or "classification"
-    n_classes: Optional[int] = None  # auto-detected if None
+    target_name: str = "urban_taxonomy"
+    target_cols: List[str] = field(default_factory=lambda: list(TAXONOMY_TARGET_COLS))
 
     # Spatial block CV (same defaults as LinearProbeConfig)
     n_folds: int = 5
@@ -98,9 +94,7 @@ class DNNProbeConfig:
     target_path: Optional[str] = None
     output_dir: Optional[str] = None
 
-    # Run-level provenance: if non-empty, a dated run directory is created
-    # under stage3_analysis/dnn_probe/{run_id}/ instead of writing to the
-    # flat analysis directory.  When empty (default), behaviour is unchanged.
+    # Run-level provenance
     run_descriptor: str = "default"
 
     # Device
@@ -110,146 +104,46 @@ class DNNProbeConfig:
         paths = StudyAreaPaths(self.study_area)
         self.run_id: Optional[str] = None
 
-        # Auto-configure for urban_taxonomy
-        if self.target_name == "urban_taxonomy":
-            if self.target_cols == list(TARGET_COLS):
-                self.target_cols = list(TAXONOMY_TARGET_COLS)
-            if self.task_type == "regression":
-                self.task_type = "classification"
-
         if self.embeddings_path is None:
             self.embeddings_path = str(
                 paths.embedding_file("alphaearth", self.h3_resolution, self.year)
             )
         if self.target_path is None:
-            target_year = 2025 if self.target_name == "urban_taxonomy" else self.year
             self.target_path = str(
-                paths.target_file(self.target_name, self.h3_resolution, target_year)
+                paths.target_file(self.target_name, self.h3_resolution, 2025)
             )
         if self.output_dir is None:
             if self.run_descriptor:
                 self.run_id = paths.create_run_id(self.run_descriptor)
-                self.output_dir = str(paths.stage3_run("dnn_probe", self.run_id))
+                self.output_dir = str(
+                    paths.stage3_run("dnn_classification_probe", self.run_id)
+                )
             else:
-                self.output_dir = str(paths.stage3("dnn_probe"))
+                self.output_dir = str(paths.stage3("dnn_classification_probe"))
         if self.device == "auto":
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 # ---------------------------------------------------------------------------
-# MLP Model
+# Main classifier
 # ---------------------------------------------------------------------------
 
-class MLPProbeModel(nn.Module):
+class DNNClassificationProber:
     """
-    Multi-layer perceptron probe for per-hexagon regression.
+    MLP classification probe with spatial block CV.
 
-    Architecture: progressively narrowing funnel from input_dim down to 1.
-    Each layer halves the dimension: input_dim -> hidden_dim -> hidden_dim//2
-    -> ... -> linear head -> 1.
+    Evaluates whether non-linear transformations of AlphaEarth embeddings
+    improve urban taxonomy classification over linear probes. Each hexagon
+    is an independent sample -- no graph structure is used.
 
-    Each hexagon is treated as an independent sample -- no message passing
-    or graph structure is used.
+    Uses CrossEntropyLoss with smooth logarithmic batch size scheduling.
     """
 
     def __init__(
         self,
-        input_dim: int,
-        hidden_dim: int,
-        num_layers: int,
-        dropout: float = 0.0,
-        use_layer_norm: bool = True,
-        output_dim: int = 1,
+        config: DNNClassificationConfig,
+        project_root: Optional[Path] = None,
     ):
-        super().__init__()
-        self.use_layer_norm = use_layer_norm
-        self.num_layers = num_layers
-        self.output_dim = output_dim
-
-        # Build progressively narrowing dimensions:
-        # input_dim -> hidden_dim -> hidden_dim//2 -> ... -> head -> output_dim
-        dims = [input_dim, hidden_dim]
-        for _ in range(num_layers - 1):
-            dims.append(max(dims[-1] // 2, 8))  # floor at 8
-
-        self.layers = nn.ModuleList()
-        self.norms = nn.ModuleList()
-        for i in range(len(dims) - 1):
-            self.layers.append(nn.Linear(dims[i], dims[i + 1]))
-            self.norms.append(
-                nn.LayerNorm(dims[i + 1]) if use_layer_norm else nn.Identity()
-            )
-
-        self.dropout = nn.Dropout(dropout)
-        self.activation = nn.GELU()
-
-        # Output head: 1 for regression, n_classes for classification
-        self.head = nn.Linear(dims[-1], output_dim)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass.
-
-        Assumes input features are NaN-free. If NaN values are present
-        (e.g. due to missing embeddings that slipped past upstream
-        validation), they are replaced with 0.0 as a safety guard and
-        a warning is logged.
-
-        Args:
-            x: Feature matrix [N, input_dim].
-
-        Returns:
-            Per-sample predictions [N, 1].
-        """
-        # Safety guard: replace NaN inputs to avoid silent propagation
-        if torch.isnan(x).any():
-            logger.warning("NaN detected in input features, replacing with 0.0")
-            x = torch.nan_to_num(x, nan=0.0)
-
-        # Progressive narrowing through layers
-        h = x
-        for i in range(len(self.layers)):
-            h = self.layers[i](h)
-            h = self.norms[i](h)
-            h = self.activation(h)
-            h = self.dropout(h)
-
-        # Regression head
-        return self.head(h)
-
-
-# ---------------------------------------------------------------------------
-# Main regressor
-# ---------------------------------------------------------------------------
-
-class DNNProbeRegressor:
-    """
-    MLP probe with spatial block CV.
-
-    Evaluates whether non-linear transformations of AlphaEarth embeddings
-    improve liveability prediction over linear probes. Each hexagon is an
-    independent sample -- no graph structure is used.
-
-    Visualization compatibility:
-        Produces TargetResult objects compatible with LinearProbeVisualizer,
-        but because the MLP has no linear coefficients (``coefficients`` is
-        a zero vector), only a subset of visualizer methods produce
-        meaningful output.
-
-        Works correctly:
-            - plot_scatter_predicted_vs_actual (uses oof_predictions)
-            - plot_spatial_residuals (uses oof_predictions + region_ids)
-            - plot_fold_metrics (uses fold_metrics)
-            - plot_metrics_comparison (uses overall_r2)
-
-        Not meaningful (coefficients are zeros):
-            - plot_coefficient_bars / plot_coefficient_bars_faceted
-            - plot_coefficient_heatmap
-            - plot_rgb_top3_map
-            - plot_cross_target_correlation
-    """
-
-    def __init__(self, config: DNNProbeConfig, project_root: Optional[Path] = None):
         self.config = config
         self.project_root = project_root or Path(__file__).parent.parent
         self.results: Dict[str, TargetResult] = {}
@@ -259,7 +153,7 @@ class DNNProbeRegressor:
         self.feature_names: List[str] = []
 
     # ------------------------------------------------------------------
-    # Data loading (mirrors LinearProbeRegressor)
+    # Data loading (mirrors DNNProbeRegressor)
     # ------------------------------------------------------------------
 
     def load_and_join_data(self) -> gpd.GeoDataFrame:
@@ -335,7 +229,7 @@ class DNNProbeRegressor:
         return joined
 
     # ------------------------------------------------------------------
-    # Spatial blocking (mirrors LinearProbeRegressor)
+    # Spatial blocking (mirrors DNNProbeRegressor)
     # ------------------------------------------------------------------
 
     def create_spatial_blocks(self, gdf: gpd.GeoDataFrame) -> np.ndarray:
@@ -400,15 +294,35 @@ class DNNProbeRegressor:
         return folds
 
     # ------------------------------------------------------------------
-    # Training
+    # Batch size schedule
     # ------------------------------------------------------------------
 
     def _batch_size_schedule(self, epoch: int, initial_bs: int, n_train: int) -> int:
-        """Smooth log-linear batch size schedule from initial_bs to n_train."""
-        import math
+        """
+        Smooth logarithmic batch size schedule.
+
+        Grows batch size exponentially from initial_bs to n_train over the
+        course of training, following a log-linear interpolation. This
+        provides a smoother ramp than the step-doubling used in the
+        regression probe.
+
+        Args:
+            epoch: Current epoch (0-indexed).
+            initial_bs: Starting batch size.
+            n_train: Total number of training samples (maximum batch size).
+
+        Returns:
+            Batch size for this epoch.
+        """
         progress = epoch / max(self.config.max_epochs - 1, 1)
-        log_bs = math.log(initial_bs) + progress * (math.log(n_train) - math.log(initial_bs))
+        log_bs = math.log(initial_bs) + progress * (
+            math.log(n_train) - math.log(initial_bs)
+        )
         return min(max(int(round(math.exp(log_bs))), 1), n_train)
+
+    # ------------------------------------------------------------------
+    # Training
+    # ------------------------------------------------------------------
 
     def _train_one_fold(
         self,
@@ -417,75 +331,55 @@ class DNNProbeRegressor:
         train_mask: np.ndarray,
         val_mask: np.ndarray,
         hparams: Dict[str, Any],
-        task_type: str = "regression",
-        n_classes: Optional[int] = None,
+        n_classes: int,
         label_offset: int = 0,
-    ) -> Tuple[MLPProbeModel, float, StandardScaler, Optional[StandardScaler], List[float]]:
+    ) -> Tuple[MLPProbeModel, float, StandardScaler, List[float]]:
         """
-        Train MLP for one fold with early stopping.
+        Train MLP for one fold with early stopping (classification only).
 
-        For regression: per-fold feature AND target standardization with MSELoss.
-        For classification: feature standardization only, CrossEntropyLoss.
+        Feature standardization only, no target standardization.
+        Labels converted to 0-based long tensor for CrossEntropyLoss.
 
         Args:
             X: Feature matrix [N, D] (numpy, raw -- standardized here).
-            y: Target vector [N] (numpy).
+            y: Target vector [N] (numpy, integer labels).
             train_mask: Boolean array [N] for training samples.
             val_mask: Boolean array [N] for validation samples.
             hparams: Dict with keys: hidden_dim, num_layers, dropout,
                      use_layer_norm, learning_rate, weight_decay,
                      initial_batch_size.
-            task_type: "regression" or "classification".
-            n_classes: Number of classes (required for classification).
-            label_offset: Subtracted from labels to make them 0-based
-                          (CrossEntropyLoss requires 0-based).
+            n_classes: Number of output classes.
+            label_offset: Subtracted from labels to make them 0-based.
 
         Returns:
             (trained_model on CPU, best_val_loss, fitted_feature_scaler,
-             fitted_target_scaler_or_None, val_loss_history)
+             val_loss_history)
         """
         device = torch.device(self.config.device)
-        is_clf = task_type == "classification"
 
         # Per-fold feature standardization
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X[train_mask]).astype(np.float32)
         X_val = scaler.transform(X[val_mask]).astype(np.float32)
 
-        if is_clf:
-            # Classification: labels as long tensor (0-based)
-            y_train_np = (y[train_mask] - label_offset).astype(np.int64)
-            y_val_np = (y[val_mask] - label_offset).astype(np.int64)
-            y_scaler = None
-        else:
-            # Regression: per-fold target standardization
-            y_scaler = StandardScaler()
-            y_train_np = y_scaler.fit_transform(
-                y[train_mask].reshape(-1, 1)
-            ).ravel().astype(np.float32)
-            y_val_np = y_scaler.transform(
-                y[val_mask].reshape(-1, 1)
-            ).ravel().astype(np.float32)
+        # Classification: labels as long tensor (0-based via label_offset)
+        y_train_np = (y[train_mask] - label_offset).astype(np.int64)
+        y_val_np = (y[val_mask] - label_offset).astype(np.int64)
 
         # Build tensors
         x_train_t = torch.tensor(X_train, dtype=torch.float32, device=device)
         x_val_t = torch.tensor(X_val, dtype=torch.float32, device=device)
-        if is_clf:
-            y_train_t = torch.tensor(y_train_np, dtype=torch.long, device=device)
-            y_val_t = torch.tensor(y_val_np, dtype=torch.long, device=device)
-        else:
-            y_train_t = torch.tensor(y_train_np, dtype=torch.float32, device=device)
-            y_val_t = torch.tensor(y_val_np, dtype=torch.float32, device=device)
+        y_train_t = torch.tensor(y_train_np, dtype=torch.long, device=device)
+        y_val_t = torch.tensor(y_val_np, dtype=torch.long, device=device)
 
         # Create model
-        output_dim = n_classes if is_clf else 1
         model = MLPProbeModel(
             input_dim=X.shape[1],
             hidden_dim=hparams["hidden_dim"],
             num_layers=hparams["num_layers"],
             dropout=hparams["dropout"],
             use_layer_norm=hparams.get("use_layer_norm", self.config.use_layer_norm),
-            output_dim=output_dim,
+            output_dim=n_classes,
         ).to(device)
 
         optimizer = torch.optim.AdamW(
@@ -498,10 +392,10 @@ class DNNProbeRegressor:
             optimizer, T_max=self.config.max_epochs
         )
 
-        criterion = nn.CrossEntropyLoss() if is_clf else nn.MSELoss()
+        criterion = nn.CrossEntropyLoss()
 
         # Progressive batch size parameters
-        batch_size = hparams.get("initial_batch_size", 4096)
+        initial_bs = hparams.get("initial_batch_size", 4096)
         n_train = x_train_t.shape[0]
 
         best_val_loss = float("inf")
@@ -510,8 +404,8 @@ class DNNProbeRegressor:
         val_loss_history: List[float] = []
 
         for epoch in range(self.config.max_epochs):
-            # Smooth log-linear batch size schedule
-            current_bs = self._batch_size_schedule(epoch, batch_size, n_train)
+            # Smooth logarithmic batch size schedule
+            current_bs = self._batch_size_schedule(epoch, initial_bs, n_train)
 
             # -- Mini-batch training --
             model.train()
@@ -520,10 +414,7 @@ class DNNProbeRegressor:
                 idx = perm[start : start + current_bs]
                 optimizer.zero_grad()
                 out = model(x_train_t[idx])
-                if is_clf:
-                    loss = criterion(out, y_train_t[idx])
-                else:
-                    loss = criterion(out.squeeze(-1), y_train_t[idx])
+                loss = criterion(out, y_train_t[idx])
                 loss.backward()
                 optimizer.step()
 
@@ -533,10 +424,7 @@ class DNNProbeRegressor:
             model.eval()
             with torch.no_grad():
                 val_out = model(x_val_t)
-                if is_clf:
-                    val_loss = criterion(val_out, y_val_t).item()
-                else:
-                    val_loss = criterion(val_out.squeeze(-1), y_val_t).item()
+                val_loss = criterion(val_out, y_val_t).item()
 
             val_loss_history.append(val_loss)
 
@@ -554,7 +442,7 @@ class DNNProbeRegressor:
             model.load_state_dict(best_state)
 
         model = model.cpu()
-        return model, best_val_loss, scaler, y_scaler, val_loss_history
+        return model, best_val_loss, scaler, val_loss_history
 
     # ------------------------------------------------------------------
     # Per-target pipeline
@@ -562,11 +450,7 @@ class DNNProbeRegressor:
 
     def _get_target_name(self, target_col: str) -> str:
         """Look up display name for a target column."""
-        return (
-            TARGET_NAMES.get(target_col)
-            or TAXONOMY_TARGET_NAMES.get(target_col)
-            or target_col
-        )
+        return TAXONOMY_TARGET_NAMES.get(target_col, target_col)
 
     def run_for_target(
         self,
@@ -577,46 +461,36 @@ class DNNProbeRegressor:
         region_ids: np.ndarray,
     ) -> TargetResult:
         """
-        Run spatial CV pipeline for one target variable.
+        Run spatial CV pipeline for one classification target.
 
-        For regression: MSELoss with target standardization.
-        For classification: CrossEntropyLoss with 0-based labels.
+        Uses CrossEntropyLoss with 0-based labels and argmax predictions.
 
         Args:
-            target_col: Target column name (e.g. 'lbm' or 'type_level1').
+            target_col: Target column name (e.g. 'type_level1').
             X: Feature matrix [N, D].
             y_all: DataFrame with all target columns.
             folds: Spatial fold assignments.
             region_ids: Region IDs for each row.
 
         Returns:
-            TargetResult with metrics and predictions.
+            TargetResult with classification metrics and predictions.
         """
-        task_type = self.config.task_type
-        is_clf = task_type == "classification"
-
         y = y_all[target_col].values
         unique_folds = np.unique(folds)
         target_name = self._get_target_name(target_col)
 
         logger.info(f"\n--- Target: {target_col} ({target_name}) ---")
 
-        # For classification: determine label offset and n_classes
-        label_offset = 0
-        n_classes = 0
-        if is_clf:
-            unique_labels = np.unique(y[~np.isnan(y)]).astype(int)
-            label_min = int(unique_labels.min())
-            label_max = int(unique_labels.max())
-            # CrossEntropyLoss requires 0-based contiguous labels
-            label_offset = label_min
-            n_classes = label_max - label_min + 1
-            logger.info(
-                f"  n_classes={n_classes}, label_range=[{label_min}, {label_max}], "
-                f"offset={label_offset}"
-            )
-        else:
-            logger.info(f"  y range: [{y.min():.4f}, {y.max():.4f}], mean={y.mean():.4f}")
+        # Determine label offset and n_classes
+        unique_labels = np.unique(y[~np.isnan(y)]).astype(int)
+        label_min = int(unique_labels.min())
+        label_max = int(unique_labels.max())
+        label_offset = label_min
+        n_classes = label_max - label_min + 1
+        logger.info(
+            f"  n_classes={n_classes}, label_range=[{label_min}, {label_max}], "
+            f"offset={label_offset}"
+        )
 
         # Use config defaults
         hparams = {
@@ -647,10 +521,9 @@ class DNNProbeRegressor:
             val_mask = folds == fold_id
             train_mask = ~val_mask
 
-            model, best_val_loss, fold_scaler, fold_y_scaler, val_history = (
+            model, best_val_loss, fold_scaler, val_history = (
                 self._train_one_fold(
                     X, y, train_mask, val_mask, hparams,
-                    task_type=task_type,
                     n_classes=n_classes,
                     label_offset=label_offset,
                 )
@@ -661,62 +534,42 @@ class DNNProbeRegressor:
             device = torch.device(self.config.device)
 
             X_val_scaled = fold_scaler.transform(X[val_mask]).astype(np.float32)
-            x_val_t = torch.tensor(X_val_scaled, dtype=torch.float32, device=device)
+            x_val_t = torch.tensor(
+                X_val_scaled, dtype=torch.float32, device=device
+            )
 
             model = model.to(device)
             model.eval()
             with torch.no_grad():
                 val_out = model(x_val_t)
 
-            if is_clf:
-                # Argmax -> predicted class (0-based), then add offset back
-                val_pred = val_out.argmax(dim=-1).cpu().numpy() + label_offset
-                val_pred = val_pred.astype(float)
-            else:
-                val_pred_std = val_out.squeeze(-1).cpu().numpy()
-                val_pred = fold_y_scaler.inverse_transform(
-                    val_pred_std.reshape(-1, 1)
-                ).ravel()
+            # Argmax -> predicted class (0-based), then add offset back
+            val_pred = val_out.argmax(dim=-1).cpu().numpy() + label_offset
+            val_pred = val_pred.astype(float)
 
             oof_predictions[val_mask] = val_pred
 
             y_val = y[val_mask]
 
-            if is_clf:
-                acc = float(accuracy_score(y_val, val_pred))
-                f1 = float(f1_score(y_val, val_pred, average="macro", zero_division=0))
-                fold_metrics_list.append(
-                    FoldMetrics(
-                        fold=int(fold_id),
-                        rmse=0.0, mae=0.0, r2=0.0,
-                        n_train=int(train_mask.sum()),
-                        n_test=int(val_mask.sum()),
-                        accuracy=acc,
-                        f1_macro=f1,
-                    )
+            acc = float(accuracy_score(y_val, val_pred))
+            f1 = float(
+                f1_score(y_val, val_pred, average="macro", zero_division=0)
+            )
+            fold_metrics_list.append(
+                FoldMetrics(
+                    fold=int(fold_id),
+                    rmse=0.0, mae=0.0, r2=0.0,
+                    n_train=int(train_mask.sum()),
+                    n_test=int(val_mask.sum()),
+                    accuracy=acc,
+                    f1_macro=f1,
                 )
-                logger.info(
-                    f"    Fold {fold_id}: Acc={acc:.4f}, F1={f1:.4f} "
-                    f"(train={train_mask.sum():,}, test={val_mask.sum():,}, "
-                    f"epochs={len(val_history)})"
-                )
-            else:
-                rmse = float(np.sqrt(mean_squared_error(y_val, val_pred)))
-                mae = float(mean_absolute_error(y_val, val_pred))
-                r2 = float(r2_score(y_val, val_pred))
-                fold_metrics_list.append(
-                    FoldMetrics(
-                        fold=int(fold_id),
-                        rmse=rmse, mae=mae, r2=r2,
-                        n_train=int(train_mask.sum()),
-                        n_test=int(val_mask.sum()),
-                    )
-                )
-                logger.info(
-                    f"    Fold {fold_id}: R2={r2:.4f}, RMSE={rmse:.4f}, MAE={mae:.4f} "
-                    f"(train={train_mask.sum():,}, test={val_mask.sum():,}, "
-                    f"epochs={len(val_history)})"
-                )
+            )
+            logger.info(
+                f"    Fold {fold_id}: Acc={acc:.4f}, F1={f1:.4f} "
+                f"(train={train_mask.sum():,}, test={val_mask.sum():,}, "
+                f"epochs={len(val_history)})"
+            )
 
             # Free GPU memory
             model = model.cpu()
@@ -730,65 +583,39 @@ class DNNProbeRegressor:
         # Overall metrics from OOF predictions
         valid_mask = ~np.isnan(oof_predictions)
 
-        if is_clf:
-            overall_acc = float(accuracy_score(
-                y[valid_mask], oof_predictions[valid_mask]
-            ))
-            overall_f1 = float(f1_score(
+        overall_acc = float(
+            accuracy_score(y[valid_mask], oof_predictions[valid_mask])
+        )
+        overall_f1 = float(
+            f1_score(
                 y[valid_mask], oof_predictions[valid_mask],
                 average="macro", zero_division=0,
-            ))
-            logger.info(
-                f"  Overall OOF: Acc={overall_acc:.4f}, F1={overall_f1:.4f}"
             )
-            result = TargetResult(
-                target=target_col,
-                target_name=target_name,
-                best_alpha=0.0,
-                best_l1_ratio=0.0,
-                fold_metrics=fold_metrics_list,
-                overall_r2=0.0,
-                overall_rmse=0.0,
-                overall_mae=0.0,
-                coefficients=np.zeros(len(self.feature_names)),
-                intercept=0.0,
-                feature_names=self.feature_names,
-                oof_predictions=oof_predictions,
-                actual_values=y,
-                region_ids=region_ids,
-                overall_accuracy=overall_acc,
-                overall_f1_macro=overall_f1,
-                n_classes=n_classes,
-                task_type=task_type,
-            )
-        else:
-            overall_r2 = float(r2_score(y[valid_mask], oof_predictions[valid_mask]))
-            overall_rmse = float(
-                np.sqrt(mean_squared_error(y[valid_mask], oof_predictions[valid_mask]))
-            )
-            overall_mae = float(
-                mean_absolute_error(y[valid_mask], oof_predictions[valid_mask])
-            )
-            logger.info(
-                f"  Overall OOF: R2={overall_r2:.4f}, "
-                f"RMSE={overall_rmse:.4f}, MAE={overall_mae:.4f}"
-            )
-            result = TargetResult(
-                target=target_col,
-                target_name=target_name,
-                best_alpha=0.0,
-                best_l1_ratio=0.0,
-                fold_metrics=fold_metrics_list,
-                overall_r2=overall_r2,
-                overall_rmse=overall_rmse,
-                overall_mae=overall_mae,
-                coefficients=np.zeros(len(self.feature_names)),
-                intercept=0.0,
-                feature_names=self.feature_names,
-                oof_predictions=oof_predictions,
-                actual_values=y,
-                region_ids=region_ids,
-            )
+        )
+        logger.info(
+            f"  Overall OOF: Acc={overall_acc:.4f}, F1={overall_f1:.4f}"
+        )
+
+        result = TargetResult(
+            target=target_col,
+            target_name=target_name,
+            best_alpha=0.0,
+            best_l1_ratio=0.0,
+            fold_metrics=fold_metrics_list,
+            overall_r2=0.0,
+            overall_rmse=0.0,
+            overall_mae=0.0,
+            coefficients=np.zeros(len(self.feature_names)),
+            intercept=0.0,
+            feature_names=self.feature_names,
+            oof_predictions=oof_predictions,
+            actual_values=y,
+            region_ids=region_ids,
+            overall_accuracy=overall_acc,
+            overall_f1_macro=overall_f1,
+            n_classes=n_classes,
+            task_type="classification",
+        )
 
         self.results[target_col] = result
         return result
@@ -799,17 +626,15 @@ class DNNProbeRegressor:
 
     def run(self) -> Dict[str, TargetResult]:
         """
-        Run the full DNN probe pipeline for all target variables.
+        Run the full DNN classification probe pipeline for all target variables.
 
         Returns:
             Dictionary mapping target column to TargetResult.
         """
-        task_type = self.config.task_type
-        mode_label = "Classification" if task_type == "classification" else "Regression"
-        logger.info(f"=== DNN Probe {mode_label} (MLP) ===")
+        logger.info("=== DNN Classification Probe (MLP) ===")
         logger.info(f"Study area: {self.config.study_area}")
         logger.info(f"Year: {self.config.year}")
-        logger.info(f"Task type: {task_type}")
+        logger.info(f"Target: {self.config.target_name}")
         logger.info(f"Device: {self.config.device}")
         logger.info(
             f"Architecture: MLP, "
@@ -839,16 +664,10 @@ class DNNProbeRegressor:
         # Summary
         logger.info("\n=== Summary ===")
         for target_col, result in self.results.items():
-            if result.task_type == "classification":
-                logger.info(
-                    f"  {target_col} ({result.target_name}): "
-                    f"Acc={result.overall_accuracy:.4f}, F1={result.overall_f1_macro:.4f}"
-                )
-            else:
-                logger.info(
-                    f"  {target_col} ({result.target_name}): "
-                    f"R2={result.overall_r2:.4f}, RMSE={result.overall_rmse:.4f}"
-                )
+            logger.info(
+                f"  {target_col} ({result.target_name}): "
+                f"Acc={result.overall_accuracy:.4f}, F1={result.overall_f1_macro:.4f}"
+            )
 
         return self.results
 
@@ -862,7 +681,7 @@ class DNNProbeRegressor:
 
         Produces:
             metrics_summary.csv, predictions_{target}.parquet, config.json,
-            and optionally training_curves/{target}_fold{k}.json.
+            training_curves/{target}_fold{k}.json, and run_info.json.
         """
         out_dir = output_dir or (self.project_root / self.config.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -873,26 +692,21 @@ class DNNProbeRegressor:
             row: Dict[str, Any] = {
                 "target": target_col,
                 "target_name": result.target_name,
-                "task_type": result.task_type,
-                "best_alpha": result.best_alpha,
-                "best_l1_ratio": result.best_l1_ratio,
-                "overall_r2": result.overall_r2,
-                "overall_rmse": result.overall_rmse,
-                "overall_mae": result.overall_mae,
+                "task_type": "classification",
+                "overall_accuracy": result.overall_accuracy,
+                "overall_f1_macro": result.overall_f1_macro,
+                "n_classes": result.n_classes,
+                "overall_r2": 0.0,
+                "overall_rmse": 0.0,
+                "overall_mae": 0.0,
+                "best_alpha": 0.0,
+                "best_l1_ratio": 0.0,
                 "n_features": len(result.feature_names),
             }
-            if result.task_type == "classification":
-                row["overall_accuracy"] = result.overall_accuracy
-                row["overall_f1_macro"] = result.overall_f1_macro
-                row["n_classes"] = result.n_classes
             if result.fold_metrics:
                 for fm in result.fold_metrics:
-                    if result.task_type == "classification":
-                        row[f"fold{fm.fold}_accuracy"] = fm.accuracy
-                        row[f"fold{fm.fold}_f1_macro"] = fm.f1_macro
-                    else:
-                        row[f"fold{fm.fold}_r2"] = fm.r2
-                        row[f"fold{fm.fold}_rmse"] = fm.rmse
+                    row[f"fold{fm.fold}_accuracy"] = fm.accuracy
+                    row[f"fold{fm.fold}_f1_macro"] = fm.f1_macro
             metrics_rows.append(row)
 
         metrics_df = pd.DataFrame(metrics_rows)
@@ -906,8 +720,6 @@ class DNNProbeRegressor:
                 "actual": result.actual_values,
                 "predicted": result.oof_predictions,
             }
-            if result.task_type == "regression":
-                pred_dict["residual"] = result.actual_values - result.oof_predictions
             pred_df = pd.DataFrame(pred_dict).set_index("region_id")
             pred_path = out_dir / f"predictions_{target_col}.parquet"
             pred_df.to_parquet(pred_path)
@@ -919,7 +731,7 @@ class DNNProbeRegressor:
             "study_area": self.config.study_area,
             "year": self.config.year,
             "h3_resolution": self.config.h3_resolution,
-            "task_type": self.config.task_type,
+            "task_type": "classification",
             "target_name": self.config.target_name,
             "n_folds": self.config.n_folds,
             "block_width": self.config.block_width,
@@ -933,7 +745,6 @@ class DNNProbeRegressor:
             "best_hyperparameters": {},
         }
         for target_col, hps in self.best_hparams.items():
-            # Convert numpy types for JSON serialization
             config_dict["best_hyperparameters"][target_col] = {
                 k: (int(v) if isinstance(v, (np.integer,)) else
                     float(v) if isinstance(v, (np.floating,)) else v)
@@ -947,7 +758,6 @@ class DNNProbeRegressor:
 
         # Write run-level provenance when using a run directory
         if self.config.run_id is not None:
-            # Auto-detect upstream run
             _paths = StudyAreaPaths(self.config.study_area)
             _latest = _paths.latest_run(_paths.stage1("alphaearth"))
             _upstream_label = _latest.name if _latest else "flat"
@@ -979,134 +789,6 @@ class DNNProbeRegressor:
 
         return out_dir
 
-    # ------------------------------------------------------------------
-    # Comparison with linear probe
-    # ------------------------------------------------------------------
-
-    def compare_with_linear(
-        self,
-        linear_results: Dict[str, TargetResult],
-    ) -> pd.DataFrame:
-        """
-        Produce comparison table: linear vs DNN R2/RMSE/MAE per target.
-
-        Args:
-            linear_results: Dictionary of TargetResult from linear probe.
-
-        Returns:
-            DataFrame with columns: target, target_name,
-            linear_r2, linear_rmse, linear_mae,
-            dnn_r2, dnn_rmse, dnn_mae,
-            r2_delta, rmse_delta.
-        """
-        rows = []
-        for target_col in self.config.target_cols:
-            lr = linear_results.get(target_col)
-            dr = self.results.get(target_col)
-            if lr is None or dr is None:
-                continue
-
-            rows.append(
-                {
-                    "target": target_col,
-                    "target_name": TARGET_NAMES.get(target_col, target_col),
-                    "linear_r2": lr.overall_r2,
-                    "linear_rmse": lr.overall_rmse,
-                    "linear_mae": lr.overall_mae,
-                    "dnn_r2": dr.overall_r2,
-                    "dnn_rmse": dr.overall_rmse,
-                    "dnn_mae": dr.overall_mae,
-                    "r2_delta": dr.overall_r2 - lr.overall_r2,
-                    "rmse_delta": dr.overall_rmse - lr.overall_rmse,
-                }
-            )
-
-        return pd.DataFrame(rows)
-
-    @staticmethod
-    def load_linear_results(linear_dir: Path) -> Dict[str, TargetResult]:
-        """
-        Load linear probe results from disk for comparison.
-
-        Reads metrics_summary.csv and predictions_{target}.parquet files
-        from the linear probe output directory and reconstructs a minimal
-        Dict[str, TargetResult] sufficient for compare_with_linear().
-
-        Args:
-            linear_dir: Path to the linear probe output directory.
-
-        Returns:
-            Dictionary mapping target column to TargetResult (metrics only,
-            coefficients/predictions may be empty).
-        """
-        metrics_path = linear_dir / "metrics_summary.csv"
-        if not metrics_path.exists():
-            raise FileNotFoundError(
-                f"Linear probe metrics not found: {metrics_path}"
-            )
-
-        metrics_df = pd.read_csv(metrics_path)
-        results: Dict[str, TargetResult] = {}
-
-        for _, row in metrics_df.iterrows():
-            target_col = row["target"]
-
-            # Try to load predictions for full TargetResult
-            pred_path = linear_dir / f"predictions_{target_col}.parquet"
-            if pred_path.exists():
-                pred_df = pd.read_parquet(pred_path)
-                oof_preds = pred_df["predicted"].values
-                actuals = pred_df["actual"].values
-                region_ids = pred_df.index.values
-            else:
-                oof_preds = np.array([])
-                actuals = np.array([])
-                region_ids = np.array([])
-
-            # Reconstruct fold metrics from fold{k}_r2/fold{k}_rmse columns
-            fold_metrics = []
-            for fold_id in range(1, 20):
-                r2_key = f"fold{fold_id}_r2"
-                rmse_key = f"fold{fold_id}_rmse"
-                if r2_key in row and not pd.isna(row[r2_key]):
-                    fold_metrics.append(FoldMetrics(
-                        fold=fold_id,
-                        r2=float(row[r2_key]),
-                        rmse=float(row[rmse_key]),
-                        mae=0.0,
-                        n_train=0,
-                        n_test=0,
-                    ))
-
-            results[target_col] = TargetResult(
-                target=target_col,
-                target_name=row.get("target_name", target_col),
-                best_alpha=row.get("best_alpha", 0.0),
-                best_l1_ratio=row.get("best_l1_ratio", 0.0),
-                fold_metrics=fold_metrics,
-                overall_r2=row["overall_r2"],
-                overall_rmse=row["overall_rmse"],
-                overall_mae=row["overall_mae"],
-                coefficients=np.array([]),
-                intercept=0.0,
-                feature_names=[],
-                oof_predictions=oof_preds,
-                actual_values=actuals,
-                region_ids=region_ids,
-            )
-
-        # Supplement with coefficients if available
-        coef_path = linear_dir / "coefficients.csv"
-        if coef_path.exists():
-            coef_df = pd.read_csv(coef_path)
-            for target_col, result in results.items():
-                target_coefs = coef_df[coef_df["target"] == target_col]
-                if not target_coefs.empty:
-                    result.feature_names = target_coefs["feature"].tolist()
-                    result.coefficients = target_coefs["coefficient"].values
-
-        return results
-
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -1114,13 +796,18 @@ class DNNProbeRegressor:
 
 
 def main():
-    """Run DNN probe regression or classification with CLI arguments."""
+    """Run DNN classification probe with CLI arguments."""
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="DNN Probe: MLP-based AlphaEarth -> Targets"
+        description="DNN Classification Probe: MLP-based AlphaEarth -> Urban Taxonomy"
     )
     parser.add_argument("--study-area", default="netherlands")
+    parser.add_argument(
+        "--target-name",
+        default="urban_taxonomy",
+        help="Target dataset name (default: urban_taxonomy)",
+    )
     parser.add_argument(
         "--n-folds",
         type=int,
@@ -1164,26 +851,9 @@ def main():
         help="Device (default: auto)",
     )
     parser.add_argument(
-        "--task-type",
-        choices=["regression", "classification"],
-        default="regression",
-        help="Task type (default: regression)",
-    )
-    parser.add_argument(
-        "--target-name",
-        default="leefbaarometer",
-        help="Target dataset name (default: leefbaarometer)",
-    )
-    parser.add_argument(
-        "--compare",
-        type=str,
-        default=None,
-        help="Path to linear probe results dir for comparison table",
-    )
-    parser.add_argument(
         "--visualize",
         action="store_true",
-        help="Generate DNN probe visualizations after saving results",
+        help="Generate DNN classification visualizations after saving results",
     )
     parser.add_argument(
         "--quick-viz",
@@ -1197,15 +867,14 @@ def main():
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
-    config = DNNProbeConfig(
+    config = DNNClassificationConfig(
         study_area=args.study_area,
+        target_name=args.target_name,
         n_folds=args.n_folds,
         max_epochs=args.max_epochs,
         block_width=args.block_size,
         block_height=args.block_size,
         device=args.device,
-        target_name=args.target_name,
-        task_type=args.task_type,
     )
 
     if args.hidden_dim is not None:
@@ -1215,37 +884,25 @@ def main():
     if args.batch_size is not None:
         config.initial_batch_size = args.batch_size
 
-    regressor = DNNProbeRegressor(config)
-    regressor.run()
-    out_dir = regressor.save_results()
-
-    # Comparison with linear probe
-    linear_results = None
-    if args.compare:
-        linear_dir = Path(args.compare)
-        logger.info(f"\nLoading linear probe results from {linear_dir}...")
-        linear_results = DNNProbeRegressor.load_linear_results(linear_dir)
-        comparison_df = regressor.compare_with_linear(linear_results)
-        comparison_path = out_dir / "comparison_linear_vs_dnn.csv"
-        comparison_df.to_csv(comparison_path, index=False)
-        logger.info(f"\nComparison saved to {comparison_path}")
-        logger.info(f"\n{comparison_df.to_string(index=False)}")
+    prober = DNNClassificationProber(config)
+    prober.run()
+    out_dir = prober.save_results()
 
     # Visualization
     if args.visualize:
-        from stage3_analysis.dnn_probe_viz import DNNProbeVisualizer
+        from stage3_analysis.dnn_classification_viz import (
+            DNNClassificationVisualizer,
+        )
 
         viz_dir = out_dir / "plots"
-        logger.info(f"\nGenerating DNN probe visualizations to {viz_dir}...")
-        viz = DNNProbeVisualizer(
-            results=regressor.results,
+        logger.info(f"\nGenerating DNN classification visualizations to {viz_dir}...")
+        viz = DNNClassificationVisualizer(
+            results=prober.results,
             output_dir=viz_dir,
-            training_curves=regressor.training_curves,
+            training_curves=prober.training_curves,
+            study_area=args.study_area,
         )
-        plot_paths = viz.plot_all(
-            linear_results=linear_results,
-            skip_spatial=args.quick_viz,
-        )
+        plot_paths = viz.plot_all(skip_spatial=args.quick_viz)
         logger.info(f"Generated {len(plot_paths)} plots to {viz_dir}")
 
 

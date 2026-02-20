@@ -36,10 +36,8 @@ try:
 except ImportError:
     HAS_DATASHADER = False
 
-# SRAI for H3 geometry creation (never use h3 directly)
-from srai.h3 import h3_to_geoseries
-
 from utils import StudyAreaPaths
+from utils.spatial_db import SpatialDB
 
 matplotlib.use('Agg')
 warnings.filterwarnings('ignore')
@@ -133,14 +131,21 @@ def find_study_area_data(study_area: str, resolution: int) -> Path:
     return data_path
 
 
-def load_and_prepare_embeddings(data_path: Path) -> Tuple[gpd.GeoDataFrame, np.ndarray]:
+def load_and_prepare_embeddings(
+    data_path: Path,
+    study_area: str = "netherlands",
+    resolution: int = 10,
+) -> Tuple[gpd.GeoDataFrame, np.ndarray]:
     """
     Load embeddings and prepare for kmeans_clustering_1layer.
 
     Supports both SRAI region_id format and legacy h3_index format.
+    Uses SpatialDB for geometry lookup from pre-computed region files.
     Returns (GeoDataFrame with geometry, embedding numpy array).
     """
     print(f"Loading embeddings from {data_path.name}...")
+
+    db = SpatialDB.for_study_area(study_area)
 
     try:
         gdf = gpd.read_parquet(data_path)
@@ -151,11 +156,11 @@ def load_and_prepare_embeddings(data_path: Path) -> Tuple[gpd.GeoDataFrame, np.n
         if 'region_id' in df.columns or df.index.name == 'region_id':
             if df.index.name == 'region_id':
                 df = df.reset_index()
-            geometry_series = h3_to_geoseries(df['region_id'])
-            gdf = gpd.GeoDataFrame(df, geometry=geometry_series, crs='EPSG:4326')
+            geom_gdf = db.geometry(df['region_id'], resolution=resolution, crs=4326)
+            gdf = gpd.GeoDataFrame(df, geometry=geom_gdf.geometry.values, crs='EPSG:4326')
         elif 'h3_index' in df.columns:
-            geometry_series = h3_to_geoseries(df['h3_index'])
-            gdf = gpd.GeoDataFrame(df, geometry=geometry_series, crs='EPSG:4326')
+            geom_gdf = db.geometry(df['h3_index'], resolution=resolution, crs=4326)
+            gdf = gpd.GeoDataFrame(df, geometry=geom_gdf.geometry.values, crs='EPSG:4326')
         elif 'lat' in df.columns and 'lng' in df.columns:
             from shapely.geometry import Point
             geometry = [Point(xy) for xy in zip(df.lng, df.lat)]
