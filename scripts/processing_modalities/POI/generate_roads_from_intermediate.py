@@ -77,8 +77,9 @@ def main():
     logger.info(f"Starting Highway2Vec training at {start_time}")
     
     try:
-        # Call the private method directly since we have all the data
-        embeddings_df = processor._train_highway2vec_with_data(roads_gdf, regions_gdf, joint_gdf, 10, "netherlands")
+        # Use the public highway2vec method with pre-computed regions
+        # (regions_gdf with >1000 rows triggers the pre-computed branch)
+        embeddings_df = processor.highway2vec(roads_gdf, regions_gdf, 10, "netherlands")
         
         # Save embeddings manually since we're calling highway2vec directly
         output_dir = Path(roads_config['output_dir'])
@@ -98,7 +99,7 @@ def main():
         if Path(output_path).exists():
             df = pd.read_parquet(output_path)
             logger.info(f"Generated embeddings shape: {df.shape}")
-            logger.info(f"H3 cells: {df['h3_index'].nunique()}")
+            logger.info(f"H3 cells: {df['region_id'].nunique()}")
             logger.info(f"Memory usage: {df.memory_usage(deep=True).sum() / 1024 / 1024:.2f} MB")
             
     except Exception as e:
