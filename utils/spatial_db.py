@@ -93,7 +93,7 @@ class SpatialDB:
         """
         ids_series = pd.Series(np.asarray(hex_ids, dtype=str), name="region_id")
         ids_df = ids_series.to_frame()
-        self._ctx.create_data_frame(ids_df).to_view(view_name)
+        self._ctx.create_data_frame(ids_df).to_view(view_name, overwrite=True)
 
     @staticmethod
     def _transform_clause(geom_col: str, from_crs: int, to_crs: int) -> str:

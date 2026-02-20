@@ -120,9 +120,9 @@ class ClassificationVisualizer:
             cmap="Blues",
             vmin=0,
             vmax=1,
-            annot=n_labels <= 20,
-            fmt=".2f" if n_labels <= 20 else "",
-            linewidths=0.5 if n_labels <= 20 else 0,
+            annot=False,
+            linewidths=0.5,
+            linecolor="#cccccc",
             square=True,
             ax=ax,
         )

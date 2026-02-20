@@ -403,7 +403,9 @@ class DNNClassificationProber:
         best_state: Optional[Dict] = None
         val_loss_history: List[float] = []
 
-        for epoch in range(self.config.max_epochs):
+        from tqdm import trange
+
+        for epoch in trange(self.config.max_epochs, desc="    Epochs", leave=False):
             # Smooth logarithmic batch size schedule
             current_bs = self._batch_size_schedule(epoch, initial_bs, n_train)
 
@@ -517,7 +519,9 @@ class DNNClassificationProber:
         fold_metrics_list: List[FoldMetrics] = []
         training_curves: Dict[int, List[float]] = {}
 
-        for fold_id in unique_folds:
+        from tqdm import tqdm
+
+        for fold_id in tqdm(unique_folds, desc=f"  CV folds", leave=False):
             val_mask = folds == fold_id
             train_mask = ~val_mask
 
@@ -656,7 +660,9 @@ class DNNClassificationProber:
         logger.info(f"Targets: {self.config.target_cols}")
 
         # Run for each target
-        for target_col in self.config.target_cols:
+        from tqdm import tqdm
+
+        for target_col in tqdm(self.config.target_cols, desc="Targets"):
             self.run_for_target(
                 target_col, X, y_all, folds, region_ids,
             )
@@ -860,12 +866,80 @@ def main():
         action="store_true",
         help="Generate only fast plots (skip spatial maps)",
     )
+    parser.add_argument(
+        "--plot-only",
+        type=str,
+        default=None,
+        help="Skip training, load results from this run dir and generate plots only",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
+
+    # --plot-only mode: load saved results and generate visualizations
+    if args.plot_only:
+        from stage3_analysis.dnn_classification_viz import (
+            DNNClassificationVisualizer,
+        )
+
+        run_dir = Path(args.plot_only)
+        logger.info(f"Plot-only mode: loading results from {run_dir}")
+
+        # Load results from saved predictions
+        results: Dict[str, TargetResult] = {}
+        metrics_df = pd.read_csv(run_dir / "metrics_summary.csv")
+        for _, row in metrics_df.iterrows():
+            target_col = row["target"]
+            pred_path = run_dir / f"predictions_{target_col}.parquet"
+            pred_df = pd.read_parquet(pred_path)
+            results[target_col] = TargetResult(
+                target=target_col,
+                target_name=row["target_name"],
+                best_alpha=0.0,
+                best_l1_ratio=0.0,
+                fold_metrics=[],
+                overall_r2=0.0,
+                overall_rmse=0.0,
+                overall_mae=0.0,
+                coefficients=np.array([]),
+                intercept=0.0,
+                feature_names=[],
+                oof_predictions=pred_df["predicted"].values,
+                actual_values=pred_df["actual"].values,
+                region_ids=pred_df.index.values,
+                overall_accuracy=row.get("overall_accuracy"),
+                overall_f1_macro=row.get("overall_f1_macro"),
+                n_classes=int(row.get("n_classes", 0)),
+                task_type="classification",
+            )
+
+        # Load training curves if available
+        training_curves: Dict[str, Dict[int, List[float]]] = {}
+        curves_dir = run_dir / "training_curves"
+        if curves_dir.exists():
+            for curve_file in sorted(curves_dir.glob("*.json")):
+                with open(curve_file) as f:
+                    data = json.load(f)
+                tc = data["target"]
+                fold_id = data["fold"]
+                if tc not in training_curves:
+                    training_curves[tc] = {}
+                training_curves[tc][fold_id] = data["val_loss"]
+
+        viz_dir = run_dir / "plots"
+        logger.info(f"Generating plots to {viz_dir}...")
+        viz = DNNClassificationVisualizer(
+            results=results,
+            output_dir=viz_dir,
+            training_curves=training_curves,
+            study_area=args.study_area,
+        )
+        plot_paths = viz.plot_all(skip_spatial=args.quick_viz)
+        logger.info(f"Generated {len(plot_paths)} plots to {viz_dir}")
+        return
 
     config = DNNClassificationConfig(
         study_area=args.study_area,

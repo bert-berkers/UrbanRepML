@@ -267,7 +267,9 @@ class ClassificationProber:
         oof_predictions = np.full(len(y), np.nan)
         fold_metrics_list = []
 
-        for fold_id in unique_folds:
+        from tqdm import tqdm
+
+        for fold_id in tqdm(unique_folds, desc=f"  CV folds", leave=False):
             test_mask = folds == fold_id
             train_mask = ~test_mask
 
@@ -342,7 +344,9 @@ class ClassificationProber:
 
         unique_folds = np.unique(folds)
 
-        for target_col in self.config.target_cols:
+        from tqdm import tqdm
+
+        for target_col in tqdm(self.config.target_cols, desc="Targets"):
             y = y_all[target_col].values
             target_name = self._get_target_name(target_col)
 
@@ -512,12 +516,63 @@ def main():
         action="store_true",
         help="Skip spatial maps (faster visualization)",
     )
+    parser.add_argument(
+        "--plot-only",
+        type=str,
+        default=None,
+        help="Skip training, load results from this run dir and generate plots only",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
+
+    # --plot-only mode: load saved results and generate visualizations
+    if args.plot_only:
+        from stage3_analysis.classification_viz import ClassificationVisualizer
+
+        run_dir = Path(args.plot_only)
+        logger.info(f"Plot-only mode: loading results from {run_dir}")
+
+        results: Dict[str, TargetResult] = {}
+        metrics_df = pd.read_csv(run_dir / "metrics_summary.csv")
+        for _, row in metrics_df.iterrows():
+            target_col = row["target"]
+            pred_path = run_dir / f"predictions_{target_col}.parquet"
+            pred_df = pd.read_parquet(pred_path)
+            results[target_col] = TargetResult(
+                target=target_col,
+                target_name=row["target_name"],
+                best_alpha=0.0,
+                best_l1_ratio=0.0,
+                fold_metrics=[],
+                overall_r2=0.0,
+                overall_rmse=0.0,
+                overall_mae=0.0,
+                coefficients=np.zeros(0),
+                intercept=0.0,
+                feature_names=[],
+                oof_predictions=pred_df["predicted"].values,
+                actual_values=pred_df["actual"].values,
+                region_ids=pred_df.index.values,
+                overall_accuracy=row.get("overall_accuracy"),
+                overall_f1_macro=row.get("overall_f1_macro"),
+                n_classes=int(row.get("n_classes", 0)),
+                task_type="classification",
+            )
+
+        viz_dir = run_dir / "plots"
+        logger.info(f"Generating plots to {viz_dir}...")
+        viz = ClassificationVisualizer(
+            results=results,
+            output_dir=viz_dir,
+            study_area=args.study_area,
+        )
+        plot_paths = viz.plot_all(skip_spatial=args.quick_viz)
+        logger.info(f"Generated {len(plot_paths)} plots to {viz_dir}")
+        return
 
     config = ClassificationProbeConfig(
         study_area=args.study_area,
