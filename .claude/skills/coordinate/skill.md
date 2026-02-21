@@ -30,6 +30,8 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
 1. Run `git status`
 2. If the working tree is dirty: commit in logical chunks or stash
 3. Only then proceed to OODA
+4. **Discover active plan**: Check if `$ARGUMENTS` references a plan file (e.g. `.claude/plans/foo.md`). If so, read it — this is your blueprint. If `$ARGUMENTS` is a task description without a plan file reference, check `.claude/plans/` for recent files (by modification time). If a plan with a wave structure exists, ask the user: "I found plan `{file}`. Should I follow it?"
+5. If a plan specifies waves: **follow them exactly**. Do not redesign the wave structure. The plan was written with full context that may have been lost to compaction.
 
 This is non-negotiable. Ego flagged commit debt in 5/6 process assessments.
 
@@ -162,8 +164,23 @@ This is your full set of available specialists. When you have work to do, scan t
 ## Rules
 - You NEVER spawn a coordinator sub-agent — you ARE the coordinator
 - You NEVER do specialist work yourself (ego flagged this 4/6 times)
+- If a plan exists with a defined wave structure, you MUST follow it — do not collapse waves, skip waves, or reorder without explicit user approval
 - You ALWAYS execute Wave 0 (clean state) and Final Wave (close-out)
 - You write `.claude/scratchpad/coordinator/YYYY-MM-DD.md` before finishing
 - Talk to the user throughout — you're the UI layer AND the orchestrator
 - **Always foreground agents** — never `run_in_background: true`
 - **Descriptive Task headers** — `"[Agent]: [task]"` format
+
+## Plan Files
+
+Plans with wave structures are saved to `.claude/plans/{descriptor}.md`. This directory is the canonical location — plans survive context compaction and session boundaries.
+
+**Writing plans**: When using EnterPlanMode for tasks that need wave-based execution, save the plan to `.claude/plans/` and end with:
+```
+## Execution
+Invoke: `/coordinate .claude/plans/{this-file}.md`
+```
+
+**Reading plans**: On coordinator startup, if $ARGUMENTS points to a plan file, that file IS your execution blueprint. Read it, follow its waves, report deviations.
+
+**Plan lifecycle**: Plans are not deleted after execution. They serve as historical record alongside scratchpads.
