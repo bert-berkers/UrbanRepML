@@ -4,7 +4,7 @@
 DNN Classification Probe: MLP Probe for Urban Taxonomy Classification
 
 Trains a multi-layer perceptron (MLP) probe to classify H3 hexagons into
-urban taxonomy hierarchy levels using AlphaEarth embeddings. Classification
+urban taxonomy hierarchy levels using embeddings. Classification
 only -- no regression code paths.
 
 Key differences from the DNN regression probe (dnn_probe.py):
@@ -39,7 +39,6 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.preprocessing import StandardScaler
-from spatialkfold.blocks import spatial_blocks
 
 from stage3_analysis.linear_probe import (
     TAXONOMY_TARGET_COLS,
@@ -68,6 +67,7 @@ class DNNClassificationConfig:
     h3_resolution: int = 10
     target_name: str = "urban_taxonomy"
     target_cols: List[str] = field(default_factory=lambda: list(TAXONOMY_TARGET_COLS))
+    modality: str = "alphaearth"
 
     # Spatial block CV (same defaults as LinearProbeConfig)
     n_folds: int = 5
@@ -106,7 +106,7 @@ class DNNClassificationConfig:
 
         if self.embeddings_path is None:
             self.embeddings_path = str(
-                paths.embedding_file("alphaearth", self.h3_resolution, self.year)
+                paths.embedding_file(self.modality, self.h3_resolution, self.year)
             )
         if self.target_path is None:
             self.target_path = str(
@@ -132,7 +132,7 @@ class DNNClassificationProber:
     """
     MLP classification probe with spatial block CV.
 
-    Evaluates whether non-linear transformations of AlphaEarth embeddings
+    Evaluates whether non-linear transformations of embeddings
     improve urban taxonomy classification over linear probes. Each hexagon
     is an independent sample -- no graph structure is used.
 
@@ -247,6 +247,8 @@ class DNNClassificationProber:
         )
 
         gdf_proj = gdf.to_crs(epsg=28992)
+
+        from spatialkfold.blocks import spatial_blocks
 
         blocks_gdf = spatial_blocks(
             gdf=gdf_proj,
@@ -765,14 +767,14 @@ class DNNClassificationProber:
         # Write run-level provenance when using a run directory
         if self.config.run_id is not None:
             _paths = StudyAreaPaths(self.config.study_area)
-            _latest = _paths.latest_run(_paths.stage1("alphaearth"))
+            _latest = _paths.latest_run(_paths.stage1(self.config.modality))
             _upstream_label = _latest.name if _latest else "flat"
             write_run_info(
                 out_dir,
                 stage="stage3",
                 study_area=self.config.study_area,
                 config=config_dict,
-                upstream_runs={"stage1/alphaearth": _upstream_label},
+                upstream_runs={f"stage1/{self.config.modality}": _upstream_label},
             )
             logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
 
@@ -806,9 +808,15 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="DNN Classification Probe: MLP-based AlphaEarth -> Urban Taxonomy"
+        description="DNN Classification Probe: MLP-based Embeddings -> Urban Taxonomy"
     )
     parser.add_argument("--study-area", default="netherlands")
+    parser.add_argument("--modality", default="alphaearth",
+                        help="Stage1 modality name (default: alphaearth)")
+    parser.add_argument("--stage2-model", default=None,
+                        help="Stage2 fusion model name (overrides --modality)")
+    parser.add_argument("--embeddings-path", default=None,
+                        help="Direct path to embeddings parquet (overrides all)")
     parser.add_argument(
         "--target-name",
         default="urban_taxonomy",
@@ -941,15 +949,43 @@ def main():
         logger.info(f"Generated {len(plot_paths)} plots to {viz_dir}")
         return
 
-    config = DNNClassificationConfig(
-        study_area=args.study_area,
-        target_name=args.target_name,
-        n_folds=args.n_folds,
-        max_epochs=args.max_epochs,
-        block_width=args.block_size,
-        block_height=args.block_size,
-        device=args.device,
-    )
+    if args.embeddings_path:
+        config = DNNClassificationConfig(
+            study_area=args.study_area,
+            embeddings_path=args.embeddings_path,
+            target_name=args.target_name,
+            n_folds=args.n_folds,
+            max_epochs=args.max_epochs,
+            block_width=args.block_size,
+            block_height=args.block_size,
+            device=args.device,
+        )
+    elif args.stage2_model:
+        from utils.paths import StudyAreaPaths as _SAP
+        _paths = _SAP(args.study_area)
+        fused_path = _paths.fused_embedding_file(args.stage2_model, 10)
+        config = DNNClassificationConfig(
+            study_area=args.study_area,
+            embeddings_path=str(fused_path),
+            modality=args.stage2_model,
+            target_name=args.target_name,
+            n_folds=args.n_folds,
+            max_epochs=args.max_epochs,
+            block_width=args.block_size,
+            block_height=args.block_size,
+            device=args.device,
+        )
+    else:
+        config = DNNClassificationConfig(
+            study_area=args.study_area,
+            modality=args.modality,
+            target_name=args.target_name,
+            n_folds=args.n_folds,
+            max_epochs=args.max_epochs,
+            block_width=args.block_size,
+            block_height=args.block_size,
+            device=args.device,
+        )
 
     if args.hidden_dim is not None:
         config.hidden_dim = args.hidden_dim

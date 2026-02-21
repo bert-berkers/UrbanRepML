@@ -33,8 +33,6 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from utils import StudyAreaPaths
 
-from sklearn.metrics import confusion_matrix
-
 from .linear_probe import LinearProbeRegressor, TargetResult, TARGET_NAMES, TAXONOMY_TARGET_NAMES
 
 logger = logging.getLogger(__name__)
@@ -91,7 +89,7 @@ class LinearProbeVisualizer:
         coefs = result.coefficients
         names = result.feature_names
 
-        # Natural A00→A63 order (ascending by feature name)
+        # Natural feature order (ascending by feature name)
         natural_idx = sorted(range(len(names)), key=lambda i: names[i])
         ordered_coefs = coefs[natural_idx]
         ordered_names = [names[i] for i in natural_idx]
@@ -138,7 +136,7 @@ class LinearProbeVisualizer:
         Faceted horizontal bar chart comparing ALL coefficients across all targets.
 
         2x3 subplot grid with shared x-axis range so panels are directly comparable.
-        Features displayed in natural A00→A63 order for cross-target comparison.
+        Features displayed in natural feature order for cross-target comparison.
         Requires more than one target result.
 
         Returns:
@@ -176,7 +174,7 @@ class LinearProbeVisualizer:
             coefs = result.coefficients
             names = result.feature_names
 
-            # Natural A00→A63 order
+            # Natural feature order
             natural_idx = sorted(range(len(names)), key=lambda i: names[i])
             ordered_coefs = coefs[natural_idx]
             ordered_names = [names[i] for i in natural_idx]
@@ -202,7 +200,7 @@ class LinearProbeVisualizer:
 
         fig.suptitle(
             "OLS Coefficients: All Features per Leefbaarometer Indicator\n"
-            "A00->A63 order | Shared x-axis for direct comparison",
+            "Natural feature order | Shared x-axis for direct comparison",
             fontsize=14,
         )
         plt.tight_layout(rect=[0, 0, 1, 0.95])
@@ -233,7 +231,7 @@ class LinearProbeVisualizer:
         for j, target_col in enumerate(targets):
             coef_matrix[:, j] = self.results[target_col].coefficients
 
-        # Natural A00→A63 order for consistent cross-target comparison
+        # Natural feature order for consistent cross-target comparison
         natural_idx = sorted(range(len(feature_names)), key=lambda i: feature_names[i])
         coef_matrix = coef_matrix[natural_idx]
         sorted_names = [feature_names[i] for i in natural_idx]
@@ -262,7 +260,7 @@ class LinearProbeVisualizer:
         )
 
         ax.set_title("Coefficient Heatmap\n"
-                      "Features (A00→A63) x Leefbaarometer Targets")
+                      "Features x Leefbaarometer Targets")
         ax.set_ylabel("Embedding Feature")
         ax.set_xlabel("Target Variable")
 
@@ -368,7 +366,7 @@ class LinearProbeVisualizer:
         r2_full = [results_full[t].overall_r2 for t in targets]
         bars1 = ax.bar(x - width / 2 if results_pca else x, r2_full,
                        width if results_pca else width * 1.5,
-                       label="Full 64-dim", color="steelblue", edgecolor="white")
+                       label="Full embeddings", color="steelblue", edgecolor="white")
 
         if results_pca:
             r2_pca = [results_pca[t].overall_r2 for t in targets]
@@ -387,7 +385,7 @@ class LinearProbeVisualizer:
                         f"{height:.3f}", ha="center", va="bottom", fontsize=9)
 
         ax.set_ylabel("R-squared (OOF)")
-        ax.set_title("Linear Probe Performance: AlphaEarth -> Leefbaarometer\n"
+        ax.set_title("Linear Probe Performance: Embeddings -> Leefbaarometer\n"
                       "Spatial Block Cross-Validation")
         ax.set_xticks(x)
         ax.set_xticklabels(target_labels, rotation=30, ha="right")
@@ -810,9 +808,14 @@ class LinearProbeVisualizer:
         # 2. Load only needed columns from embeddings parquet
         # ----------------------------------------------------------
         if embeddings_path is None:
-            # Construct via StudyAreaPaths rather than navigating up from
-            # output_dir, which breaks when output_dir is a run subdirectory.
+            # Best-effort fallback; callers should pass embeddings_path
+            # explicitly when probing non-alphaearth modalities.
             embeddings_path = self.paths.embedding_file("alphaearth", 10, 2022)
+            logger.warning(
+                "No embeddings_path provided to plot_rgb_top3_map; "
+                "falling back to alphaearth default. Pass embeddings_path "
+                "explicitly for other modalities."
+            )
 
         embeddings_path = Path(embeddings_path)
         if not embeddings_path.exists():
@@ -1040,16 +1043,12 @@ class LinearProbeVisualizer:
 
     def plot_fold_metrics(self) -> Optional[Path]:
         """
-        Box plot of per-fold metrics across targets.
-
-        For regression: R2 and RMSE.
-        For classification: Accuracy and F1 (macro).
+        Box plot of per-fold R2 and RMSE across targets.
 
         Returns:
             Path to saved figure, or None if no fold metrics.
         """
         rows = []
-        any_clf = False
         for target_col, result in self.results.items():
             target_label = (
                 TAXONOMY_TARGET_NAMES.get(target_col)
@@ -1062,10 +1061,6 @@ class LinearProbeVisualizer:
                     "R2": fm.r2,
                     "RMSE": fm.rmse,
                 }
-                if fm.accuracy is not None:
-                    row["Accuracy"] = fm.accuracy
-                    row["F1 Macro"] = fm.f1_macro
-                    any_clf = True
                 rows.append(row)
 
         if not rows:
@@ -1074,43 +1069,24 @@ class LinearProbeVisualizer:
 
         metrics_df = pd.DataFrame(rows)
 
-        if any_clf and "Accuracy" in metrics_df.columns:
-            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-            sns.boxplot(data=metrics_df, x="target", y="Accuracy", ax=axes[0],
-                        palette="Set2", hue="target", legend=False)
-            sns.stripplot(data=metrics_df, x="target", y="Accuracy", ax=axes[0],
-                          color="black", size=5, alpha=0.7)
-            axes[0].set_title("Accuracy by Spatial Fold")
-            axes[0].set_xticklabels(axes[0].get_xticklabels(), rotation=30, ha="right")
+        sns.boxplot(data=metrics_df, x="target", y="R2", ax=axes[0],
+                    palette="Set2", hue="target", legend=False)
+        sns.stripplot(data=metrics_df, x="target", y="R2", ax=axes[0],
+                      color="black", size=5, alpha=0.7)
+        axes[0].set_title("R-squared by Spatial Fold")
+        axes[0].set_xticklabels(axes[0].get_xticklabels(), rotation=30, ha="right")
+        axes[0].axhline(y=0, color="red", linewidth=0.5, linestyle="--")
 
-            sns.boxplot(data=metrics_df, x="target", y="F1 Macro", ax=axes[1],
-                        palette="Set2", hue="target", legend=False)
-            sns.stripplot(data=metrics_df, x="target", y="F1 Macro", ax=axes[1],
-                          color="black", size=5, alpha=0.7)
-            axes[1].set_title("F1 (macro) by Spatial Fold")
-            axes[1].set_xticklabels(axes[1].get_xticklabels(), rotation=30, ha="right")
+        sns.boxplot(data=metrics_df, x="target", y="RMSE", ax=axes[1],
+                    palette="Set2", hue="target", legend=False)
+        sns.stripplot(data=metrics_df, x="target", y="RMSE", ax=axes[1],
+                      color="black", size=5, alpha=0.7)
+        axes[1].set_title("RMSE by Spatial Fold")
+        axes[1].set_xticklabels(axes[1].get_xticklabels(), rotation=30, ha="right")
 
-            fig.suptitle("Classification Probe: Per-Fold Spatial CV Metrics", fontsize=14)
-        else:
-            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-            sns.boxplot(data=metrics_df, x="target", y="R2", ax=axes[0],
-                        palette="Set2", hue="target", legend=False)
-            sns.stripplot(data=metrics_df, x="target", y="R2", ax=axes[0],
-                          color="black", size=5, alpha=0.7)
-            axes[0].set_title("R-squared by Spatial Fold")
-            axes[0].set_xticklabels(axes[0].get_xticklabels(), rotation=30, ha="right")
-            axes[0].axhline(y=0, color="red", linewidth=0.5, linestyle="--")
-
-            sns.boxplot(data=metrics_df, x="target", y="RMSE", ax=axes[1],
-                        palette="Set2", hue="target", legend=False)
-            sns.stripplot(data=metrics_df, x="target", y="RMSE", ax=axes[1],
-                          color="black", size=5, alpha=0.7)
-            axes[1].set_title("RMSE by Spatial Fold")
-            axes[1].set_xticklabels(axes[1].get_xticklabels(), rotation=30, ha="right")
-
-            fig.suptitle("Linear Probe: Per-Fold Spatial CV Metrics", fontsize=14)
+        fig.suptitle("Linear Probe: Per-Fold Spatial CV Metrics", fontsize=14)
 
         plt.tight_layout()
 
@@ -1121,138 +1097,6 @@ class LinearProbeVisualizer:
         logger.info(f"Saved fold metrics plot: {path}")
         return path
 
-    def plot_confusion_matrix(self, target_col: str) -> Optional[Path]:
-        """
-        Confusion matrix heatmap for classification results.
-
-        Args:
-            target_col: Target variable name.
-
-        Returns:
-            Path to saved figure, or None if not a classification result.
-        """
-        result = self.results[target_col]
-        if result.task_type != "classification":
-            return None
-
-        valid = ~np.isnan(result.oof_predictions)
-        y_true = result.actual_values[valid].astype(int)
-        y_pred = result.oof_predictions[valid].astype(int)
-
-        labels = sorted(np.unique(np.concatenate([y_true, y_pred])))
-        cm = confusion_matrix(y_true, y_pred, labels=labels)
-
-        # Normalize by row (true label) for better visualization
-        cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True)
-        cm_norm = np.nan_to_num(cm_norm)
-
-        n_labels = len(labels)
-        figsize = max(6, n_labels * 0.4)
-        fig, ax = plt.subplots(figsize=(figsize, figsize))
-
-        sns.heatmap(
-            cm_norm,
-            xticklabels=labels,
-            yticklabels=labels,
-            cmap="Blues",
-            vmin=0, vmax=1,
-            annot=n_labels <= 20,
-            fmt=".2f" if n_labels <= 20 else "",
-            linewidths=0.5 if n_labels <= 20 else 0,
-            square=True,
-            ax=ax,
-        )
-
-        target_name = (
-            TARGET_NAMES.get(target_col)
-            or TAXONOMY_TARGET_NAMES.get(target_col)
-            or target_col
-        )
-        ax.set_title(
-            f"Confusion Matrix (normalized): {target_name}\n"
-            f"Acc={result.overall_accuracy:.4f}, F1={result.overall_f1_macro:.4f}, "
-            f"n_classes={result.n_classes}"
-        )
-        ax.set_xlabel("Predicted")
-        ax.set_ylabel("Actual")
-
-        plt.tight_layout()
-        path = self.output_dir / f"confusion_matrix_{target_col}.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
-        plt.close(fig)
-
-        logger.info(f"Saved confusion matrix: {path}")
-        return path
-
-    def plot_classification_metrics_comparison(self) -> Optional[Path]:
-        """
-        Bar chart comparing accuracy across classification targets.
-
-        Returns:
-            Path to saved figure, or None if no classification results.
-        """
-        clf_results = {
-            k: v for k, v in self.results.items()
-            if v.task_type == "classification"
-        }
-        if not clf_results:
-            return None
-
-        targets = list(clf_results.keys())
-        target_labels = [
-            TAXONOMY_TARGET_NAMES.get(t, TARGET_NAMES.get(t, t))
-            for t in targets
-        ]
-
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-        x = np.arange(len(targets))
-        width = 0.5
-
-        # Accuracy
-        acc_vals = [clf_results[t].overall_accuracy for t in targets]
-        bars = axes[0].bar(x, acc_vals, width, color="steelblue", edgecolor="white")
-        for bar in bars:
-            h = bar.get_height()
-            axes[0].text(
-                bar.get_x() + bar.get_width() / 2., h + 0.005,
-                f"{h:.3f}", ha="center", va="bottom", fontsize=9,
-            )
-        axes[0].set_ylabel("Accuracy (OOF)")
-        axes[0].set_title("Classification Accuracy per Level")
-        axes[0].set_xticks(x)
-        axes[0].set_xticklabels(target_labels, rotation=30, ha="right")
-        axes[0].set_ylim(0, 1.05)
-
-        # F1 macro
-        f1_vals = [clf_results[t].overall_f1_macro for t in targets]
-        bars = axes[1].bar(x, f1_vals, width, color="coral", edgecolor="white")
-        for bar in bars:
-            h = bar.get_height()
-            axes[1].text(
-                bar.get_x() + bar.get_width() / 2., h + 0.005,
-                f"{h:.3f}", ha="center", va="bottom", fontsize=9,
-            )
-        axes[1].set_ylabel("F1 Macro (OOF)")
-        axes[1].set_title("Classification F1 (macro) per Level")
-        axes[1].set_xticks(x)
-        axes[1].set_xticklabels(target_labels, rotation=30, ha="right")
-        axes[1].set_ylim(0, 1.05)
-
-        fig.suptitle(
-            "Classification Probe: Accuracy & F1 per Hierarchy Level\n"
-            "Spatial Block Cross-Validation",
-            fontsize=14,
-        )
-        plt.tight_layout(rect=[0, 0, 1, 0.92])
-
-        path = self.output_dir / "classification_metrics_comparison.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
-        plt.close(fig)
-
-        logger.info(f"Saved classification metrics comparison: {path}")
-        return path
-
     def plot_all(
         self,
         geometry_source: Optional[gpd.GeoDataFrame] = None,
@@ -1261,11 +1105,7 @@ class LinearProbeVisualizer:
         boundary_gdf: Optional[gpd.GeoDataFrame] = None,
     ) -> List[Path]:
         """
-        Generate all visualizations.
-
-        Automatically detects task_type and generates appropriate plots:
-        - Regression: coefficient bars, scatter, spatial residuals, heatmap, etc.
-        - Classification: confusion matrices, accuracy/F1 comparison bars.
+        Generate all regression visualizations.
 
         Args:
             geometry_source: GeoDataFrame for spatial maps.
@@ -1279,37 +1119,24 @@ class LinearProbeVisualizer:
         logger.info(f"Generating all visualizations to {self.output_dir}")
         paths = []
 
-        # Check if any results are classification
-        any_clf = any(r.task_type == "classification" for r in self.results.values())
-        any_reg = any(r.task_type == "regression" for r in self.results.values())
-
         # Per-target plots
         for target_col in self.results:
-            result = self.results[target_col]
-            if result.task_type == "regression":
-                paths.append(self.plot_coefficient_bars(target_col))
-                paths.append(self.plot_scatter_predicted_vs_actual(target_col))
-                paths.append(self.plot_spatial_residuals(target_col, geometry_source))
-                if embeddings_path is not None:
-                    paths.append(self.plot_rgb_top3_map(
-                        target_col, embeddings_path, boundary_gdf
-                    ))
-            else:
-                # Classification: confusion matrix
-                paths.append(self.plot_confusion_matrix(target_col))
+            paths.append(self.plot_coefficient_bars(target_col))
+            paths.append(self.plot_scatter_predicted_vs_actual(target_col))
+            paths.append(self.plot_spatial_residuals(target_col, geometry_source))
+            if embeddings_path is not None:
+                paths.append(self.plot_rgb_top3_map(
+                    target_col, embeddings_path, boundary_gdf
+                ))
 
         # Cross-target plots
-        if any_reg:
-            paths.append(self.plot_coefficient_heatmap())
-            paths.append(self.plot_cross_target_correlation())
-            paths.append(self.plot_metrics_comparison(
-                results_full=self.results, results_pca=results_pca
-            ))
-            if len(self.results) > 1:
-                paths.append(self.plot_coefficient_bars_faceted())
-
-        if any_clf:
-            paths.append(self.plot_classification_metrics_comparison())
+        paths.append(self.plot_coefficient_heatmap())
+        paths.append(self.plot_cross_target_correlation())
+        paths.append(self.plot_metrics_comparison(
+            results_full=self.results, results_pca=results_pca
+        ))
+        if len(self.results) > 1:
+            paths.append(self.plot_coefficient_bars_faceted())
 
         fold_metrics_path = self.plot_fold_metrics()
         if fold_metrics_path is not None:
