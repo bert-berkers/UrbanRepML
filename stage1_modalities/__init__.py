@@ -11,6 +11,17 @@ Processors for different urban data stage1_modalities:
 
 from stage1_modalities.base import ModalityProcessor
 
+# Canonical mapping of modality names to column prefixes.
+# Each stage1 processor names its output columns as prefix + zero-padded index
+# (e.g. AlphaEarth produces A00-A63). The concat script uses this for validation.
+MODALITY_PREFIXES = {
+    "alphaearth": "A",   # A00-A63 (64 features)
+    "poi": "P",          # P00-Pxx
+    "roads": "R",        # R00-Rxx
+    "aerial": "S",       # S00-Sxx (satellite imagery)
+    "gtfs": "G",         # G00-Gxx
+}
+
 
 def get_available_modalities():
     """Get list of available modality processors."""

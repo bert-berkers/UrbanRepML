@@ -81,6 +81,15 @@ class StudyAreaPaths:
         """Fused embedding output directory for a model."""
         return self.stage2(model_name) / "embeddings"
 
+    def fused_embedding_file(
+        self, model_name: str, resolution: int, year: int = 2022
+    ) -> Path:
+        """Parquet file for fused multimodal embeddings."""
+        return (
+            self.model_embeddings(model_name)
+            / f"{self.study_area}_res{resolution}_{year}.parquet"
+        )
+
     def plots(self, model_name: str) -> Path:
         """Plot directory for a fusion model."""
         return self.stage2(model_name) / "plots"
