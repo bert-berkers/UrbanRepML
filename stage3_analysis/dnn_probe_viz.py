@@ -404,7 +404,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         ax.legend()
 
         fig.suptitle(
-            "Linear vs DNN Probe: AlphaEarth Embeddings -> Leefbaarometer\n"
+            "Linear vs DNN Probe: Embeddings -> Leefbaarometer\n"
             "Spatial Block Cross-Validation",
             fontsize=14,
         )
@@ -756,11 +756,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         skip_spatial: bool = False,
     ) -> List[Path]:
         """
-        Generate all DNN probe visualizations.
-
-        Automatically detects task_type and generates appropriate plots:
-        - Regression: scatter, spatial residuals, comparison bars, etc.
-        - Classification: confusion matrices, accuracy/F1 comparison.
+        Generate all DNN probe regression visualizations.
 
         Args:
             geometry_source: GeoDataFrame for spatial maps.
@@ -783,33 +779,22 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
             logger.info("  skip_spatial=True -- skipping spatial maps")
         paths: List[Path] = []
 
-        any_clf = any(r.task_type == "classification" for r in self.results.values())
-        any_reg = any(r.task_type == "regression" for r in self.results.values())
-
         # -- Per-target plots --
         for target_col in self.results:
-            result = self.results[target_col]
-            if result.task_type == "regression":
+            paths.append(
+                self.plot_scatter_predicted_vs_actual(target_col)
+            )
+            if not skip_spatial:
                 paths.append(
-                    self.plot_scatter_predicted_vs_actual(target_col)
+                    self.plot_spatial_residuals(target_col, geometry_source)
                 )
-                if not skip_spatial:
-                    paths.append(
-                        self.plot_spatial_residuals(target_col, geometry_source)
-                    )
-            else:
-                # Classification: confusion matrix (inherited from parent)
-                paths.append(self.plot_confusion_matrix(target_col))
 
         # -- Cross-target plots --
         fold_path = self.plot_fold_metrics()
         if fold_path is not None:
             paths.append(fold_path)
 
-        if any_reg:
-            paths.append(self.plot_metrics_comparison())
-        if any_clf:
-            paths.append(self.plot_classification_metrics_comparison())
+        paths.append(self.plot_metrics_comparison())
 
         # -- DNN-specific: training curves --
         curves_path = self.plot_training_curves()
@@ -822,8 +807,8 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
             if tc_path is not None:
                 paths.append(tc_path)
 
-        # -- Comparison plots (require linear_results, regression only) --
-        if linear_results is not None and any_reg:
+        # -- Comparison plots (require linear_results) --
+        if linear_results is not None:
             comp_bars = self.plot_comparison_bars(linear_results)
             if comp_bars is not None:
                 paths.append(comp_bars)
@@ -835,12 +820,11 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
             # Spatial improvement per target
             if not skip_spatial:
                 for target_col in self.results:
-                    if self.results[target_col].task_type == "regression":
-                        imp_path = self.plot_spatial_improvement(
-                            target_col, linear_results, geometry_source
-                        )
-                        if imp_path is not None:
-                            paths.append(imp_path)
+                    imp_path = self.plot_spatial_improvement(
+                        target_col, linear_results, geometry_source
+                    )
+                    if imp_path is not None:
+                        paths.append(imp_path)
 
         # Filter out None values
         paths = [p for p in paths if p is not None]

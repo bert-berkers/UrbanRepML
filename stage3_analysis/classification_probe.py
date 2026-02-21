@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Classification Probe: AlphaEarth Embeddings -> Urban Taxonomy
+Classification Probe: Embeddings -> Urban Taxonomy
 
 Fits LogisticRegression with spatial block cross-validation to
-evaluate whether AlphaEarth embeddings encode urban morphological
+evaluate whether embeddings encode urban morphological
 type signals (urban taxonomy hierarchical classification).
 
     - LogisticRegression (multinomial, balanced class weights)
@@ -30,7 +30,6 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.preprocessing import StandardScaler
-from spatialkfold.blocks import spatial_blocks
 
 from utils import StudyAreaPaths
 from utils.paths import write_run_info
@@ -54,6 +53,7 @@ class ClassificationProbeConfig:
     h3_resolution: int = 10
     target_name: str = "urban_taxonomy"
     target_cols: List[str] = field(default_factory=lambda: list(TAXONOMY_TARGET_COLS))
+    modality: str = "alphaearth"
 
     # Spatial block CV
     n_folds: int = 5
@@ -75,7 +75,7 @@ class ClassificationProbeConfig:
 
         if self.embeddings_path is None:
             self.embeddings_path = str(
-                paths.embedding_file("alphaearth", self.h3_resolution, self.year)
+                paths.embedding_file(self.modality, self.h3_resolution, self.year)
             )
         if self.target_path is None:
             target_year = 2025 if self.target_name == "urban_taxonomy" else self.year
@@ -96,7 +96,7 @@ class ClassificationProber:
     """
     LogisticRegression classification probe with spatial block cross-validation.
 
-    Evaluates whether AlphaEarth embeddings encode urban morphological type
+    Evaluates whether embeddings encode urban morphological type
     signals by fitting LogisticRegression to predict urban taxonomy classes.
     Spatial block cross-validation prevents spatial autocorrelation leakage.
     """
@@ -200,6 +200,8 @@ class ClassificationProber:
         )
 
         gdf_proj = gdf.to_crs(epsg=28992)
+
+        from spatialkfold.blocks import spatial_blocks
 
         blocks_gdf = spatial_blocks(
             gdf=gdf_proj,
@@ -470,14 +472,14 @@ class ClassificationProber:
         # Write run-level provenance
         if self.config.run_id is not None:
             _paths = StudyAreaPaths(self.config.study_area)
-            _latest = _paths.latest_run(_paths.stage1("alphaearth"))
+            _latest = _paths.latest_run(_paths.stage1(self.config.modality))
             _upstream_label = _latest.name if _latest else "flat"
             write_run_info(
                 out_dir,
                 stage="stage3",
                 study_area=self.config.study_area,
                 config=config_dict,
-                upstream_runs={"stage1/alphaearth": _upstream_label},
+                upstream_runs={f"stage1/{self.config.modality}": _upstream_label},
             )
             logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
 
@@ -489,9 +491,15 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Classification Probe: AlphaEarth -> Urban Taxonomy"
+        description="Classification Probe: Embeddings -> Urban Taxonomy"
     )
     parser.add_argument("--study-area", default="netherlands")
+    parser.add_argument("--modality", default="alphaearth",
+                        help="Stage1 modality name (default: alphaearth)")
+    parser.add_argument("--stage2-model", default=None,
+                        help="Stage2 fusion model name (overrides --modality)")
+    parser.add_argument("--embeddings-path", default=None,
+                        help="Direct path to embeddings parquet (overrides all)")
     parser.add_argument(
         "--target-name",
         default="urban_taxonomy",
@@ -574,13 +582,36 @@ def main():
         logger.info(f"Generated {len(plot_paths)} plots to {viz_dir}")
         return
 
-    config = ClassificationProbeConfig(
-        study_area=args.study_area,
-        target_name=args.target_name,
-        n_folds=args.n_folds,
-        block_width=args.block_size,
-        block_height=args.block_size,
-    )
+    if args.embeddings_path:
+        config = ClassificationProbeConfig(
+            study_area=args.study_area,
+            embeddings_path=args.embeddings_path,
+            target_name=args.target_name,
+            n_folds=args.n_folds,
+            block_width=args.block_size,
+            block_height=args.block_size,
+        )
+    elif args.stage2_model:
+        paths = StudyAreaPaths(args.study_area)
+        fused_path = paths.fused_embedding_file(args.stage2_model, 10)
+        config = ClassificationProbeConfig(
+            study_area=args.study_area,
+            embeddings_path=str(fused_path),
+            modality=args.stage2_model,
+            target_name=args.target_name,
+            n_folds=args.n_folds,
+            block_width=args.block_size,
+            block_height=args.block_size,
+        )
+    else:
+        config = ClassificationProbeConfig(
+            study_area=args.study_area,
+            modality=args.modality,
+            target_name=args.target_name,
+            n_folds=args.n_folds,
+            block_width=args.block_size,
+            block_height=args.block_size,
+        )
 
     prober = ClassificationProber(config)
     prober.run()

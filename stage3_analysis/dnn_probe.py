@@ -4,8 +4,8 @@
 DNN Probe: MLP Probe for Liveability Prediction
 
 Trains a multi-layer perceptron (MLP) probe to test whether non-linear
-transformations of AlphaEarth embeddings improve liveability prediction
-over the existing linear probe.
+transformations of embeddings improve liveability prediction over the
+existing linear probe.
 
 Key differences from the linear probe:
     - Uses a multi-layer MLP with residual connections, LayerNorm, and GELU
@@ -33,20 +33,15 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
     mean_absolute_error,
     mean_squared_error,
     r2_score,
 )
 from sklearn.preprocessing import StandardScaler
-from spatialkfold.blocks import spatial_blocks
 
 from stage3_analysis.linear_probe import (
     TARGET_COLS,
     TARGET_NAMES,
-    TAXONOMY_TARGET_COLS,
-    TAXONOMY_TARGET_NAMES,
     FoldMetrics,
     TargetResult,
 )
@@ -62,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DNNProbeConfig:
-    """Configuration for DNN MLP probe regression or classification."""
+    """Configuration for DNN MLP probe regression."""
 
     # Study area
     study_area: str = "netherlands"
@@ -70,8 +65,7 @@ class DNNProbeConfig:
     h3_resolution: int = 10
     target_name: str = "leefbaarometer"
     target_cols: List[str] = field(default_factory=lambda: list(TARGET_COLS))
-    task_type: str = "regression"  # "regression" or "classification"
-    n_classes: Optional[int] = None  # auto-detected if None
+    modality: str = "alphaearth"
 
     # Spatial block CV (same defaults as LinearProbeConfig)
     n_folds: int = 5
@@ -110,21 +104,13 @@ class DNNProbeConfig:
         paths = StudyAreaPaths(self.study_area)
         self.run_id: Optional[str] = None
 
-        # Auto-configure for urban_taxonomy
-        if self.target_name == "urban_taxonomy":
-            if self.target_cols == list(TARGET_COLS):
-                self.target_cols = list(TAXONOMY_TARGET_COLS)
-            if self.task_type == "regression":
-                self.task_type = "classification"
-
         if self.embeddings_path is None:
             self.embeddings_path = str(
-                paths.embedding_file("alphaearth", self.h3_resolution, self.year)
+                paths.embedding_file(self.modality, self.h3_resolution, self.year)
             )
         if self.target_path is None:
-            target_year = 2025 if self.target_name == "urban_taxonomy" else self.year
             self.target_path = str(
-                paths.target_file(self.target_name, self.h3_resolution, target_year)
+                paths.target_file(self.target_name, self.h3_resolution, self.year)
             )
         if self.output_dir is None:
             if self.run_descriptor:
@@ -183,7 +169,7 @@ class MLPProbeModel(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.activation = nn.GELU()
 
-        # Output head: 1 for regression, n_classes for classification
+        # Output head
         self.head = nn.Linear(dims[-1], output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -226,7 +212,7 @@ class DNNProbeRegressor:
     """
     MLP probe with spatial block CV.
 
-    Evaluates whether non-linear transformations of AlphaEarth embeddings
+    Evaluates whether non-linear transformations of embeddings
     improve liveability prediction over linear probes. Each hexagon is an
     independent sample -- no graph structure is used.
 
@@ -347,6 +333,8 @@ class DNNProbeRegressor:
         Returns:
             Array of fold assignments (1 to n_folds) per row, aligned to gdf index.
         """
+        from spatialkfold.blocks import spatial_blocks
+
         logger.info(
             f"Creating spatial blocks: {self.config.n_folds} folds, "
             f"{self.config.block_width}m x {self.config.block_height}m"
@@ -417,15 +405,11 @@ class DNNProbeRegressor:
         train_mask: np.ndarray,
         val_mask: np.ndarray,
         hparams: Dict[str, Any],
-        task_type: str = "regression",
-        n_classes: Optional[int] = None,
-        label_offset: int = 0,
-    ) -> Tuple[MLPProbeModel, float, StandardScaler, Optional[StandardScaler], List[float]]:
+    ) -> Tuple[MLPProbeModel, float, StandardScaler, StandardScaler, List[float]]:
         """
         Train MLP for one fold with early stopping.
 
-        For regression: per-fold feature AND target standardization with MSELoss.
-        For classification: feature standardization only, CrossEntropyLoss.
+        Per-fold feature AND target standardization with MSELoss.
 
         Args:
             X: Feature matrix [N, D] (numpy, raw -- standardized here).
@@ -435,57 +419,41 @@ class DNNProbeRegressor:
             hparams: Dict with keys: hidden_dim, num_layers, dropout,
                      use_layer_norm, learning_rate, weight_decay,
                      initial_batch_size.
-            task_type: "regression" or "classification".
-            n_classes: Number of classes (required for classification).
-            label_offset: Subtracted from labels to make them 0-based
-                          (CrossEntropyLoss requires 0-based).
 
         Returns:
             (trained_model on CPU, best_val_loss, fitted_feature_scaler,
-             fitted_target_scaler_or_None, val_loss_history)
+             fitted_target_scaler, val_loss_history)
         """
         device = torch.device(self.config.device)
-        is_clf = task_type == "classification"
 
         # Per-fold feature standardization
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X[train_mask]).astype(np.float32)
         X_val = scaler.transform(X[val_mask]).astype(np.float32)
 
-        if is_clf:
-            # Classification: labels as long tensor (0-based)
-            y_train_np = (y[train_mask] - label_offset).astype(np.int64)
-            y_val_np = (y[val_mask] - label_offset).astype(np.int64)
-            y_scaler = None
-        else:
-            # Regression: per-fold target standardization
-            y_scaler = StandardScaler()
-            y_train_np = y_scaler.fit_transform(
-                y[train_mask].reshape(-1, 1)
-            ).ravel().astype(np.float32)
-            y_val_np = y_scaler.transform(
-                y[val_mask].reshape(-1, 1)
-            ).ravel().astype(np.float32)
+        # Per-fold target standardization
+        y_scaler = StandardScaler()
+        y_train_np = y_scaler.fit_transform(
+            y[train_mask].reshape(-1, 1)
+        ).ravel().astype(np.float32)
+        y_val_np = y_scaler.transform(
+            y[val_mask].reshape(-1, 1)
+        ).ravel().astype(np.float32)
 
         # Build tensors
         x_train_t = torch.tensor(X_train, dtype=torch.float32, device=device)
         x_val_t = torch.tensor(X_val, dtype=torch.float32, device=device)
-        if is_clf:
-            y_train_t = torch.tensor(y_train_np, dtype=torch.long, device=device)
-            y_val_t = torch.tensor(y_val_np, dtype=torch.long, device=device)
-        else:
-            y_train_t = torch.tensor(y_train_np, dtype=torch.float32, device=device)
-            y_val_t = torch.tensor(y_val_np, dtype=torch.float32, device=device)
+        y_train_t = torch.tensor(y_train_np, dtype=torch.float32, device=device)
+        y_val_t = torch.tensor(y_val_np, dtype=torch.float32, device=device)
 
         # Create model
-        output_dim = n_classes if is_clf else 1
         model = MLPProbeModel(
             input_dim=X.shape[1],
             hidden_dim=hparams["hidden_dim"],
             num_layers=hparams["num_layers"],
             dropout=hparams["dropout"],
             use_layer_norm=hparams.get("use_layer_norm", self.config.use_layer_norm),
-            output_dim=output_dim,
+            output_dim=1,
         ).to(device)
 
         optimizer = torch.optim.AdamW(
@@ -498,7 +466,7 @@ class DNNProbeRegressor:
             optimizer, T_max=self.config.max_epochs
         )
 
-        criterion = nn.CrossEntropyLoss() if is_clf else nn.MSELoss()
+        criterion = nn.MSELoss()
 
         # Progressive batch size parameters
         batch_size = hparams.get("initial_batch_size", 4096)
@@ -520,10 +488,7 @@ class DNNProbeRegressor:
                 idx = perm[start : start + current_bs]
                 optimizer.zero_grad()
                 out = model(x_train_t[idx])
-                if is_clf:
-                    loss = criterion(out, y_train_t[idx])
-                else:
-                    loss = criterion(out.squeeze(-1), y_train_t[idx])
+                loss = criterion(out.squeeze(-1), y_train_t[idx])
                 loss.backward()
                 optimizer.step()
 
@@ -533,10 +498,7 @@ class DNNProbeRegressor:
             model.eval()
             with torch.no_grad():
                 val_out = model(x_val_t)
-                if is_clf:
-                    val_loss = criterion(val_out, y_val_t).item()
-                else:
-                    val_loss = criterion(val_out.squeeze(-1), y_val_t).item()
+                val_loss = criterion(val_out.squeeze(-1), y_val_t).item()
 
             val_loss_history.append(val_loss)
 
@@ -562,11 +524,7 @@ class DNNProbeRegressor:
 
     def _get_target_name(self, target_col: str) -> str:
         """Look up display name for a target column."""
-        return (
-            TARGET_NAMES.get(target_col)
-            or TAXONOMY_TARGET_NAMES.get(target_col)
-            or target_col
-        )
+        return TARGET_NAMES.get(target_col, target_col)
 
     def run_for_target(
         self,
@@ -577,13 +535,10 @@ class DNNProbeRegressor:
         region_ids: np.ndarray,
     ) -> TargetResult:
         """
-        Run spatial CV pipeline for one target variable.
-
-        For regression: MSELoss with target standardization.
-        For classification: CrossEntropyLoss with 0-based labels.
+        Run spatial CV pipeline for one target variable (regression).
 
         Args:
-            target_col: Target column name (e.g. 'lbm' or 'type_level1').
+            target_col: Target column name (e.g. 'lbm').
             X: Feature matrix [N, D].
             y_all: DataFrame with all target columns.
             folds: Spatial fold assignments.
@@ -592,31 +547,12 @@ class DNNProbeRegressor:
         Returns:
             TargetResult with metrics and predictions.
         """
-        task_type = self.config.task_type
-        is_clf = task_type == "classification"
-
         y = y_all[target_col].values
         unique_folds = np.unique(folds)
         target_name = self._get_target_name(target_col)
 
         logger.info(f"\n--- Target: {target_col} ({target_name}) ---")
-
-        # For classification: determine label offset and n_classes
-        label_offset = 0
-        n_classes = 0
-        if is_clf:
-            unique_labels = np.unique(y[~np.isnan(y)]).astype(int)
-            label_min = int(unique_labels.min())
-            label_max = int(unique_labels.max())
-            # CrossEntropyLoss requires 0-based contiguous labels
-            label_offset = label_min
-            n_classes = label_max - label_min + 1
-            logger.info(
-                f"  n_classes={n_classes}, label_range=[{label_min}, {label_max}], "
-                f"offset={label_offset}"
-            )
-        else:
-            logger.info(f"  y range: [{y.min():.4f}, {y.max():.4f}], mean={y.mean():.4f}")
+        logger.info(f"  y range: [{y.min():.4f}, {y.max():.4f}], mean={y.mean():.4f}")
 
         # Use config defaults
         hparams = {
@@ -648,12 +584,7 @@ class DNNProbeRegressor:
             train_mask = ~val_mask
 
             model, best_val_loss, fold_scaler, fold_y_scaler, val_history = (
-                self._train_one_fold(
-                    X, y, train_mask, val_mask, hparams,
-                    task_type=task_type,
-                    n_classes=n_classes,
-                    label_offset=label_offset,
-                )
+                self._train_one_fold(X, y, train_mask, val_mask, hparams)
             )
             training_curves[int(fold_id)] = val_history
 
@@ -668,55 +599,31 @@ class DNNProbeRegressor:
             with torch.no_grad():
                 val_out = model(x_val_t)
 
-            if is_clf:
-                # Argmax -> predicted class (0-based), then add offset back
-                val_pred = val_out.argmax(dim=-1).cpu().numpy() + label_offset
-                val_pred = val_pred.astype(float)
-            else:
-                val_pred_std = val_out.squeeze(-1).cpu().numpy()
-                val_pred = fold_y_scaler.inverse_transform(
-                    val_pred_std.reshape(-1, 1)
-                ).ravel()
+            val_pred_std = val_out.squeeze(-1).cpu().numpy()
+            val_pred = fold_y_scaler.inverse_transform(
+                val_pred_std.reshape(-1, 1)
+            ).ravel()
 
             oof_predictions[val_mask] = val_pred
 
             y_val = y[val_mask]
 
-            if is_clf:
-                acc = float(accuracy_score(y_val, val_pred))
-                f1 = float(f1_score(y_val, val_pred, average="macro", zero_division=0))
-                fold_metrics_list.append(
-                    FoldMetrics(
-                        fold=int(fold_id),
-                        rmse=0.0, mae=0.0, r2=0.0,
-                        n_train=int(train_mask.sum()),
-                        n_test=int(val_mask.sum()),
-                        accuracy=acc,
-                        f1_macro=f1,
-                    )
+            rmse = float(np.sqrt(mean_squared_error(y_val, val_pred)))
+            mae = float(mean_absolute_error(y_val, val_pred))
+            r2 = float(r2_score(y_val, val_pred))
+            fold_metrics_list.append(
+                FoldMetrics(
+                    fold=int(fold_id),
+                    rmse=rmse, mae=mae, r2=r2,
+                    n_train=int(train_mask.sum()),
+                    n_test=int(val_mask.sum()),
                 )
-                logger.info(
-                    f"    Fold {fold_id}: Acc={acc:.4f}, F1={f1:.4f} "
-                    f"(train={train_mask.sum():,}, test={val_mask.sum():,}, "
-                    f"epochs={len(val_history)})"
-                )
-            else:
-                rmse = float(np.sqrt(mean_squared_error(y_val, val_pred)))
-                mae = float(mean_absolute_error(y_val, val_pred))
-                r2 = float(r2_score(y_val, val_pred))
-                fold_metrics_list.append(
-                    FoldMetrics(
-                        fold=int(fold_id),
-                        rmse=rmse, mae=mae, r2=r2,
-                        n_train=int(train_mask.sum()),
-                        n_test=int(val_mask.sum()),
-                    )
-                )
-                logger.info(
-                    f"    Fold {fold_id}: R2={r2:.4f}, RMSE={rmse:.4f}, MAE={mae:.4f} "
-                    f"(train={train_mask.sum():,}, test={val_mask.sum():,}, "
-                    f"epochs={len(val_history)})"
-                )
+            )
+            logger.info(
+                f"    Fold {fold_id}: R2={r2:.4f}, RMSE={rmse:.4f}, MAE={mae:.4f} "
+                f"(train={train_mask.sum():,}, test={val_mask.sum():,}, "
+                f"epochs={len(val_history)})"
+            )
 
             # Free GPU memory
             model = model.cpu()
@@ -730,65 +637,33 @@ class DNNProbeRegressor:
         # Overall metrics from OOF predictions
         valid_mask = ~np.isnan(oof_predictions)
 
-        if is_clf:
-            overall_acc = float(accuracy_score(
-                y[valid_mask], oof_predictions[valid_mask]
-            ))
-            overall_f1 = float(f1_score(
-                y[valid_mask], oof_predictions[valid_mask],
-                average="macro", zero_division=0,
-            ))
-            logger.info(
-                f"  Overall OOF: Acc={overall_acc:.4f}, F1={overall_f1:.4f}"
-            )
-            result = TargetResult(
-                target=target_col,
-                target_name=target_name,
-                best_alpha=0.0,
-                best_l1_ratio=0.0,
-                fold_metrics=fold_metrics_list,
-                overall_r2=0.0,
-                overall_rmse=0.0,
-                overall_mae=0.0,
-                coefficients=np.zeros(len(self.feature_names)),
-                intercept=0.0,
-                feature_names=self.feature_names,
-                oof_predictions=oof_predictions,
-                actual_values=y,
-                region_ids=region_ids,
-                overall_accuracy=overall_acc,
-                overall_f1_macro=overall_f1,
-                n_classes=n_classes,
-                task_type=task_type,
-            )
-        else:
-            overall_r2 = float(r2_score(y[valid_mask], oof_predictions[valid_mask]))
-            overall_rmse = float(
-                np.sqrt(mean_squared_error(y[valid_mask], oof_predictions[valid_mask]))
-            )
-            overall_mae = float(
-                mean_absolute_error(y[valid_mask], oof_predictions[valid_mask])
-            )
-            logger.info(
-                f"  Overall OOF: R2={overall_r2:.4f}, "
-                f"RMSE={overall_rmse:.4f}, MAE={overall_mae:.4f}"
-            )
-            result = TargetResult(
-                target=target_col,
-                target_name=target_name,
-                best_alpha=0.0,
-                best_l1_ratio=0.0,
-                fold_metrics=fold_metrics_list,
-                overall_r2=overall_r2,
-                overall_rmse=overall_rmse,
-                overall_mae=overall_mae,
-                coefficients=np.zeros(len(self.feature_names)),
-                intercept=0.0,
-                feature_names=self.feature_names,
-                oof_predictions=oof_predictions,
-                actual_values=y,
-                region_ids=region_ids,
-            )
+        overall_r2 = float(r2_score(y[valid_mask], oof_predictions[valid_mask]))
+        overall_rmse = float(
+            np.sqrt(mean_squared_error(y[valid_mask], oof_predictions[valid_mask]))
+        )
+        overall_mae = float(
+            mean_absolute_error(y[valid_mask], oof_predictions[valid_mask])
+        )
+        logger.info(
+            f"  Overall OOF: R2={overall_r2:.4f}, "
+            f"RMSE={overall_rmse:.4f}, MAE={overall_mae:.4f}"
+        )
+        result = TargetResult(
+            target=target_col,
+            target_name=target_name,
+            best_alpha=0.0,
+            best_l1_ratio=0.0,
+            fold_metrics=fold_metrics_list,
+            overall_r2=overall_r2,
+            overall_rmse=overall_rmse,
+            overall_mae=overall_mae,
+            coefficients=np.zeros(len(self.feature_names)),
+            intercept=0.0,
+            feature_names=self.feature_names,
+            oof_predictions=oof_predictions,
+            actual_values=y,
+            region_ids=region_ids,
+        )
 
         self.results[target_col] = result
         return result
@@ -804,12 +679,9 @@ class DNNProbeRegressor:
         Returns:
             Dictionary mapping target column to TargetResult.
         """
-        task_type = self.config.task_type
-        mode_label = "Classification" if task_type == "classification" else "Regression"
-        logger.info(f"=== DNN Probe {mode_label} (MLP) ===")
+        logger.info("=== DNN Probe Regression (MLP) ===")
         logger.info(f"Study area: {self.config.study_area}")
         logger.info(f"Year: {self.config.year}")
-        logger.info(f"Task type: {task_type}")
         logger.info(f"Device: {self.config.device}")
         logger.info(
             f"Architecture: MLP, "
@@ -839,16 +711,10 @@ class DNNProbeRegressor:
         # Summary
         logger.info("\n=== Summary ===")
         for target_col, result in self.results.items():
-            if result.task_type == "classification":
-                logger.info(
-                    f"  {target_col} ({result.target_name}): "
-                    f"Acc={result.overall_accuracy:.4f}, F1={result.overall_f1_macro:.4f}"
-                )
-            else:
-                logger.info(
-                    f"  {target_col} ({result.target_name}): "
-                    f"R2={result.overall_r2:.4f}, RMSE={result.overall_rmse:.4f}"
-                )
+            logger.info(
+                f"  {target_col} ({result.target_name}): "
+                f"R2={result.overall_r2:.4f}, RMSE={result.overall_rmse:.4f}"
+            )
 
         return self.results
 
@@ -873,7 +739,6 @@ class DNNProbeRegressor:
             row: Dict[str, Any] = {
                 "target": target_col,
                 "target_name": result.target_name,
-                "task_type": result.task_type,
                 "best_alpha": result.best_alpha,
                 "best_l1_ratio": result.best_l1_ratio,
                 "overall_r2": result.overall_r2,
@@ -881,18 +746,10 @@ class DNNProbeRegressor:
                 "overall_mae": result.overall_mae,
                 "n_features": len(result.feature_names),
             }
-            if result.task_type == "classification":
-                row["overall_accuracy"] = result.overall_accuracy
-                row["overall_f1_macro"] = result.overall_f1_macro
-                row["n_classes"] = result.n_classes
             if result.fold_metrics:
                 for fm in result.fold_metrics:
-                    if result.task_type == "classification":
-                        row[f"fold{fm.fold}_accuracy"] = fm.accuracy
-                        row[f"fold{fm.fold}_f1_macro"] = fm.f1_macro
-                    else:
-                        row[f"fold{fm.fold}_r2"] = fm.r2
-                        row[f"fold{fm.fold}_rmse"] = fm.rmse
+                    row[f"fold{fm.fold}_r2"] = fm.r2
+                    row[f"fold{fm.fold}_rmse"] = fm.rmse
             metrics_rows.append(row)
 
         metrics_df = pd.DataFrame(metrics_rows)
@@ -905,9 +762,8 @@ class DNNProbeRegressor:
                 "region_id": result.region_ids,
                 "actual": result.actual_values,
                 "predicted": result.oof_predictions,
+                "residual": result.actual_values - result.oof_predictions,
             }
-            if result.task_type == "regression":
-                pred_dict["residual"] = result.actual_values - result.oof_predictions
             pred_df = pd.DataFrame(pred_dict).set_index("region_id")
             pred_path = out_dir / f"predictions_{target_col}.parquet"
             pred_df.to_parquet(pred_path)
@@ -919,7 +775,6 @@ class DNNProbeRegressor:
             "study_area": self.config.study_area,
             "year": self.config.year,
             "h3_resolution": self.config.h3_resolution,
-            "task_type": self.config.task_type,
             "target_name": self.config.target_name,
             "n_folds": self.config.n_folds,
             "block_width": self.config.block_width,
@@ -949,14 +804,14 @@ class DNNProbeRegressor:
         if self.config.run_id is not None:
             # Auto-detect upstream run
             _paths = StudyAreaPaths(self.config.study_area)
-            _latest = _paths.latest_run(_paths.stage1("alphaearth"))
+            _latest = _paths.latest_run(_paths.stage1(self.config.modality))
             _upstream_label = _latest.name if _latest else "flat"
             write_run_info(
                 out_dir,
                 stage="stage3",
                 study_area=self.config.study_area,
                 config=config_dict,
-                upstream_runs={"stage1/alphaearth": _upstream_label},
+                upstream_runs={f"stage1/{self.config.modality}": _upstream_label},
             )
             logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
 
@@ -1114,11 +969,11 @@ class DNNProbeRegressor:
 
 
 def main():
-    """Run DNN probe regression or classification with CLI arguments."""
+    """Run DNN probe regression with CLI arguments."""
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="DNN Probe: MLP-based AlphaEarth -> Targets"
+        description="DNN Probe: MLP-based Embeddings -> Targets"
     )
     parser.add_argument("--study-area", default="netherlands")
     parser.add_argument(
@@ -1164,15 +1019,24 @@ def main():
         help="Device (default: auto)",
     )
     parser.add_argument(
-        "--task-type",
-        choices=["regression", "classification"],
-        default="regression",
-        help="Task type (default: regression)",
-    )
-    parser.add_argument(
         "--target-name",
         default="leefbaarometer",
         help="Target dataset name (default: leefbaarometer)",
+    )
+    parser.add_argument(
+        "--modality",
+        default="alphaearth",
+        help="Stage1 modality name (default: alphaearth)",
+    )
+    parser.add_argument(
+        "--stage2-model",
+        default=None,
+        help="Stage2 fusion model name (overrides --modality)",
+    )
+    parser.add_argument(
+        "--embeddings-path",
+        default=None,
+        help="Direct path to embeddings parquet (overrides all)",
     )
     parser.add_argument(
         "--compare",
@@ -1197,16 +1061,43 @@ def main():
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
-    config = DNNProbeConfig(
-        study_area=args.study_area,
-        n_folds=args.n_folds,
-        max_epochs=args.max_epochs,
-        block_width=args.block_size,
-        block_height=args.block_size,
-        device=args.device,
-        target_name=args.target_name,
-        task_type=args.task_type,
-    )
+    if args.embeddings_path:
+        config = DNNProbeConfig(
+            study_area=args.study_area,
+            embeddings_path=args.embeddings_path,
+            n_folds=args.n_folds,
+            max_epochs=args.max_epochs,
+            block_width=args.block_size,
+            block_height=args.block_size,
+            device=args.device,
+            target_name=args.target_name,
+        )
+    elif args.stage2_model:
+        from utils.paths import StudyAreaPaths as _SAP
+        _paths = _SAP(args.study_area)
+        fused_path = _paths.fused_embedding_file(args.stage2_model, 10)
+        config = DNNProbeConfig(
+            study_area=args.study_area,
+            embeddings_path=str(fused_path),
+            modality=args.stage2_model,
+            n_folds=args.n_folds,
+            max_epochs=args.max_epochs,
+            block_width=args.block_size,
+            block_height=args.block_size,
+            device=args.device,
+            target_name=args.target_name,
+        )
+    else:
+        config = DNNProbeConfig(
+            study_area=args.study_area,
+            modality=args.modality,
+            n_folds=args.n_folds,
+            max_epochs=args.max_epochs,
+            block_width=args.block_size,
+            block_height=args.block_size,
+            device=args.device,
+            target_name=args.target_name,
+        )
 
     if args.hidden_dim is not None:
         config.hidden_dim = args.hidden_dim

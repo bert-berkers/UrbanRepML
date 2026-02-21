@@ -139,7 +139,7 @@ class HierarchicalClusterAnalyzer:
         # Default feature categories
         if feature_categories is None:
             feature_categories = [
-                'alphaearth',     # A00-A63 columns
+                'embedding',      # Embedding columns (e.g. A00-A63, emb_0-emb_N)
                 'topographical',  # elevation, slope, aspect, curvature
                 'poi',           # POI utility features
                 'distance',      # Distance-based features
@@ -151,10 +151,13 @@ class HierarchicalClusterAnalyzer:
         feature_names = []
 
         for category in feature_categories:
-            if category == 'alphaearth':
-                alpha_cols = [col for col in df.columns if col.startswith('A') and col[1:].isdigit()]
-                selected_features.extend(alpha_cols)
-                feature_names.extend(alpha_cols)
+            if category == 'embedding':
+                # Try known prefix patterns, fall back to emb_ prefix
+                emb_cols = [col for col in df.columns if col.startswith(('A', 'P', 'R', 'S', 'G')) and len(col) >= 2 and col[1:].isdigit()]
+                if not emb_cols:
+                    emb_cols = [col for col in df.columns if col.startswith('emb_')]
+                selected_features.extend(emb_cols)
+                feature_names.extend(emb_cols)
 
             elif category == 'topographical':
                 topo_cols = [col for col in df.columns if any(

@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Linear Probe Regression: AlphaEarth Embeddings -> Leefbaarometer
+Linear Probe Regression: Embeddings -> Leefbaarometer
 
 Fits plain OLS (LinearRegression) with spatial block cross-validation to
-evaluate whether AlphaEarth embeddings encode Dutch liveability
-(leefbaarometer) signals.
+evaluate whether embeddings encode Dutch liveability (leefbaarometer) signals.
 
     - Ordinary Least Squares (no regularization)
     - Spatial block cross-validation via spatialkfold
@@ -24,16 +23,13 @@ from typing import Dict, List, Optional, Tuple
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
     mean_absolute_error,
     mean_squared_error,
     r2_score,
 )
 from sklearn.preprocessing import StandardScaler
-from spatialkfold.blocks import spatial_blocks
 
 from utils import StudyAreaPaths
 from utils.paths import write_run_info
@@ -68,14 +64,14 @@ TAXONOMY_TARGET_NAMES = {
 
 @dataclass
 class LinearProbeConfig:
-    """Configuration for linear probe regression or classification."""
+    """Configuration for linear probe regression."""
 
     study_area: str = "netherlands"
     year: int = 2022
     h3_resolution: int = 10
     target_name: str = "leefbaarometer"
     target_cols: List[str] = field(default_factory=lambda: list(TARGET_COLS))
-    task_type: str = "regression"  # "regression" or "classification"
+    modality: str = "alphaearth"
 
     # Spatial block CV
     n_folds: int = 5
@@ -98,20 +94,13 @@ class LinearProbeConfig:
         paths = StudyAreaPaths(self.study_area)
         self.run_id: Optional[str] = None
 
-        # Auto-configure for urban_taxonomy
-        if self.target_name == "urban_taxonomy":
-            if self.target_cols == list(TARGET_COLS):
-                self.target_cols = list(TAXONOMY_TARGET_COLS)
-            if self.task_type == "regression":
-                self.task_type = "classification"
-
         if self.embeddings_path is None:
             self.embeddings_path = str(
-                paths.embedding_file("alphaearth", self.h3_resolution, self.year)
+                paths.embedding_file(self.modality, self.h3_resolution, self.year)
             )
         if self.pca_embeddings_path is None:
             self.pca_embeddings_path = str(
-                paths.pca_embedding_file("alphaearth", self.h3_resolution, 16, self.year)
+                paths.pca_embedding_file(self.modality, self.h3_resolution, 16, self.year)
             )
         if self.target_path is None:
             target_year = 2025 if self.target_name == "urban_taxonomy" else self.year
@@ -168,9 +157,9 @@ class LinearProbeRegressor:
     """
     OLS linear probe with spatial block cross-validation.
 
-    Evaluates whether AlphaEarth embeddings encode liveability signals by
-    fitting plain LinearRegression to predict leefbaarometer scores.
-    Spatial block cross-validation prevents spatial autocorrelation leakage.
+    Evaluates whether embeddings encode liveability signals by fitting plain
+    LinearRegression to predict leefbaarometer scores.  Spatial block
+    cross-validation prevents spatial autocorrelation leakage.
     """
 
     def __init__(self, config: LinearProbeConfig, project_root: Optional[Path] = None):
@@ -273,6 +262,8 @@ class LinearProbeRegressor:
         Returns:
             Array of fold assignments (1 to n_folds) per row, aligned to gdf index.
         """
+        from spatialkfold.blocks import spatial_blocks
+
         logger.info(f"Creating spatial blocks: {self.config.n_folds} folds, "
                      f"{self.config.block_width}m x {self.config.block_height}m")
 
@@ -329,13 +320,11 @@ class LinearProbeRegressor:
         y: np.ndarray,
         folds: np.ndarray,
         unique_folds: np.ndarray,
-        task_type: str = "regression",
     ) -> Tuple[np.ndarray, List[FoldMetrics]]:
         """
         Train and evaluate with spatial CV.
 
-        For regression: plain LinearRegression with RMSE/MAE/R2.
-        For classification: LogisticRegression (multinomial) with accuracy/F1.
+        Plain LinearRegression with RMSE/MAE/R2 metrics.
 
         Returns:
             Out-of-fold predictions and per-fold metrics.
@@ -354,58 +343,29 @@ class LinearProbeRegressor:
             X_train_s = scaler.fit_transform(X_train)
             X_test_s = scaler.transform(X_test)
 
-            if task_type == "classification":
-                model = LogisticRegression(
-                    max_iter=1000,
-                    class_weight="balanced",
-                    solver="lbfgs",
-                    random_state=self.config.random_state,
-                )
-                model.fit(X_train_s, y_train)
-                y_pred = model.predict(X_test_s)
+            model = LinearRegression()
+            model.fit(X_train_s, y_train)
+            y_pred = model.predict(X_test_s)
 
-                oof_predictions[test_mask] = y_pred
+            oof_predictions[test_mask] = y_pred
 
-                acc = accuracy_score(y_test, y_pred)
-                f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            mae = mean_absolute_error(y_test, y_pred)
+            r2 = r2_score(y_test, y_pred)
 
-                fold_metrics_list.append(FoldMetrics(
-                    fold=int(fold_id),
-                    rmse=0.0, mae=0.0, r2=0.0,
-                    n_train=int(train_mask.sum()),
-                    n_test=int(test_mask.sum()),
-                    accuracy=acc,
-                    f1_macro=f1,
-                ))
+            fold_metrics_list.append(FoldMetrics(
+                fold=int(fold_id),
+                rmse=rmse,
+                mae=mae,
+                r2=r2,
+                n_train=int(train_mask.sum()),
+                n_test=int(test_mask.sum()),
+            ))
 
-                logger.info(
-                    f"    Fold {fold_id}: Acc={acc:.4f}, F1={f1:.4f} "
-                    f"(train={train_mask.sum():,}, test={test_mask.sum():,})"
-                )
-            else:
-                model = LinearRegression()
-                model.fit(X_train_s, y_train)
-                y_pred = model.predict(X_test_s)
-
-                oof_predictions[test_mask] = y_pred
-
-                rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-                mae = mean_absolute_error(y_test, y_pred)
-                r2 = r2_score(y_test, y_pred)
-
-                fold_metrics_list.append(FoldMetrics(
-                    fold=int(fold_id),
-                    rmse=rmse,
-                    mae=mae,
-                    r2=r2,
-                    n_train=int(train_mask.sum()),
-                    n_test=int(test_mask.sum()),
-                ))
-
-                logger.info(
-                    f"    Fold {fold_id}: R2={r2:.4f}, RMSE={rmse:.4f}, MAE={mae:.4f} "
-                    f"(train={train_mask.sum():,}, test={test_mask.sum():,})"
-                )
+            logger.info(
+                f"    Fold {fold_id}: R2={r2:.4f}, RMSE={rmse:.4f}, MAE={mae:.4f} "
+                f"(train={train_mask.sum():,}, test={test_mask.sum():,})"
+            )
 
         return oof_predictions, fold_metrics_list
 
@@ -503,10 +463,9 @@ class LinearProbeRegressor:
 
     def run(self, use_pca: bool = False) -> Dict[str, TargetResult]:
         """
-        Run linear probe with spatial block CV.
+        Run linear probe regression with spatial block CV.
 
-        For regression: OLS LinearRegression with R2/RMSE.
-        For classification: LogisticRegression with accuracy/F1.
+        OLS LinearRegression with R2/RMSE/MAE metrics.
 
         Args:
             use_pca: If True, use PCA-16 embeddings instead of full 64-dim.
@@ -514,13 +473,10 @@ class LinearProbeRegressor:
         Returns:
             Dictionary mapping target column to TargetResult.
         """
-        task_type = self.config.task_type
         emb_type = "PCA-16" if use_pca else f"full {len(self.feature_names) or '?'}-dim"
-        mode_label = "Classification" if task_type == "classification" else "Regression"
-        logger.info(f"=== Linear Probe {mode_label} (Spatial CV, {emb_type}) ===")
+        logger.info(f"=== Linear Probe Regression (Spatial CV, {emb_type}) ===")
         logger.info(f"Study area: {self.config.study_area}")
         logger.info(f"Year: {self.config.year}")
-        logger.info(f"Task type: {task_type}")
 
         gdf = self.load_and_join_data(use_pca=use_pca)
         folds = self.create_spatial_blocks(gdf)
@@ -539,91 +495,51 @@ class LinearProbeRegressor:
             target_name = self._get_target_name(target_col)
 
             logger.info(f"\n--- Target: {target_col} ({target_name}) ---")
-            if task_type == "classification":
-                n_classes = int(len(np.unique(y[~np.isnan(y)])))
-                logger.info(f"  n_classes={n_classes}, distribution: "
-                             f"{dict(zip(*np.unique(y.astype(int), return_counts=True)))}")
-            else:
-                logger.info(f"  y range: [{y.min():.4f}, {y.max():.4f}], mean={y.mean():.4f}")
+            logger.info(f"  y range: [{y.min():.4f}, {y.max():.4f}], mean={y.mean():.4f}")
 
             oof_predictions, fold_metrics = self._train_and_evaluate_cv(
-                X, y, folds, unique_folds, task_type=task_type,
+                X, y, folds, unique_folds,
             )
 
             valid_mask = ~np.isnan(oof_predictions)
 
-            if task_type == "classification":
-                overall_acc = accuracy_score(
-                    y[valid_mask], oof_predictions[valid_mask]
-                )
-                overall_f1 = f1_score(
-                    y[valid_mask], oof_predictions[valid_mask],
-                    average="macro", zero_division=0,
-                )
-                logger.info(f"  Overall OOF: Acc={overall_acc:.4f}, F1={overall_f1:.4f}")
+            overall_r2 = r2_score(y[valid_mask], oof_predictions[valid_mask])
+            overall_rmse = np.sqrt(mean_squared_error(y[valid_mask], oof_predictions[valid_mask]))
+            overall_mae = mean_absolute_error(y[valid_mask], oof_predictions[valid_mask])
 
-                result = TargetResult(
-                    target=target_col,
-                    target_name=target_name,
-                    best_alpha=0.0,
-                    best_l1_ratio=0.0,
-                    fold_metrics=fold_metrics,
-                    overall_r2=0.0,
-                    overall_rmse=0.0,
-                    overall_mae=0.0,
-                    coefficients=np.zeros(len(self.feature_names)),
-                    intercept=0.0,
-                    feature_names=self.feature_names,
-                    oof_predictions=oof_predictions,
-                    actual_values=y,
-                    region_ids=region_ids,
-                    overall_accuracy=overall_acc,
-                    overall_f1_macro=overall_f1,
-                    n_classes=n_classes,
-                    task_type=task_type,
-                )
-            else:
-                overall_r2 = r2_score(y[valid_mask], oof_predictions[valid_mask])
-                overall_rmse = np.sqrt(mean_squared_error(y[valid_mask], oof_predictions[valid_mask]))
-                overall_mae = mean_absolute_error(y[valid_mask], oof_predictions[valid_mask])
+            logger.info(f"  Overall OOF: R2={overall_r2:.4f}, RMSE={overall_rmse:.4f}, "
+                         f"MAE={overall_mae:.4f}")
 
-                logger.info(f"  Overall OOF: R2={overall_r2:.4f}, RMSE={overall_rmse:.4f}, "
-                             f"MAE={overall_mae:.4f}")
+            # Train final model on all data for coefficients
+            scaler = StandardScaler()
+            X_s = scaler.fit_transform(X)
+            final_model = LinearRegression()
+            final_model.fit(X_s, y)
 
-                # Train final model on all data for coefficients
-                scaler = StandardScaler()
-                X_s = scaler.fit_transform(X)
-                final_model = LinearRegression()
-                final_model.fit(X_s, y)
-
-                result = TargetResult(
-                    target=target_col,
-                    target_name=target_name,
-                    best_alpha=0.0,
-                    best_l1_ratio=0.0,
-                    fold_metrics=fold_metrics,
-                    overall_r2=overall_r2,
-                    overall_rmse=overall_rmse,
-                    overall_mae=overall_mae,
-                    coefficients=final_model.coef_,
-                    intercept=final_model.intercept_,
-                    feature_names=self.feature_names,
-                    oof_predictions=oof_predictions,
-                    actual_values=y,
-                    region_ids=region_ids,
-                )
+            result = TargetResult(
+                target=target_col,
+                target_name=target_name,
+                best_alpha=0.0,
+                best_l1_ratio=0.0,
+                fold_metrics=fold_metrics,
+                overall_r2=overall_r2,
+                overall_rmse=overall_rmse,
+                overall_mae=overall_mae,
+                coefficients=final_model.coef_,
+                intercept=final_model.intercept_,
+                feature_names=self.feature_names,
+                oof_predictions=oof_predictions,
+                actual_values=y,
+                region_ids=region_ids,
+            )
 
             self.results[target_col] = result
 
         # Summary
         logger.info("\n=== Summary ===")
         for target_col, result in self.results.items():
-            if result.task_type == "classification":
-                logger.info(f"  {target_col} ({result.target_name}): "
-                             f"Acc={result.overall_accuracy:.4f}, F1={result.overall_f1_macro:.4f}")
-            else:
-                logger.info(f"  {target_col} ({result.target_name}): "
-                             f"R2={result.overall_r2:.4f}, RMSE={result.overall_rmse:.4f}")
+            logger.info(f"  {target_col} ({result.target_name}): "
+                         f"R2={result.overall_r2:.4f}, RMSE={result.overall_rmse:.4f}")
 
         return self.results
 
@@ -638,7 +554,6 @@ class LinearProbeRegressor:
             row = {
                 "target": target_col,
                 "target_name": result.target_name,
-                "task_type": result.task_type,
                 "best_alpha": result.best_alpha,
                 "best_l1_ratio": result.best_l1_ratio,
                 "overall_r2": result.overall_r2,
@@ -646,49 +561,38 @@ class LinearProbeRegressor:
                 "overall_mae": result.overall_mae,
                 "n_features": len(result.feature_names),
             }
-            if result.task_type == "classification":
-                row["overall_accuracy"] = result.overall_accuracy
-                row["overall_f1_macro"] = result.overall_f1_macro
-                row["n_classes"] = result.n_classes
             # Only add fold metrics if they exist (CV mode has them, simple mode doesn't)
             if result.fold_metrics:
                 for fm in result.fold_metrics:
-                    if result.task_type == "classification":
-                        row[f"fold{fm.fold}_accuracy"] = fm.accuracy
-                        row[f"fold{fm.fold}_f1_macro"] = fm.f1_macro
-                    else:
-                        row[f"fold{fm.fold}_r2"] = fm.r2
-                        row[f"fold{fm.fold}_rmse"] = fm.rmse
+                    row[f"fold{fm.fold}_r2"] = fm.r2
+                    row[f"fold{fm.fold}_rmse"] = fm.rmse
             metrics_rows.append(row)
 
         metrics_df = pd.DataFrame(metrics_rows)
         metrics_df.to_csv(out_dir / "metrics_summary.csv", index=False)
         logger.info(f"Saved metrics summary to {out_dir / 'metrics_summary.csv'}")
 
-        # Save coefficients per target (only meaningful for regression)
-        if self.config.task_type == "regression":
-            coef_rows = []
-            for target_col, result in self.results.items():
-                for feat_name, coef_val in zip(result.feature_names, result.coefficients):
-                    coef_rows.append({
-                        "target": target_col,
-                        "feature": feat_name,
-                        "coefficient": coef_val,
-                    })
-            coef_df = pd.DataFrame(coef_rows)
-            coef_df.to_csv(out_dir / "coefficients.csv", index=False)
-            logger.info(f"Saved coefficients to {out_dir / 'coefficients.csv'}")
+        # Save coefficients per target
+        coef_rows = []
+        for target_col, result in self.results.items():
+            for feat_name, coef_val in zip(result.feature_names, result.coefficients):
+                coef_rows.append({
+                    "target": target_col,
+                    "feature": feat_name,
+                    "coefficient": coef_val,
+                })
+        coef_df = pd.DataFrame(coef_rows)
+        coef_df.to_csv(out_dir / "coefficients.csv", index=False)
+        logger.info(f"Saved coefficients to {out_dir / 'coefficients.csv'}")
 
         # Save out-of-fold predictions per target
         for target_col, result in self.results.items():
-            pred_dict = {
+            pred_df = pd.DataFrame({
                 "region_id": result.region_ids,
                 "actual": result.actual_values,
                 "predicted": result.oof_predictions,
-            }
-            if result.task_type == "regression":
-                pred_dict["residual"] = result.actual_values - result.oof_predictions
-            pred_df = pd.DataFrame(pred_dict).set_index("region_id")
+                "residual": result.actual_values - result.oof_predictions,
+            }).set_index("region_id")
             pred_path = out_dir / f"predictions_{target_col}.parquet"
             pred_df.to_parquet(pred_path)
 
@@ -699,7 +603,7 @@ class LinearProbeRegressor:
             "study_area": self.config.study_area,
             "year": self.config.year,
             "h3_resolution": self.config.h3_resolution,
-            "task_type": self.config.task_type,
+            "modality": self.config.modality,
             "target_name": self.config.target_name,
             "n_folds": self.config.n_folds,
             "block_width": self.config.block_width,
@@ -715,14 +619,14 @@ class LinearProbeRegressor:
         if self.config.run_id is not None:
             # Auto-detect upstream run
             _paths = StudyAreaPaths(self.config.study_area)
-            _latest = _paths.latest_run(_paths.stage1("alphaearth"))
+            _latest = _paths.latest_run(_paths.stage1(self.config.modality))
             _upstream_label = _latest.name if _latest else "flat"
             write_run_info(
                 out_dir,
                 stage="stage3",
                 study_area=self.config.study_area,
                 config=config_dict,
-                upstream_runs={"stage1/alphaearth": _upstream_label},
+                upstream_runs={f"stage1/{self.config.modality}": _upstream_label},
             )
             logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
 
@@ -730,20 +634,23 @@ class LinearProbeRegressor:
 
 
 def main():
-    """Run linear probe regression or classification with default config."""
+    """Run linear probe regression with default config."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Linear Probe: AlphaEarth -> Targets")
+    parser = argparse.ArgumentParser(description="Linear Probe: Embeddings -> Targets")
     parser.add_argument("--study-area", default="netherlands")
     parser.add_argument("--pca", action="store_true", help="Use PCA-16 embeddings")
     parser.add_argument("--n-folds", type=int, default=5, help="Spatial CV folds")
     parser.add_argument("--block-size", type=int, default=10000,
                         help="Spatial block size in meters (default: 10000)")
-    parser.add_argument("--task-type", choices=["regression", "classification"],
-                        default="regression",
-                        help="Task type (default: regression)")
     parser.add_argument("--target-name", default="leefbaarometer",
                         help="Target dataset name (default: leefbaarometer)")
+    parser.add_argument("--modality", default="alphaearth",
+                        help="Stage1 modality name (default: alphaearth)")
+    parser.add_argument("--stage2-model", default=None,
+                        help="Stage2 fusion model name (overrides --modality)")
+    parser.add_argument("--embeddings-path", default=None,
+                        help="Direct path to embeddings parquet (overrides all)")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -751,14 +658,36 @@ def main():
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
-    config = LinearProbeConfig(
-        study_area=args.study_area,
-        n_folds=args.n_folds,
-        block_width=args.block_size,
-        block_height=args.block_size,
-        target_name=args.target_name,
-        task_type=args.task_type,
-    )
+    if args.embeddings_path:
+        config = LinearProbeConfig(
+            study_area=args.study_area,
+            embeddings_path=args.embeddings_path,
+            n_folds=args.n_folds,
+            block_width=args.block_size,
+            block_height=args.block_size,
+            target_name=args.target_name,
+        )
+    elif args.stage2_model:
+        paths = StudyAreaPaths(args.study_area)
+        fused_path = paths.fused_embedding_file(args.stage2_model, 10)
+        config = LinearProbeConfig(
+            study_area=args.study_area,
+            embeddings_path=str(fused_path),
+            modality=args.stage2_model,
+            n_folds=args.n_folds,
+            block_width=args.block_size,
+            block_height=args.block_size,
+            target_name=args.target_name,
+        )
+    else:
+        config = LinearProbeConfig(
+            study_area=args.study_area,
+            modality=args.modality,
+            n_folds=args.n_folds,
+            block_width=args.block_size,
+            block_height=args.block_size,
+            target_name=args.target_name,
+        )
 
     regressor = LinearProbeRegressor(config)
     regressor.run(use_pca=args.pca)

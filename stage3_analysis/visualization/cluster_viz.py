@@ -101,7 +101,7 @@ DEFAULT_HIERARCHICAL_CLUSTERS = {
 }
 
 
-def find_study_area_data(study_area: str, resolution: int) -> Path:
+def find_study_area_data(study_area: str, resolution: int, modality: str = "alphaearth") -> Path:
     """Find the most recent data file for a study area at a given resolution."""
     if study_area not in STUDY_AREA_CONFIG:
         available = ', '.join(STUDY_AREA_CONFIG.keys())
@@ -109,7 +109,7 @@ def find_study_area_data(study_area: str, resolution: int) -> Path:
 
     config = STUDY_AREA_CONFIG[study_area]
     paths = StudyAreaPaths(study_area)
-    data_dir = paths.stage1("alphaearth")
+    data_dir = paths.stage1(modality)
 
     # Try resolution-specific pattern first
     patterns = config.get('file_pattern_by_res', {})
@@ -170,8 +170,12 @@ def load_and_prepare_embeddings(
 
     print(f"Loaded {len(gdf):,} hexagons")
 
-    # Extract AlphaEarth embedding columns (A00-A63)
-    embedding_cols = [col for col in gdf.columns if col.startswith('A') and col[1:].isdigit()]
+    # Extract embedding columns
+    # Try known prefix patterns, fall back to all numeric columns
+    embedding_cols = [col for col in gdf.columns if col.startswith(('A', 'P', 'R', 'S', 'G')) and len(col) >= 2 and col[1:].isdigit()]
+    if not embedding_cols:
+        exclude = {"pixel_count", "tile_count", "geometry", "h3_index", "region_id"}
+        embedding_cols = [col for col in gdf.columns if col not in exclude and pd.api.types.is_numeric_dtype(gdf[col])]
     embeddings = gdf[embedding_cols].values.astype(np.float32)
 
     print(f"Embeddings shape: {embeddings.shape}")
@@ -364,7 +368,7 @@ def create_cluster_visualization(
 
     method = "Dissolved" if use_dissolve else "Datashader" if use_datashader else "Standard"
     title = (
-        f"{title_prefix} AlphaEarth - {n_clusters} Clusters ({method})\n"
+        f"{title_prefix} Embeddings - {n_clusters} Clusters ({method})\n"
         f"H3 Res {resolution} | {len(gdf):,} hexagons"
     )
     ax.set_title(title, fontsize=13, fontweight='bold', pad=15)
@@ -499,7 +503,7 @@ def create_hierarchical_subplot(
 
     fig.suptitle(
         f"{study_area.title()} - Hierarchical Multi-Resolution Clustering\n"
-        f"AlphaEarth {year} | MiniBatch K-Means + Dissolve",
+        f"Embeddings {year} | MiniBatch K-Means + Dissolve",
         fontsize=16, fontweight='bold', y=0.98,
     )
 
