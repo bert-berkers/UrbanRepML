@@ -1,6 +1,6 @@
 # UrbanRepML
 
-**Dense urban embeddings from independent modalities, fused on hexagonal grids, probed for what they learned.**
+**Dense geospatial (urban) embeddings from independent modalities, fused on hexagonal grids, probed for what they learned.**
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -8,7 +8,7 @@
 
 UrbanRepML learns dense geospatial (urban) representations by encoding each data modality independently, fusing them spatially through multi-resolution U-Net architectures on [H3 hexagonal grids](https://h3geo.org/), then probing the resulting embeddings against external ground truth. All spatial operations use [SRAI](https://github.com/kraina-ai/srai). The project is developed by a human and [12 specialist AI agents](#multi-agent-development) coordinated through stigmergic scratchpads.
 
-For background on the approach and early results, see the [Active Inference Institute talk](https://www.youtube.com/watch?v=UYD8CR_Xorg&ab_channel=ActiveInferenceInstitute).
+For philosophical & societal motivation, and early results of the fullareaU-NET, see the [Active Inference Institute talk](https://www.youtube.com/watch?v=UYD8CR_Xorg&ab_channel=ActiveInferenceInstitute).
 
 ---
 
