@@ -1,0 +1,1 @@
+Dense geospatial embeddings from late-fused modalities on H3 hexagonal grids, probed against livability and building morphology targets. Built by a human + 12 AI agents coordinated through stigmergic scratchpads.
