@@ -10,6 +10,23 @@ When multiple Claude Code sessions run concurrently on this codebase, each coord
 registers a claim file in `.claude/coordinators/`. This rule applies to all coordinator
 sessions and to the `/coordinate` skill.
 
+## Three-Scale Cognitive Architecture
+
+This protocol operates at the **lateral** scale of a three-level cognitive system:
+
+| Scale | Entity | Temporal Reach | Communication |
+|-------|--------|---------------|---------------|
+| **Supra** | Human user | Longest — across all workstreams and sessions | Direct chat, task delegation |
+| **Lateral** | Coordinators (peers) | Mid — session-scoped | This protocol: claims, messages, heartbeats |
+| **Vertical** | Specialist agents | Shortest — task-scoped | Scratchpads, SubagentStart/Stop hooks |
+
+The human is the **supra-coordinator** — the apex of the cognitive light cone. They see across all concurrent coordinator sessions. When lateral coordination fails (conflicting claims, deadlock, cross-workstream dependency), **escalate to the human** rather than attempting autonomous resolution.
+
+Coordinator-to-coordinator messages are "bioelectric signals" between cells. They should be:
+- **Sparse**: one message per state transition, not a running commentary
+- **Actionable**: include what changed and what the recipient should do about it
+- **Gradient-like**: signal strength (info < warning < request) indicates priority
+
 ## Protocol Obligations
 
 ### On Session Start

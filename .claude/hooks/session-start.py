@@ -10,8 +10,12 @@ SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
 COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
 SESSION_ID_FILE = Path(__file__).resolve().parents[1] / "coordinators" / ".current_session_id"
 
-# Keywords that indicate a specialist left critical notes needing attention
-CRITICAL_KEYWORDS = ("BLOCKED", "URGENT", "CRITICAL", "BROKEN")
+# Signal vocabulary: keywords that indicate specialist left critical notes.
+# Extended set supports Levin's "pervasive signaling" -- richer gradients between agents.
+CRITICAL_KEYWORDS = (
+    "BLOCKED", "URGENT", "CRITICAL", "BROKEN",
+    "SHAPE_CHANGED", "INTERFACE_CHANGED", "DEPRECATED", "NEEDS_TEST",
+)
 
 
 def read_file(path: Path, max_lines: int = 30) -> str:
@@ -73,6 +77,40 @@ def scan_critical_signals() -> list[str]:
                             break
                     break  # One signal per agent per date is enough
     return signals
+
+
+def cognitive_light_cone_summary() -> str:
+    """Quantify the system's cognitive reach (Levin's embodied constraints).
+
+    Returns a one-line summary of temporal depth, agent reach,
+    unresolved items, and active coordinator count.
+    """
+    # Temporal depth: how many unique days of scratchpad history?
+    all_entries = sorted(SCRATCHPAD_ROOT.rglob("????-??-??.md"))
+    days = len(set(e.stem for e in all_entries))
+
+    # Agent reach: how many agents have contributed scratchpads?
+    agents = len([
+        d for d in SCRATCHPAD_ROOT.iterdir()
+        if d.is_dir() and any(d.glob("*.md"))
+    ])
+
+    # Unresolved items (forward projection quality signal)
+    recent = all_entries[-5:] if all_entries else []
+    unresolved = 0
+    for e in recent:
+        try:
+            unresolved += e.read_text(encoding="utf-8").lower().count("unresolved")
+        except Exception:
+            pass
+
+    # Active coordinator count (lateral reach)
+    active_coords = len(list(COORDINATORS_DIR.glob("session-*.yaml")))
+
+    return (
+        f"Light cone: {days}d memory, {agents} agents, "
+        f"~{unresolved} unresolved, {active_coords} active coordinators"
+    )
 
 
 def staleness_note(entry: Path | None, label: str) -> str | None:
@@ -177,6 +215,10 @@ def main() -> None:
         return
 
     parts = ["## Session Orientation (auto-injected by SessionStart hook)"]
+
+    # Cognitive light cone metrics (Levin's embodied constraints)
+    light_cone = cognitive_light_cone_summary()
+    parts.append(f"\n**{light_cone}**")
 
     # Active coordinators (injected first -- most urgent info)
     if session_id:
