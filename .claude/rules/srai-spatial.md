@@ -17,6 +17,7 @@ paths:
 
 - `h3.cell_to_parent()`, `h3.cell_to_children()`, `h3.cell_to_center_child()`
 - `h3.get_resolution()`, `h3.cell_to_local_ij()` and similar introspection
+- `h3.grid_distance()` — point-to-point grid distance between two cells (not a neighborhood query)
 
 ## NEVER use h3 for
 
@@ -39,10 +40,16 @@ h3.polyfill(...)     # Use H3Regionalizer
 h3.grid_disk(...)    # Use H3Neighbourhood
 ```
 
+## Scope
+
+These rules apply everywhere: stage code, scripts, utils, AND tests. There is no test carveout.
+Tests must use SRAI (`H3Neighbourhood.get_neighbours_up_to_distance(unchecked=True)`) instead of
+`h3.grid_disk`/`h3.grid_ring`, and pre-defined hex constants instead of `h3.latlng_to_cell`.
+
 ## Audit Checklist
 
-When modifying stage code, check:
+When modifying stage code or tests, check:
 1. No new `import h3` for tessellation/neighborhood operations
-2. No `h3.polyfill`, `h3.grid_disk`, `h3.grid_ring`, `h3.cell_to_boundary` calls
+2. No `h3.polyfill`, `h3.grid_disk`, `h3.grid_ring`, `h3.cell_to_boundary`, `h3.latlng_to_cell` calls
 3. GeoDataFrames indexed by `region_id` (not `h3_index`) in Stage 2+
 4. SRAI regionalizer used for any new tessellation needs

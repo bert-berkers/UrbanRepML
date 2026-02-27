@@ -468,6 +468,11 @@ def merge_results_with_regions(
     logger.info(f"Merged {len(df):,} unique hexagons.")
 
     # Handle both SRAI (region_id) and legacy (h3_index) formats
+    # TODO(h3_index→region_id migration): This bridge code is the root cause of h3_index
+    # appearing in downstream parquet files. When the legacy h3_index branch fires, it
+    # renames region_id→h3_index in the output, propagating the legacy column name to all
+    # consumers. Remove the elif branch (and the rename) once data migration to region_id
+    # is complete. See specs/h3_index_vs_region_id.md for the full migration plan.
     if regions_gdf.index.name == 'region_id':
         regions_gdf = regions_gdf.reset_index()
         merge_col = 'region_id'

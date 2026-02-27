@@ -244,8 +244,9 @@ class HierarchicalConeTrainer:
             embeddings_df = pd.read_parquet(embeddings_path)
 
             # Align with regions
-            if 'h3_index' in embeddings_df.columns:
-                embeddings_df = embeddings_df.set_index('h3_index')
+            # TODO: remove once all upstream parquet files are written with region_id as index
+            if 'region_id' in embeddings_df.columns:
+                embeddings_df = embeddings_df.set_index('region_id')
                 embeddings_df.index.name = 'region_id'
 
             # Extract embedding columns only

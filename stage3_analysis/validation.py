@@ -73,16 +73,16 @@ class EmbeddingValidator:
 
             results['stats'] = {
                 'n_hexagons': len(df),
-                'n_features': df.shape[1] - 2,  # Minus h3_index and resolution
-                'h3_cells': df['h3_index'].nunique() if 'h3_index' in df.columns else 0,
+                'n_features': df.shape[1] - 2,  # Minus region_id and resolution
+                'h3_cells': df['region_id'].nunique() if 'region_id' in df.columns else 0,
                 'columns': list(df.columns)[:10],
                 'missing_values': df.isnull().sum().sum(),
                 'memory_usage_mb': df.memory_usage(deep=True).sum() / 1024 / 1024
             }
 
             # Validate H3 indices
-            if 'h3_index' in df.columns:
-                sample_indices = df['h3_index'].head(5).tolist()
+            if 'region_id' in df.columns:
+                sample_indices = df['region_id'].head(5).tolist()
                 h3_valid = all(_h3.is_valid_cell(idx) for idx in sample_indices)
                 results['stats']['h3_valid'] = h3_valid
 
@@ -127,14 +127,14 @@ class EmbeddingValidator:
                 df = pd.read_parquet(embeddings_path)
                 dataframes[modality] = df
 
-                if 'h3_index' in df.columns:
-                    h3_sets[modality] = set(df['h3_index'])
+                if 'region_id' in df.columns:
+                    h3_sets[modality] = set(df['region_id'])
                     comparison['modalities'][modality] = {
                         'n_hexagons': len(h3_sets[modality]),
                         'n_features': df.shape[1] - 2
                     }
                 else:
-                    logger.warning(f"{modality} missing h3_index column")
+                    logger.warning(f"{modality} missing region_id column")
             else:
                 logger.warning(f"{modality} embeddings not found at {embeddings_path}")
 

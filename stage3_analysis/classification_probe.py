@@ -125,15 +125,18 @@ class ClassificationProber:
         logger.info(f"Loading embeddings from {emb_path}")
         emb_df = pd.read_parquet(emb_path)
 
-        # Normalize index: embeddings may use h3_index column
-        if "h3_index" in emb_df.columns and emb_df.index.name != "region_id":
-            emb_df = emb_df.set_index("h3_index")
+        # Normalize index: embeddings may use region_id column
+        if "region_id" in emb_df.columns and emb_df.index.name != "region_id":
+            emb_df = emb_df.set_index("region_id")
             emb_df.index.name = "region_id"
 
-        # Identify embedding feature columns (A00-A63 pattern + fallback)
+        # Identify embedding feature columns by modality prefix (A, P, R, S, G)
+        from stage1_modalities import MODALITY_PREFIXES
+        _prefixes = tuple(MODALITY_PREFIXES.values())
         self.feature_names = [
             c for c in emb_df.columns
-            if (c.startswith("A") and c[1:].isdigit()) or c.startswith("emb_")
+            if (len(c) >= 2 and c[0] in _prefixes and c[1:].isdigit())
+            or c.startswith("emb_")
         ]
         if not self.feature_names:
             # Numeric fallback for arbitrary embedding column names

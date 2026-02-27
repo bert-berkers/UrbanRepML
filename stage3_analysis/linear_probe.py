@@ -171,7 +171,7 @@ class LinearProbeRegressor:
 
     def load_and_join_data(self, use_pca: bool = False) -> gpd.GeoDataFrame:
         """
-        Load embeddings and target data, inner join on region_id / h3_index.
+        Load embeddings and target data, inner join on region_id.
 
         Args:
             use_pca: If True, use PCA-16 embeddings instead of full 64-dim.
@@ -187,9 +187,9 @@ class LinearProbeRegressor:
         logger.info(f"Loading embeddings from {emb_path}")
         emb_df = pd.read_parquet(emb_path)
 
-        # Normalize index: embeddings may use h3_index column
-        if "h3_index" in emb_df.columns and emb_df.index.name != "region_id":
-            emb_df = emb_df.set_index("h3_index")
+        # Normalize index: embeddings may use region_id column
+        if "region_id" in emb_df.columns and emb_df.index.name != "region_id":
+            emb_df = emb_df.set_index("region_id")
             emb_df.index.name = "region_id"
 
         # Identify embedding feature columns
@@ -203,8 +203,11 @@ class LinearProbeRegressor:
                                       if c not in exclude
                                       and pd.api.types.is_numeric_dtype(emb_df[c])]
         else:
+            from stage1_modalities import MODALITY_PREFIXES
+            _prefixes = tuple(MODALITY_PREFIXES.values())
             self.feature_names = [c for c in emb_df.columns
-                                  if (c.startswith("A") and c[1:].isdigit())
+                                  if (len(c) >= 2 and c[0] in _prefixes
+                                      and c[1:].isdigit())
                                   or c.startswith("emb_")]
             if not self.feature_names:
                 # Numeric fallback for arbitrary embedding column names

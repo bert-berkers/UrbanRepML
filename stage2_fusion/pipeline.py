@@ -308,8 +308,8 @@ class UrbanEmbeddingPipeline:
                 df = pd.read_parquet(path)
 
                 # Handle different index formats
-                if 'h3_index' in df.columns and df.index.name != 'h3_index':
-                    df = df.set_index('h3_index')
+                if 'region_id' in df.columns and df.index.name != 'region_id':
+                    df = df.set_index('region_id')
 
                 # Drop non-embedding columns (geometry, pixel_count, etc.)
                 drop_cols = [c for c in df.columns if c in ('geometry', 'pixel_count', 'tile_count')]

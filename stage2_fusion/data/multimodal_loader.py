@@ -29,7 +29,7 @@ class MultiModalLoader:
             
         self.modalities = {}
         self.aligned_data = None
-        self.h3_index = None
+        self.region_id = None
         
     def load_modality(self, name: str, config: Dict) -> pd.DataFrame:
         """Load a single modality's embeddings."""
@@ -45,15 +45,15 @@ class MultiModalLoader:
         logger.info(f"Loading {name} from {source_path}")
         df = pd.read_parquet(source_path)
         
-        # Ensure h3_index column exists
-        if 'h3_index' not in df.columns:
-            if df.index.name == 'h3_index':
+        # Ensure region_id column exists
+        if 'region_id' not in df.columns:
+            if df.index.name == 'region_id':
                 df = df.reset_index()
             else:
-                raise ValueError(f"No h3_index found in {name} data")
-        
-        # Set h3_index as index for alignment
-        df = df.set_index('h3_index')
+                raise ValueError(f"No region_id found in {name} data")
+
+        # Set region_id as index for alignment
+        df = df.set_index('region_id')
         
         # Remove metadata columns if present
         metadata_cols = ['h3_resolution', 'geometry']
@@ -134,37 +134,37 @@ class MultiModalLoader:
             
         logger.info(f"Aligning {len(self.modalities)} stage1_modalities using {method} method")
         
-        # Get all H3 indices
-        h3_sets = {name: set(df.index) for name, df in self.modalities.items()}
-        
+        # Get all region_id sets
+        region_id_sets = {name: set(df.index) for name, df in self.modalities.items()}
+
         if method == 'intersection':
-            # Only keep H3 cells present in all stage1_modalities
-            common_h3 = set.intersection(*h3_sets.values())
-            logger.info(f"Common H3 cells (intersection): {len(common_h3)}")
-            
+            # Only keep region_ids present in all stage1_modalities
+            common_region_ids = set.intersection(*region_id_sets.values())
+            logger.info(f"Common H3 cells (intersection): {len(common_region_ids)}")
+
         elif method == 'union':
-            # Keep all H3 cells, fill missing with zeros
-            common_h3 = set.union(*h3_sets.values())
-            logger.info(f"Total H3 cells (union): {len(common_h3)}")
+            # Keep all region_ids, fill missing with zeros
+            common_region_ids = set.union(*region_id_sets.values())
+            logger.info(f"Total H3 cells (union): {len(common_region_ids)}")
             
         else:
             raise ValueError(f"Unknown alignment method: {method}")
         
         # Report coverage
-        for name, h3_set in h3_sets.items():
-            coverage = len(h3_set.intersection(common_h3)) / len(common_h3) * 100
+        for name, region_id_set in region_id_sets.items():
+            coverage = len(region_id_set.intersection(common_region_ids)) / len(common_region_ids) * 100
             logger.info(f"  {name} coverage: {coverage:.1f}%")
-        
-        # Store common H3 index
-        self.h3_index = sorted(list(common_h3))
-        
+
+        # Store common region_id index
+        self.region_id = sorted(list(common_region_ids))
+
         # Align all stage1_modalities to common index
         aligned = {}
         for name, df in self.modalities.items():
             if method == 'intersection':
-                aligned[name] = df.loc[self.h3_index]
+                aligned[name] = df.loc[self.region_id]
             else:  # union
-                aligned[name] = df.reindex(self.h3_index, fill_value=0)
+                aligned[name] = df.reindex(self.region_id, fill_value=0)
                 
         self.aligned_modalities = aligned
         return aligned
@@ -232,7 +232,7 @@ class MultiModalLoader:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Add h3_index back as column
+        # Add region_id back as column
         output_df = self.aligned_data.reset_index()
         output_df.to_parquet(output_path)
         
@@ -244,7 +244,7 @@ class MultiModalLoader:
         metadata = {
             'stage1_modalities': list(self.modalities.keys()),
             'n_hexagons': len(output_df),
-            'n_features': output_df.shape[1] - 1,  # Minus h3_index
+            'n_features': output_df.shape[1] - 1,  # Minus region_id
             'feature_groups': self.get_feature_groups(),
             'alignment_method': getattr(self, 'alignment_method', 'intersection')
         }

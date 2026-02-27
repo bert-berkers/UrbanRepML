@@ -144,7 +144,7 @@ class ConeInferenceAggregator:
         logger.info(f"Best loss: {checkpoint['loss']:.6f}")
 
         # Initialize aggregation storage
-        # Dict[h3_index] -> List[(embedding, weight)]
+        # Dict[region_id] -> List[(embedding, weight)]
         self.predictions = defaultdict(list)
 
     def compute_weight(self, hexagon: str, cone_center: str) -> float:
@@ -253,7 +253,7 @@ class ConeInferenceAggregator:
         Aggregate predictions across cones using weighted averaging.
 
         Returns:
-            DataFrame with columns: h3_index (index), E00, E01, ..., E63
+            DataFrame with columns: region_id (index), E00, E01, ..., E63
         """
         logger.info("\n" + "=" * 80)
         logger.info("Aggregating Predictions")
@@ -285,7 +285,7 @@ class ConeInferenceAggregator:
             orient='index',
             columns=embedding_cols
         )
-        embeddings_df.index.name = 'h3_index'
+        embeddings_df.index.name = 'region_id'
 
         logger.info(f"Aggregated embeddings: {embeddings_df.shape}")
 
@@ -296,7 +296,7 @@ class ConeInferenceAggregator:
         Save embeddings to parquet.
 
         Args:
-            embeddings_df: DataFrame with h3_index and embedding columns
+            embeddings_df: DataFrame with region_id and embedding columns
         """
         logger.info("\n" + "=" * 80)
         logger.info("Saving Embeddings")

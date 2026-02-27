@@ -74,7 +74,7 @@ def main():
             import pandas as pd
             df = pd.read_parquet(output_path)
             logger.info(f"Generated embeddings shape: {df.shape}")
-            logger.info(f"H3 cells: {df['h3_index'].nunique()}")
+            logger.info(f"H3 cells: {df['region_id'].nunique()}")
             logger.info(f"Memory usage: {df.memory_usage(deep=True).sum() / 1024 / 1024:.2f} MB")
         
     except Exception as e:

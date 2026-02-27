@@ -175,9 +175,9 @@ class LeefbaarometerTargetBuilder:
         if regions_path.exists():
             logger.info(f"Loading pre-computed H3 regions from {regions_path}")
             regions_gdf = gpd.read_parquet(regions_path)
-            # Normalize index name to region_id (may be hex_id, h3_index, etc.)
+            # Normalize index name to region_id (may be hex_id, etc.)
             if regions_gdf.index.name != "region_id":
-                if regions_gdf.index.name in ("hex_id", "h3_index"):
+                if regions_gdf.index.name in ("hex_id",):
                     regions_gdf.index.name = "region_id"
                 elif "region_id" in regions_gdf.columns:
                     regions_gdf = regions_gdf.set_index("region_id")

@@ -139,7 +139,7 @@ def load_and_prepare_embeddings(
     """
     Load embeddings and prepare for kmeans_clustering_1layer.
 
-    Supports both SRAI region_id format and legacy h3_index format.
+    Supports SRAI region_id format.
     Uses SpatialDB for geometry lookup from pre-computed region files.
     Returns (GeoDataFrame with geometry, embedding numpy array).
     """
@@ -152,21 +152,21 @@ def load_and_prepare_embeddings(
     except ValueError:
         df = pd.read_parquet(data_path)
 
-        # Handle both region_id (SRAI standard) and h3_index (legacy)
+        # Handle region_id (SRAI standard)
         if 'region_id' in df.columns or df.index.name == 'region_id':
             if df.index.name == 'region_id':
                 df = df.reset_index()
             geom_gdf = db.geometry(df['region_id'], resolution=resolution, crs=4326)
             gdf = gpd.GeoDataFrame(df, geometry=geom_gdf.geometry.values, crs='EPSG:4326')
-        elif 'h3_index' in df.columns:
-            geom_gdf = db.geometry(df['h3_index'], resolution=resolution, crs=4326)
+        elif 'region_id' in df.columns:
+            geom_gdf = db.geometry(df['region_id'], resolution=resolution, crs=4326)
             gdf = gpd.GeoDataFrame(df, geometry=geom_gdf.geometry.values, crs='EPSG:4326')
         elif 'lat' in df.columns and 'lng' in df.columns:
             from shapely.geometry import Point
             geometry = [Point(xy) for xy in zip(df.lng, df.lat)]
             gdf = gpd.GeoDataFrame(df, geometry=geometry, crs='EPSG:4326')
         else:
-            raise ValueError("No geometry, region_id, h3_index, or lat/lng columns found")
+            raise ValueError("No geometry, region_id, or lat/lng columns found")
 
     print(f"Loaded {len(gdf):,} hexagons")
 
@@ -174,7 +174,7 @@ def load_and_prepare_embeddings(
     # Try known prefix patterns, fall back to all numeric columns
     embedding_cols = [col for col in gdf.columns if col.startswith(('A', 'P', 'R', 'S', 'G')) and len(col) >= 2 and col[1:].isdigit()]
     if not embedding_cols:
-        exclude = {"pixel_count", "tile_count", "geometry", "h3_index", "region_id"}
+        exclude = {"pixel_count", "tile_count", "geometry", "region_id"}
         embedding_cols = [col for col in gdf.columns if col not in exclude and pd.api.types.is_numeric_dtype(gdf[col])]
     embeddings = gdf[embedding_cols].values.astype(np.float32)
 
@@ -326,7 +326,7 @@ def create_cluster_visualization(
         figsize: Figure size
     """
     # Identify the hex ID column
-    id_cols = [c for c in ['region_id', 'h3_index'] if c in gdf.columns]
+    id_cols = [c for c in ['region_id'] if c in gdf.columns]
     keep_cols = id_cols + ['geometry']
     viz_gdf = gdf[[c for c in keep_cols if c in gdf.columns]].copy()
     viz_gdf['cluster'] = clusters

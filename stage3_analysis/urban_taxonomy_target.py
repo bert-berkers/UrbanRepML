@@ -146,7 +146,7 @@ class UrbanTaxonomyTargetBuilder:
 
         # Normalize index name
         if regions_gdf.index.name != "region_id":
-            if regions_gdf.index.name in ("hex_id", "h3_index"):
+            if regions_gdf.index.name in ("hex_id",):
                 regions_gdf.index.name = "region_id"
             elif "region_id" in regions_gdf.columns:
                 regions_gdf = regions_gdf.set_index("region_id")
