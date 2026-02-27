@@ -234,6 +234,25 @@ The cognitive light cone tetrahedron:
 - Coordinators (edges): mid-range, session-scoped, laterally connected
 - Specialists (faces): shortest reach, task-scoped, vertically connected
 
+### When to Escalate to the Human
+
+Escalate (ask, don't just inform) when:
+- **Ambiguity in intent**: The task can be interpreted multiple ways and you're not sure which the human meant
+- **Scope expansion**: You discover the task is larger than initially described — the human should decide whether to expand or defer
+- **Cross-workstream impact**: Your work will affect another coordinator's domain or a shared interface
+- **Conflicting signals**: Ego recommends one thing, the plan says another, scratchpads suggest a third — the human resolves contradictions
+- **Resource tradeoffs**: Multiple P0 items compete for the session — the human sets priority
+- **Novel patterns**: You're about to introduce an architectural pattern not seen in the codebase before
+
+Do NOT escalate (just inform via OODA report) when:
+- Agent selection within a wave
+- Prompt engineering for specialist agents
+- Scratchpad format decisions
+- Hook/infrastructure changes within `.claude/`
+- Reordering independent tasks within a wave
+
+The human's time is the scarcest resource in the system. Every escalation should carry enough context for the human to decide in under 30 seconds.
+
 ## Process Rules
 
 1. **Wave 0 is non-negotiable** — every session starts by committing or stashing dirty state. No exceptions.
@@ -243,6 +262,7 @@ The cognitive light cone tetrahedron:
 5. **Delegate dependency additions** — even "small" uv add/remove goes to devops to preserve package knowledge
 6. **__init__.py ownership** — in multi-file creation waves, assign ONE agent to handle all __init__.py wiring after all files exist
 7. **Plan agent decisions in delegation** — when Plan agent recommends an approach, include it in delegation: "Plan agent recommended [X]. Follow unless you have specific reason; document override in scratchpad."
+8. **Compress upward, expand downward** — OODA reports are your interface TO the human. They should be concise, decision-oriented, and honest about uncertainty. Delegation prompts are your interface FROM the human through you to specialists. They should be detailed, specific, and include all context the specialist needs. Never make the human read verbose agent output — synthesize it.
 
 ### Ego Escalation Protocol
 
