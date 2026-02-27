@@ -6,6 +6,8 @@ from datetime import date, timedelta
 from pathlib import Path
 
 SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
+COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
+SESSION_ID_FILE = COORDINATORS_DIR / ".current_session_id"
 
 # Lines of context to inject from each scratchpad source
 CONTEXT_LINES = 5
@@ -39,6 +41,47 @@ def staleness_warning(entry: Path | None, label: str) -> str | None:
     except ValueError:
         pass
     return None
+
+
+def get_other_coordinator_note() -> list[str]:
+    """Return lines noting any active coordinator sessions other than this one.
+
+    Silently returns empty list on any error.
+    """
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import coordinator_registry as cr
+
+        my_session_id = ""
+        if SESSION_ID_FILE.exists():
+            my_session_id = SESSION_ID_FILE.read_text(encoding="utf-8").strip()
+
+        all_claims = cr.read_all_claims(COORDINATORS_DIR)
+        other_active = [
+            c for c in all_claims
+            if c.get("session_id") != my_session_id and not cr.is_stale(c)
+        ]
+
+        if not other_active:
+            return []
+
+        lines = ["", "### Other Active Coordinator Sessions:"]
+        for claim in other_active:
+            sid = claim.get("session_id", "unknown")
+            summary = claim.get("task_summary", "no summary")
+            paths = claim.get("claimed_paths", [])
+            paths_str = ", ".join(str(p) for p in paths[:4])
+            if len(paths) > 4:
+                paths_str += f" (+{len(paths) - 4} more)"
+            lines.append(f"- **{sid}**: {summary} | claiming: {paths_str}")
+        lines.append(
+            "Avoid modifying files claimed by other coordinators without coordinator approval."
+        )
+        return lines
+    except Exception as exc:
+        print(f"subagent-context: coordinator claim check failed: {exc}", file=sys.stderr)
+        return []
 
 
 def main() -> None:
@@ -91,6 +134,10 @@ def main() -> None:
             stale = staleness_warning(own_entry, "your last entry")
             if stale:
                 parts.append(stale)
+
+    # Inject other active coordinator sessions (claim awareness)
+    coord_note = get_other_coordinator_note()
+    parts.extend(coord_note)
 
     context = "\n".join(parts)
 

@@ -6,15 +6,42 @@ from datetime import date
 from pathlib import Path
 
 SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
+COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
+SESSION_ID_FILE = COORDINATORS_DIR / ".current_session_id"
 
 MIN_LINES = 5
 MAX_LINES = 80  # Per multi-agent-protocol.md rule
+
+
+def touch_heartbeat() -> None:
+    """Update the coordinator's heartbeat_at to now.
+
+    Silently no-ops on any error (fail open).
+    """
+    try:
+        if not SESSION_ID_FILE.exists():
+            return
+        session_id = SESSION_ID_FILE.read_text(encoding="utf-8").strip()
+        if not session_id:
+            return
+
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import coordinator_registry as cr
+
+        cr.update_heartbeat(COORDINATORS_DIR, session_id)
+        print(f"SubagentStop: heartbeat updated for {session_id}", file=sys.stderr)
+    except Exception as exc:
+        print(f"SubagentStop: heartbeat update failed: {exc}", file=sys.stderr)
 
 
 def main() -> None:
     try:
         hook_input = json.loads(sys.stdin.read() or "{}")
         print(f"SubagentStop hook input: {json.dumps(hook_input)}", file=sys.stderr)
+
+        # Update coordinator heartbeat on every subagent completion
+        touch_heartbeat()
 
         # Try multiple possible field names for agent type (runtime API may vary)
         agent_type = None

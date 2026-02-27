@@ -312,6 +312,7 @@ config.local.yml
 config.local.yaml
 .claude/settings.local.json
 .claude/scratchpad/
+.claude/coordinators/
 
 # ==========================================
 # Package Management
