@@ -12,6 +12,26 @@ SESSION_ID_FILE = COORDINATORS_DIR / ".current_session_id"
 # Lines of context to inject from each scratchpad source
 CONTEXT_LINES = 5
 
+# Pipeline adjacency graph: which agents are "neighbors" in the processing pipeline.
+# When spawning an agent, we scan its neighbors' scratchpads for critical signals.
+# "*" means the agent sees signals from ALL other agents.
+PIPELINE_ADJACENCY = {
+    "stage1-modality-encoder": ["stage2-fusion-architect", "srai-spatial"],
+    "stage2-fusion-architect": ["stage1-modality-encoder", "stage3-analyst", "srai-spatial"],
+    "stage3-analyst": ["stage2-fusion-architect"],
+    "srai-spatial": ["stage1-modality-encoder", "stage2-fusion-architect", "stage3-analyst"],
+    "qaqc": ["*"],
+    "librarian": ["*"],
+    "ego": ["*"],
+}
+
+# Signal keywords that propagate between pipeline-adjacent agents.
+# Agents should emit these in their scratchpads when relevant.
+SIGNAL_KEYWORDS = [
+    "BLOCKED", "URGENT", "CRITICAL", "BROKEN",
+    "SHAPE_CHANGED", "INTERFACE_CHANGED", "DEPRECATED", "NEEDS_TEST",
+]
+
 
 def last_lines(path: Path, n: int = CONTEXT_LINES) -> str:
     """Return last n non-empty lines from a file, or empty string if missing."""
@@ -41,6 +61,55 @@ def staleness_warning(entry: Path | None, label: str) -> str | None:
     except ValueError:
         pass
     return None
+
+
+def get_sibling_signals(agent_type: str) -> list[str]:
+    """Scan pipeline-adjacent agents' today scratchpads for signal keywords.
+
+    This implements Levin's "pervasive signaling" -- bioelectric gradients
+    propagate along the pipeline adjacency graph, so stage3-analyst sees
+    SHAPE_CHANGED from stage2-fusion-architect, etc.
+    """
+    neighbors = PIPELINE_ADJACENCY.get(agent_type)
+    if not neighbors:
+        return []
+
+    today_str = date.today().isoformat()
+    yesterday_str = (date.today() - timedelta(days=1)).isoformat()
+    signals = []
+
+    # Determine which agent directories to scan
+    if "*" in neighbors:
+        scan_dirs = [
+            d for d in sorted(SCRATCHPAD_ROOT.iterdir())
+            if d.is_dir() and d.name != agent_type
+        ]
+    else:
+        scan_dirs = [
+            SCRATCHPAD_ROOT / n for n in neighbors
+            if (SCRATCHPAD_ROOT / n).is_dir()
+        ]
+
+    for agent_dir in scan_dirs:
+        for date_str in (today_str, yesterday_str):
+            entry = agent_dir / f"{date_str}.md"
+            if not entry.exists():
+                continue
+            try:
+                content = entry.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            content_upper = content.upper()
+            for keyword in SIGNAL_KEYWORDS:
+                if keyword in content_upper:
+                    for line in content.splitlines():
+                        if keyword in line.upper() and line.strip():
+                            signals.append(
+                                f"- **{agent_dir.name}** ({date_str}): {line.strip()[:120]}"
+                            )
+                            break  # One match per keyword per agent per date
+
+    return signals
 
 
 def get_other_coordinator_note() -> list[str]:
@@ -138,6 +207,15 @@ def main() -> None:
     # Inject other active coordinator sessions (claim awareness)
     coord_note = get_other_coordinator_note()
     parts.extend(coord_note)
+
+    # Inject pipeline-adjacent signals (Levin's pervasive signaling)
+    sibling_signals = get_sibling_signals(agent_type)
+    if sibling_signals:
+        parts.extend([
+            "",
+            "### Pipeline Signals (from adjacent agents):",
+            *sibling_signals,
+        ])
 
     context = "\n".join(parts)
 
