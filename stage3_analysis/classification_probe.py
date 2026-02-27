@@ -355,7 +355,10 @@ class ClassificationProber:
             y = y_all[target_col].values
             target_name = self._get_target_name(target_col)
 
-            n_classes = int(len(np.unique(y[~np.isnan(y)])))
+            unique_labels = np.unique(y[~np.isnan(y)]).astype(int)
+            label_min = int(unique_labels.min())
+            label_max = int(unique_labels.max())
+            n_classes = label_max - label_min + 1
             logger.info(f"\n--- Target: {target_col} ({target_name}) ---")
             logger.info(
                 f"  n_classes={n_classes}, distribution: "
