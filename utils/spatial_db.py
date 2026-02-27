@@ -174,11 +174,14 @@ class SpatialDB:
             result_df = result_df.reindex(ids_arr)
             return result_df["cx"].values, result_df["cy"].values
 
-        # GeoPandas fallback
+        # GeoPandas fallback — project to metric CRS for accurate centroids
         filtered = self._load_gdf_fallback(hex_ids, resolution)
-        if crs != 4326:
-            filtered = filtered.to_crs(epsg=crs)
-        centroids = filtered.geometry.centroid
+        projected = filtered.to_crs(epsg=crs if crs != 4326 else 3857)
+        centroids = projected.geometry.centroid
+        if crs == 4326:
+            # Convert back from 3857 to 4326
+            import geopandas as gpd
+            centroids = gpd.GeoSeries(centroids, crs=3857).to_crs(epsg=4326)
         ids_arr = np.asarray(hex_ids, dtype=str)
         centroids = centroids.reindex(ids_arr)
         return centroids.x.values, centroids.y.values
