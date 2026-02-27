@@ -210,10 +210,11 @@ def main() -> None:
     # Register coordinator regardless of source (handles resume/compact too)
     session_id, active_claims = register_coordinator()
 
-    # Only inject full orientation context on fresh startup, not resume/compact
-    if source not in ("startup", ""):
-        json.dump({}, sys.stdout)
-        return
+    # Inject full orientation context on startup AND after /clear (which sends
+    # "compact" or "resume"). After /clear the coordinator loses all context, so
+    # re-injection is essential — especially for the /clear → /coordinate plan workflow.
+    # Only skip on sources that genuinely don't need it (none currently identified).
+
 
     parts = ["## Session Orientation (auto-injected by SessionStart hook)"]
 

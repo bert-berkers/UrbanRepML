@@ -113,6 +113,45 @@ def get_sibling_signals(agent_type: str) -> list[str]:
     return signals
 
 
+def get_coordinator_messages() -> list[str]:
+    """Return recent coordinator messages addressed to this session or 'all'.
+
+    Fires every wave (via SubagentStart), giving continuous lateral awareness.
+    Silently returns empty list on any error.
+    """
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import coordinator_registry as cr
+
+        my_session_id = ""
+        if SESSION_ID_FILE.exists():
+            my_session_id = SESSION_ID_FILE.read_text(encoding="utf-8").strip()
+        if not my_session_id:
+            return []
+
+        # Read messages from last 2 hours addressed to us or "all"
+        from datetime import datetime
+        since = datetime.now() - timedelta(hours=2)
+        messages = cr.read_messages(
+            COORDINATORS_DIR, since=since, to_session=my_session_id
+        )
+
+        if not messages:
+            return []
+
+        lines = ["", "### Coordinator Messages (lateral signals):"]
+        for msg in messages[-5:]:  # Cap at 5 most recent
+            sender = msg.get("from", "unknown")
+            level = msg.get("level", "info")
+            body = msg.get("body", "")[:150]
+            lines.append(f"- **[{level}]** from `{sender}`: {body}")
+        return lines
+    except Exception as exc:
+        print(f"subagent-context: coordinator message read failed: {exc}", file=sys.stderr)
+        return []
+
+
 def get_other_coordinator_note() -> list[str]:
     """Return lines noting any active coordinator sessions other than this one.
 
@@ -217,6 +256,10 @@ def main() -> None:
             "### Pipeline Signals (from adjacent agents):",
             *sibling_signals,
         ])
+
+    # Inject unread coordinator messages (lateral awareness every wave)
+    coord_messages = get_coordinator_messages()
+    parts.extend(coord_messages)
 
     context = "\n".join(parts)
 
