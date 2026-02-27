@@ -35,3 +35,19 @@ Write to `.claude/scratchpad/ego/YYYY-MM-DD.md` (today's date) with:
 - **Forward-Look**: recommendations for next session
 
 Then write the forward-look to `.claude/scratchpad/coordinator/YYYY-MM-DD+1.md` (tomorrow's date) to seed the next OODA cycle.
+
+## Agent Gap Detection (Self-Assemblage)
+
+In addition to the standard health assessment, check for signs that the agent ecosystem needs to grow:
+
+1. **Unmatched task patterns**: Were there tasks this session that no existing agent was well-suited for? Did the coordinator handle a recurring category of work itself?
+2. **Scratchpad pattern mining**: Are there patterns in specialist scratchpads suggesting a missing capability? (e.g., multiple agents doing ad-hoc data validation → suggests a dedicated data-contract agent)
+3. **Repeated escalation**: Are agents consistently escalating the same type of decision? This may indicate the autonomy contract is too narrow, or a new specialist is needed.
+
+If a gap appears in 2+ sessions, recommend a new agent type in the scratchpad with:
+- **Name**: proposed agent type identifier
+- **Domain**: what expertise it would hold
+- **Triggers**: when the coordinator should dispatch it
+- **Autonomy scope**: what it can decide autonomously vs must escalate
+
+This is how the system grows new organs — not by top-down design, but by detecting functional gaps in lived operation.
