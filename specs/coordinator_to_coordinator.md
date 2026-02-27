@@ -1,6 +1,6 @@
 # Coordinator-to-Coordinator Communication Protocol
 
-## Status: Draft
+## Status: v1.1 — Implemented (2026-02-27)
 
 ## Context
 
@@ -14,6 +14,8 @@ When a user opens multiple Claude Code terminals on the same codebase -- one doi
 4. **No message passing.** If A needs B to hold off on a directory while A refactors, there is no channel to say so. The only option is the user manually telling B.
 
 These problems are not theoretical. The ego assessment flagged duplicate script confusion (`scripts/plot_linear_vs_dnn_comparison.py` vs `scripts/one_off/` version) -- exactly the kind of overlap that happens when two sessions do not coordinate.
+
+All four problems are now addressed by the advisory file-based protocol implemented in commits `52a7836` (initial protocol), `d176a37` (Levin enhancements), and `75dc879` (continuous lateral awareness).
 
 ## Decision
 
@@ -93,35 +95,41 @@ active_agents:                             # Currently running subagents
 
 ### Message Log
 
-**Path**: `.claude/coordinators/messages.yaml`
+**Path**: `.claude/coordinators/messages/{timestamp}-{session_id}.yaml`
 
-A single shared append-only file. Each entry is a timestamped message from one coordinator to another (or to all).
+Each message is a separate YAML file in the `messages/` subdirectory. This eliminates write contention entirely -- no two coordinators ever append to the same file.
 
 ```yaml
-messages:
-  - from: "gentle-amber-tide"
-    to: "all"                              # or a specific session_id
-    at: "2026-02-27T14:40:00"
-    type: "info"                           # info | warning | request | done
-    text: "Refactoring utils/paths.py -- adding study_area_root() method. Will be done by 15:00."
-
-  - from: "swift-drifting-maple"
-    to: "gentle-amber-tide"
-    at: "2026-02-27T14:50:00"
-    type: "request"
-    text: "Need utils/paths.py stable -- can you notify when refactor is complete?"
-
-  - from: "gentle-amber-tide"
-    to: "swift-drifting-maple"
-    at: "2026-02-27T15:02:00"
-    type: "done"
-    text: "utils/paths.py refactor complete. New method: study_area_root(area_name) -> Path."
+# .claude/coordinators/messages/20260227-144000-gentle-amber-tide.yaml
+from: "gentle-amber-tide"
+to: "all"                                # or a specific session_id
+at: "2026-02-27T14:40:00"
+level: "info"                            # info | warning | request | done
+body: "Refactoring utils/paths.py -- adding study_area_root() method. Will be done by 15:00."
 ```
 
-**Message types:**
+```yaml
+# .claude/coordinators/messages/20260227-145000-swift-drifting-maple.yaml
+from: "swift-drifting-maple"
+to: "gentle-amber-tide"
+at: "2026-02-27T14:50:00"
+level: "request"
+body: "Need utils/paths.py stable -- can you notify when refactor is complete?"
+```
 
-| Type | Meaning |
-|------|---------|
+```yaml
+# .claude/coordinators/messages/20260227-150200-gentle-amber-tide.yaml
+from: "gentle-amber-tide"
+to: "swift-drifting-maple"
+at: "2026-02-27T15:02:00"
+level: "done"
+body: "utils/paths.py refactor complete. New method: study_area_root(area_name) -> Path."
+```
+
+**Message levels:**
+
+| Level | Meaning |
+|-------|---------|
 | `info` | Informational -- no action expected |
 | `warning` | Something is about to change or has changed that others should know |
 | `request` | Asking another coordinator to do or avoid something |
@@ -134,7 +142,10 @@ messages:
   coordinators/
     session-gentle-amber-tide.yaml      # Active claim (Coordinator A)
     session-swift-drifting-maple.yaml    # Active claim (Coordinator B)
-    messages.yaml                        # Shared message log
+    messages/                            # Per-message files (no write contention)
+      20260227-144000-gentle-amber-tide.yaml
+      20260227-145000-swift-drifting-maple.yaml
+      20260227-150200-gentle-amber-tide.yaml
 ```
 
 The `.claude/coordinators/` directory should be gitignored -- these are ephemeral runtime artifacts, not project state. Add to `.gitignore`:
@@ -182,7 +193,7 @@ Before any file modification (either by the coordinator directly or by delegatin
 
 At each OODA cycle's OBSERVE phase, the coordinator should:
 
-1. Read `.claude/coordinators/messages.yaml`.
+1. Read all files in `.claude/coordinators/messages/`.
 2. Filter for messages addressed to this session's ID or to `"all"`.
 3. Filter for messages newer than the last check.
 4. Surface relevant messages in the OODA report.
@@ -191,7 +202,7 @@ At each OODA cycle's OBSERVE phase, the coordinator should:
 
 1. **Stop hook** (`stop.py`) is extended with `deregister_coordinator()`.
 2. Delete this session's claim file from `.claude/coordinators/`.
-3. Optionally write a `done` message to `messages.yaml` summarizing what was accomplished: "Session A completed. Modified: stage1_modalities/poi/, utils/paths.py. Committed as abc1234."
+3. Optionally write a `done` message to `.claude/coordinators/messages/` summarizing what was accomplished: "Session A completed. Modified: stage1_modalities/poi/, utils/paths.py. Committed as abc1234."
 4. **Stale claim cleanup**: if any other claim files have `heartbeat_at` older than 2 hours, delete them (they are from crashed sessions).
 
 ## Conflict Resolution
@@ -215,6 +226,58 @@ If a coordinator modifies a file and only then discovers (via message or updated
 1. Log a `warning` message with the specific file and what was changed.
 2. Alert the user: "Both sessions modified {file}. You may need to reconcile changes."
 3. Do not attempt automatic reconciliation -- git diff and manual review are the right tools.
+
+## Levin's Design Principles Integration (v1.1)
+
+The protocol was enhanced with concepts from Levin's cognitive light cone framework. These additions make the system self-improving rather than merely structured.
+
+### Three-Scale Cognitive Architecture
+
+The coordinator-to-coordinator protocol operates at the **lateral** scale of a three-level system:
+
+| Scale | Entity | Temporal Reach | Communication Channel |
+|-------|--------|---------------|----------------------|
+| **Supra** | Human user | Longest -- across all workstreams | Direct chat |
+| **Lateral** | Coordinators | Mid -- session-scoped | Claims + messages (this protocol) |
+| **Vertical** | Specialist agents | Shortest -- task-scoped | Scratchpads + hooks |
+
+The human is the supra-coordinator. When lateral coordination fails (deadlock, conflicting claims), escalate to the human.
+
+### Pervasive Signaling
+
+Agents propagate signals along a pipeline adjacency graph defined in `subagent-context.py`:
+
+```python
+PIPELINE_ADJACENCY = {
+    "stage1-modality-encoder": ["stage2-fusion-architect", "srai-spatial"],
+    "stage2-fusion-architect": ["stage1-modality-encoder", "stage3-analyst", "srai-spatial"],
+    "stage3-analyst": ["stage2-fusion-architect"],
+    "srai-spatial": ["stage1-modality-encoder", "stage2-fusion-architect", "stage3-analyst"],
+    "qaqc": ["*"],  # sees all
+    "librarian": ["*"],
+    "ego": ["*"],
+}
+```
+
+Eight signal keywords propagate automatically: `BLOCKED`, `URGENT`, `CRITICAL`, `BROKEN`, `SHAPE_CHANGED`, `INTERFACE_CHANGED`, `DEPRECATED`, `NEEDS_TEST`. These are matched with word-boundary regex to prevent false positives from identifier references.
+
+### Continuous Lateral Awareness
+
+Coordinator messages are injected at two points:
+1. **SessionStart** -- full orientation including active coordinator claims (fires on ALL sources including post-`/clear`)
+2. **SubagentStart** -- unread messages injected every wave (every agent spawn), giving continuous awareness without requiring manual message checking
+
+### Cognitive Light Cone Metrics
+
+Each session starts with a one-line summary quantifying the system's cognitive reach:
+```
+Light cone: 12d memory, 15 agents, ~5 unresolved, 1 active coordinators
+```
+This provides immediate situational awareness of temporal depth, agent breadth, forward projection quality, and lateral reach.
+
+### Autonomy Contracts
+
+Each agent type has a defined scope of autonomous decisions documented in `.claude/agents/coordinator.md`. Agents within scope do not need coordinator approval -- the scratchpad is the accountability mechanism. This prevents the coordinator from becoming a bottleneck while maintaining traceability.
 
 ## Anti-Patterns
 
@@ -272,19 +335,11 @@ If a coordinator modifies a file and only then discovers (via message or updated
 
 ### Message File Corruption
 
-**Problem**: Two sessions write to `messages.yaml` simultaneously, producing invalid YAML.
+**Problem**: Two sessions write to the message directory simultaneously.
 
-**Mitigation**: Use atomic file writes (write to a temp file, then rename). Python's `pathlib` and `os.replace()` provide this. Additionally, each message can be a separate file (`messages/TIMESTAMP-SESSIONID.yaml`) instead of appending to a single file. This eliminates write contention entirely.
+**Mitigation**: The per-message file approach eliminates write contention entirely -- each message is a separate file (`messages/{timestamp}-{session_id}.yaml`). No two coordinators ever write to the same file. Individual corrupted message files can be deleted without affecting others.
 
-**Recovery**: If `messages.yaml` is corrupted, delete it. Messages are informational, not transactional. No data loss beyond the messages themselves.
-
-**Recommendation**: Use the per-message file approach for robustness:
-```
-.claude/coordinators/
-  messages/
-    20260227-144000-gentle-amber-tide.yaml    # One message per file
-    20260227-145000-swift-drifting-maple.yaml
-```
+**Recovery**: If a message file is corrupted, delete it. Messages are informational, not transactional. No data loss beyond the individual message.
 
 ### Heartbeat Drift
 
@@ -302,13 +357,13 @@ If a coordinator modifies a file and only then discovers (via message or updated
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `.claude/hooks/session-start.py` | Add `register_coordinator()`: generate session ID, write claim file, scan existing claims, inject active-coordinator context |
-| `.claude/hooks/stop.py` | Add `deregister_coordinator()`: delete claim file, optional farewell message, stale claim cleanup |
-| `.claude/hooks/subagent-context.py` | Add claim-check injection: when a subagent starts, inject relevant active claims for the subagent's domain so it knows what to avoid |
-| `.claude/hooks/subagent-stop.py` | Update heartbeat on coordinator's claim file |
-| `.claude/settings.json` | No structural change needed -- hooks are already registered |
+| File | Implementation |
+|------|---------------|
+| `.claude/hooks/session-start.py` | `register_coordinator()`, cognitive light cone metrics, extended 8-keyword signal vocabulary, full context injection on ALL sources (including post-`/clear`) |
+| `.claude/hooks/stop.py` | `deregister_coordinator()`, stale claim cleanup |
+| `.claude/hooks/subagent-context.py` | Claim awareness injection, pipeline adjacency signal propagation (`get_sibling_signals()`), coordinator message injection (`get_coordinator_messages()`) |
+| `.claude/hooks/subagent-stop.py` | Heartbeat update on every agent completion |
+| `.claude/settings.json` | No change needed -- hooks were already registered |
 
 ### New Files
 
@@ -366,56 +421,14 @@ However, git branches remain a valid **complementary** strategy. A user who know
 - The protocol does not change the single-coordinator case at all. If only one session is active, the claim file is written and never checked against anything. The overhead is a single file write on start and delete on stop.
 - Claim granularity is glob-based, same as the existing rules system. This is a known tradeoff: too broad and everything conflicts, too narrow and overlaps are missed. The escalation ladder (directory-level to file-level) mitigates this.
 
-## Implementation Plan
+## Implementation History
 
-Ordered by dependency:
+| Commit | Date | Description |
+|--------|------|-------------|
+| `52a7836` | 2026-02-27 | Initial protocol: coordinator_registry.py, claim files, message log, 4 hook integrations, coordinator-coordination.md rule |
+| `d176a37` | 2026-02-27 | Levin principles: pipeline adjacency graph, signal vocabulary, cognitive light cone metrics, delegation checkpoint, QAQC response protocol, autonomy contracts |
+| `32a630f` | 2026-02-27 | Self-assemblage: agent gap detection in ego-check, convention discovery in librarian-update |
+| `187c496` | 2026-02-27 | Fix: word-boundary signal matching, stale agent definitions |
+| `75dc879` | 2026-02-27 | Continuous lateral awareness: post-/clear context injection, per-wave coordinator message injection |
 
-1. **`.gitignore`** -- Add `.claude/coordinators/` entry. No dependencies.
-
-2. **`.claude/hooks/coordinator_registry.py`** -- Shared library with functions:
-   - `generate_session_id(coordinators_dir) -> str` -- picks from word lists (adjective + participle/adjective + noun), checks for collisions with existing claim files, regenerates on collision
-   - `read_all_claims(coordinators_dir) -> list[dict]`
-   - `write_claim(coordinators_dir, claim_data)`
-   - `delete_claim(coordinators_dir, session_id)`
-   - `is_stale(claim, threshold_minutes=30) -> bool`
-   - `check_conflict(file_path, claims, my_session_id) -> list[dict]` -- returns list of conflicting claims
-   - `read_messages(coordinators_dir, since=None, to_session=None) -> list[dict]`
-   - `write_message(coordinators_dir, message_data)` -- writes as individual file in `messages/` subdirectory
-   - `cleanup_stale(coordinators_dir, threshold_hours=2)` -- removes stale claim files and old messages
-   Dependencies: none.
-
-3. **`.claude/hooks/session-start.py`** -- Add coordinator registration:
-   - Import `coordinator_registry`.
-   - Call `register_coordinator()` to write claim file.
-   - Scan existing claims and inject summaries into `additionalContext`.
-   Dependencies: step 2.
-
-4. **`.claude/hooks/stop.py`** -- Add coordinator deregistration:
-   - Import `coordinator_registry`.
-   - Call `deregister_coordinator()` to delete claim file.
-   - Call `cleanup_stale()` to remove crashed sessions' artifacts.
-   - Optionally write farewell message.
-   Dependencies: step 2.
-
-5. **`.claude/hooks/subagent-context.py`** -- Add claim awareness:
-   - Read active claims for the subagent's likely working paths (inferred from agent_type).
-   - Inject relevant warnings: "Another coordinator claims this domain."
-   Dependencies: step 2.
-
-6. **`.claude/hooks/subagent-stop.py`** -- Add heartbeat update:
-   - Update `heartbeat_at` in the current session's claim file.
-   Dependencies: step 2.
-
-7. **`.claude/rules/coordinator-coordination.md`** -- Path-scoped rule for `.claude/**`:
-   - Documents the protocol obligations: check claims before writing, narrow claims early, leave messages for state transitions, do not assert about domains outside your claims.
-   Dependencies: none (can be written in parallel with step 2).
-
-8. **`specs/coordinator_to_coordinator.md`** -- This document. Update status to Implemented when steps 1-7 are complete.
-
-### Estimated Scope
-
-- `coordinator_registry.py`: ~200 lines
-- Hook modifications: ~30 lines each (4 files)
-- Rule file: ~40 lines
-- Total new/modified code: ~400 lines
-- Agent: `devops` for hook modifications, `spec-writer` for the rule file
+Total implementation: ~600 lines across 10 files. All hooks verified functional by QAQC (7/7 checks pass).
