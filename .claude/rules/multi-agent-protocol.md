@@ -29,6 +29,24 @@ Every agent that does work MUST write a dated entry to `.claude/scratchpad/{agen
 - Always foreground agents (`run_in_background: false`) so the user sees activity
 - Task descriptions: `"[Agent]: [task]"` format (e.g. `"Librarian: update codebase graph"`)
 
+## The Human Layer
+
+The human user is the supra-coordinator — they sit above the coordinator in the cognitive hierarchy:
+
+```
+Human (supra) → sets goals, resolves conflicts, approves irreversible actions
+  ↓
+Coordinator (lateral) → translates intent, delegates, synthesizes, reports
+  ↓
+Specialists (vertical) → execute domain work, write scratchpads
+```
+
+**Information flows upward as compression**: specialists write 80-line scratchpads, the coordinator compresses to a 5-line OODA report, the human sees a 1-2 sentence summary.
+
+**Intent flows downward as expansion**: the human says "fix the probe pipeline", the coordinator identifies 3 sub-tasks and assigns agents, each agent gets a detailed prompt with file paths and acceptance criteria.
+
+This asymmetry is by design — the human's attention is the scarcest resource, so the system compresses toward them and expands away from them.
+
 ## Cross-Agent Communication
 
 - Scratchpads are the primary cross-session communication mechanism (stigmergy)

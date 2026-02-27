@@ -48,6 +48,19 @@ Check the coordinator-to-coordinator system for signs of dysfunction:
 
 Report findings under a **Lateral Health** subsection in the scratchpad.
 
+## Supra-Coordinator Communication Quality
+
+Check whether the coordinator is properly serving the human (supra-coordinator):
+
+1. **Escalation calibration**: Did the coordinator escalate the right things? Look for:
+   - Under-escalation: making irreversible decisions, changing scope, or overriding priorities without asking the human
+   - Over-escalation: asking the human trivial questions that fall within coordinator autonomy (agent selection, prompt wording, scratchpad format)
+2. **OODA report quality**: Were reports concise and decision-oriented? Did they include "Needs your call" items when appropriate? Or were they walls of text the human had to parse?
+3. **Compression quality**: Did the coordinator synthesize agent results before presenting to the human, or did it dump raw agent output?
+4. **Intent fidelity**: Did the coordinator's delegations faithfully reflect the human's stated intent, or did scope drift occur without acknowledgment?
+
+Report findings under a **Supra Communication** subsection in the scratchpad.
+
 ## Agent Gap Detection (Self-Assemblage)
 
 In addition to the standard health assessment, check for signs that the agent ecosystem needs to grow:
