@@ -118,8 +118,8 @@ class POIProcessor(ModalityProcessor):
         logger.info("Starting OSM data download...")
         if self.data_source == 'pbf':
             logger.info(f"Loading from PBF file: {self.pbf_path}")
-            loader = OSMPbfLoader()
-            pois_gdf = loader.load(self.pbf_path, tags=self.poi_categories, area=area_gdf)
+            loader = OSMPbfLoader(pbf_file=self.pbf_path)
+            pois_gdf = loader.load(area_gdf, tags=self.poi_categories)
         else:
             logger.info("Downloading from OSM Overpass API (with caching)...")
             loader = OSMOnlineLoader()

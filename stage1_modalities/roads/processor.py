@@ -95,8 +95,8 @@ class RoadsProcessor(ModalityProcessor):
         
         # Load roads
         if self.data_source == 'pbf':
-            loader = OSMPbfLoader()
-            roads_gdf = loader.load(self.pbf_path, tags=tags, area=area_gdf)
+            loader = OSMPbfLoader(pbf_file=self.pbf_path)
+            roads_gdf = loader.load(area_gdf, tags=tags)
         else:
             loader = OSMOnlineLoader()
             roads_gdf = loader.load(area_gdf, tags=tags)
