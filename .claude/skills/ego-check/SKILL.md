@@ -36,6 +36,18 @@ Write to `.claude/scratchpad/ego/YYYY-MM-DD.md` (today's date) with:
 
 Then write the forward-look to `.claude/scratchpad/coordinator/YYYY-MM-DD+1.md` (tomorrow's date) to seed the next OODA cycle.
 
+## Lateral Coordination Health
+
+Check the coordinator-to-coordinator system for signs of dysfunction:
+
+1. **Stale claims**: Are there `.claude/coordinators/session-*.yaml` files with heartbeats older than 30 minutes? These indicate crashed sessions that weren't cleaned up.
+2. **Claim narrowing**: Did coordinators narrow their `claimed_paths` from the initial `["*"]` within their first OODA cycle? Claim squatting degrades the protocol's value.
+3. **Message responsiveness**: Are messages in `.claude/coordinators/messages/` being read and acted on? Check if `request`-level messages got a corresponding `done` response.
+4. **Signal propagation quality**: Are pipeline signals (BLOCKED, SHAPE_CHANGED, etc.) actually reaching adjacent agents? Check SubagentStart hook output for false positives or missed signals.
+5. **Heartbeat regularity**: Are heartbeats updating at each agent completion (SubagentStop hook), or are there gaps suggesting the hook is failing silently?
+
+Report findings under a **Lateral Health** subsection in the scratchpad.
+
 ## Agent Gap Detection (Self-Assemblage)
 
 In addition to the standard health assessment, check for signs that the agent ecosystem needs to grow:
