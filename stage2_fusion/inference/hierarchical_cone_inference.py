@@ -126,8 +126,8 @@ class HierarchicalConeInference:
                 embeddings_df = pd.read_parquet(embeddings_path)
 
                 # Align indices
-                if 'h3_index' in embeddings_df.columns:
-                    embeddings_df = embeddings_df.set_index('h3_index')
+                if 'region_id' in embeddings_df.columns:
+                    embeddings_df = embeddings_df.set_index('region_id')
                     embeddings_df.index.name = 'region_id'
 
                 # Extract embedding columns

@@ -36,7 +36,7 @@ def calculate_floodfill_travel_times(
         use_srai_neighbors: Always True - use SRAI neighborhoods
         
     Returns:
-        DataFrame with origin_h3, destination_h3, travel_time_minutes
+        DataFrame with origin_region_id, destination_region_id, travel_time_minutes
         
     Note:
         This is a placeholder. Implementation should use:
@@ -70,8 +70,8 @@ def calculate_floodfill_travel_times(
         for j in range(min(10, n_regions)):  # Small neighborhood
             if i != j:
                 dummy_data.append({
-                    'origin_h3': regions_gdf.iloc[i]['region_id'],
-                    'destination_h3': regions_gdf.iloc[j]['region_id'],
+                    'origin_region_id': regions_gdf.index[i],
+                    'destination_region_id': regions_gdf.index[j],
                     'travel_time_minutes': np.random.uniform(1, cutoff_minutes)
                 })
     

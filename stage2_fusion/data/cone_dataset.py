@@ -174,9 +174,8 @@ class ConeDataset(Dataset):
         embeddings_df = pd.read_parquet(embeddings_path)
 
         # Align with SRAI region_id format
-        if 'h3_index' in embeddings_df.columns:
-            embeddings_df = embeddings_df.set_index('h3_index')
-            embeddings_df.index.name = 'region_id'
+        if 'region_id' in embeddings_df.columns:
+            embeddings_df = embeddings_df.set_index('region_id')
 
         # Extract only embedding columns (A00-A63 or P00-P15)
         embedding_cols = [col for col in embeddings_df.columns if col.startswith(('A', 'P'))]

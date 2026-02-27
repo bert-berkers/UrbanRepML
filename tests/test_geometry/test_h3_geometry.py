@@ -7,6 +7,7 @@ to ensure formulas are correct.
 
 import pytest
 import h3
+from srai.neighbourhoods import H3Neighbourhood
 from stage2_fusion.geometry import (
     expected_children_count,
     expected_total_descendants,
@@ -43,8 +44,8 @@ class TestHierarchicalGeometry:
 
     def test_against_actual_h3(self):
         """Validate formula against actual H3 cell_to_children."""
-        # Use a specific hex at res5
-        test_hex = h3.latlng_to_cell(52.0, 5.0, 5)  # Netherlands
+        # Pre-defined hex at res5 for Netherlands (lat=52.0, lng=5.0)
+        test_hex = "85196973fffffff"
 
         # Test immediate children (res6)
         actual_children = list(h3.cell_to_children(test_hex, 6))
@@ -108,12 +109,17 @@ class TestSpatialGeometry:
         assert expected_k_ring_size(5, include_center=False) == 90
 
     def test_against_actual_h3_grid_disk(self):
-        """Validate formula against actual H3 grid_disk."""
-        test_hex = h3.latlng_to_cell(52.0, 5.0, 9)  # Netherlands
+        """Validate formula against SRAI H3Neighbourhood k-disk."""
+        # Pre-defined hex at res9 for Netherlands (lat=52.0, lng=5.0)
+        test_hex = "89196971487ffff"
 
+        neighbourhood = H3Neighbourhood()
         # Test various k values
         for k in [1, 2, 3, 5]:
-            actual_ring = list(h3.grid_disk(test_hex, k))
+            # unchecked=True returns all neighbours without filtering against a regions_gdf
+            actual_ring = neighbourhood.get_neighbours_up_to_distance(
+                test_hex, k, include_center=True, unchecked=True
+            )
             expected = expected_k_ring_size(k)
 
             assert len(actual_ring) == expected, \

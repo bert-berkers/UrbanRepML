@@ -158,7 +158,7 @@ class DNNClassificationProber:
 
     def load_and_join_data(self) -> gpd.GeoDataFrame:
         """
-        Load embeddings and target data, inner join on region_id / h3_index.
+        Load embeddings and target data, inner join on region_id.
 
         Returns:
             GeoDataFrame with embeddings + target columns, indexed by region_id.
@@ -169,15 +169,18 @@ class DNNClassificationProber:
         logger.info(f"Loading embeddings from {emb_path}")
         emb_df = pd.read_parquet(emb_path)
 
-        # Normalize index: embeddings may use h3_index column
-        if "h3_index" in emb_df.columns and emb_df.index.name != "region_id":
-            emb_df = emb_df.set_index("h3_index")
+        # Normalize index: embeddings may use region_id column
+        if "region_id" in emb_df.columns and emb_df.index.name != "region_id":
+            emb_df = emb_df.set_index("region_id")
             emb_df.index.name = "region_id"
 
-        # Identify embedding feature columns (A00, A01, ..., A63)
+        # Identify embedding feature columns by modality prefix (A, P, R, S, G)
+        from stage1_modalities import MODALITY_PREFIXES
+        _prefixes = tuple(MODALITY_PREFIXES.values())
         self.feature_names = [
             c for c in emb_df.columns
-            if (c.startswith("A") and c[1:].isdigit()) or c.startswith("emb_")
+            if (len(c) >= 2 and c[0] in _prefixes and c[1:].isdigit())
+            or c.startswith("emb_")
         ]
         if not self.feature_names:
             # Fallback: numeric columns excluding metadata
@@ -859,6 +862,19 @@ def main():
         help="Spatial block size in meters (default: 10000)",
     )
     parser.add_argument(
+        "--run-descriptor",
+        default="default",
+        help="Run descriptor for output directory naming (default: 'default')",
+    )
+    parser.add_argument(
+        "--target-cols",
+        default=None,
+        help=(
+            "Comma-separated target columns to evaluate "
+            "(default: all 7 levels, e.g. type_level1,...,type_level7)"
+        ),
+    )
+    parser.add_argument(
         "--device",
         choices=["cuda", "cpu", "auto"],
         default="auto",
@@ -949,42 +965,43 @@ def main():
         logger.info(f"Generated {len(plot_paths)} plots to {viz_dir}")
         return
 
+    # Parse optional target_cols override
+    target_cols_override = None
+    if args.target_cols:
+        target_cols_override = [c.strip() for c in args.target_cols.split(",")]
+
+    # Build common kwargs shared across all config branches
+    common_kwargs = dict(
+        study_area=args.study_area,
+        target_name=args.target_name,
+        n_folds=args.n_folds,
+        max_epochs=args.max_epochs,
+        block_width=args.block_size,
+        block_height=args.block_size,
+        device=args.device,
+        run_descriptor=args.run_descriptor,
+    )
+    if target_cols_override:
+        common_kwargs["target_cols"] = target_cols_override
+
     if args.embeddings_path:
         config = DNNClassificationConfig(
-            study_area=args.study_area,
             embeddings_path=args.embeddings_path,
-            target_name=args.target_name,
-            n_folds=args.n_folds,
-            max_epochs=args.max_epochs,
-            block_width=args.block_size,
-            block_height=args.block_size,
-            device=args.device,
+            **common_kwargs,
         )
     elif args.stage2_model:
         from utils.paths import StudyAreaPaths as _SAP
         _paths = _SAP(args.study_area)
         fused_path = _paths.fused_embedding_file(args.stage2_model, 10)
         config = DNNClassificationConfig(
-            study_area=args.study_area,
             embeddings_path=str(fused_path),
             modality=args.stage2_model,
-            target_name=args.target_name,
-            n_folds=args.n_folds,
-            max_epochs=args.max_epochs,
-            block_width=args.block_size,
-            block_height=args.block_size,
-            device=args.device,
+            **common_kwargs,
         )
     else:
         config = DNNClassificationConfig(
-            study_area=args.study_area,
             modality=args.modality,
-            target_name=args.target_name,
-            n_folds=args.n_folds,
-            max_epochs=args.max_epochs,
-            block_width=args.block_size,
-            block_height=args.block_size,
-            device=args.device,
+            **common_kwargs,
         )
 
     if args.hidden_dim is not None:

@@ -53,6 +53,7 @@ class LinearProbeVisualizer:
         figsize_base: Tuple[float, float] = (10, 6),
         dpi: int = 150,
         h3_resolution: int = 10,
+        modality: str = "alphaearth",
     ):
         self.results = results
         self.output_dir = Path(output_dir)
@@ -61,6 +62,7 @@ class LinearProbeVisualizer:
         self.figsize_base = figsize_base
         self.dpi = dpi
         self.h3_resolution = h3_resolution
+        self.modality = modality
 
         # Set style
         sns.set_style("whitegrid")
@@ -774,7 +776,7 @@ class LinearProbeVisualizer:
 
         Args:
             target_col: Target variable name.
-            embeddings_path: Path to embeddings parquet with h3_index column.
+            embeddings_path: Path to embeddings parquet with region_id index.
                 If None, tries default AlphaEarth path.
             boundary_gdf: Optional study-area boundary for background context.
             max_hexagons: Maximum hexagons to plot (subsampled if exceeded).
@@ -808,13 +810,15 @@ class LinearProbeVisualizer:
         # 2. Load only needed columns from embeddings parquet
         # ----------------------------------------------------------
         if embeddings_path is None:
-            # Best-effort fallback; callers should pass embeddings_path
-            # explicitly when probing non-alphaearth modalities.
-            embeddings_path = self.paths.embedding_file("alphaearth", 10, 2022)
+            # Best-effort fallback using the visualizer's configured modality.
+            embeddings_path = self.paths.embedding_file(
+                self.modality, self.h3_resolution, 2022
+            )
             logger.warning(
                 "No embeddings_path provided to plot_rgb_top3_map; "
-                "falling back to alphaearth default. Pass embeddings_path "
-                "explicitly for other modalities."
+                f"falling back to modality={self.modality!r}, "
+                f"resolution={self.h3_resolution}. Pass embeddings_path "
+                "explicitly to override."
             )
 
         embeddings_path = Path(embeddings_path)
@@ -822,10 +826,13 @@ class LinearProbeVisualizer:
             logger.error(f"Embeddings file not found: {embeddings_path}")
             raise FileNotFoundError(f"Embeddings file not found: {embeddings_path}")
 
-        columns_to_load = ["h3_index"] + channel_names
+        columns_to_load = channel_names
         emb_df = pd.read_parquet(embeddings_path, columns=columns_to_load)
-        emb_df = emb_df.set_index("h3_index")
-        emb_df.index.name = "region_id"
+        # Index is region_id (set by parquet metadata); ensure name is correct
+        if emb_df.index.name != "region_id":
+            if "region_id" in emb_df.columns:
+                emb_df = emb_df.set_index("region_id")
+            emb_df.index.name = "region_id"
 
         # ----------------------------------------------------------
         # 3. Filter to prediction hexagons (those with target data)
