@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SessionStart hook: warm-start the coordinator with scratchpad context, critical signals, and recent git history."""
 import json
+import re
 import subprocess
 import sys
 from datetime import date, datetime, timedelta
@@ -68,9 +69,9 @@ def scan_critical_signals() -> list[str]:
                 continue
             content_upper = content.upper()
             for keyword in CRITICAL_KEYWORDS:
-                if keyword in content_upper:
+                if re.search(r'\b' + keyword + r'\b', content_upper):
                     for line in content.splitlines():
-                        if keyword in line.upper() and line.strip():
+                        if re.search(r'\b' + keyword + r'\b', line.upper()) and line.strip():
                             signals.append(
                                 f"- **{agent_dir.name}** ({date_str}): {line.strip()[:120]}"
                             )

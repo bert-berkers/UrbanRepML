@@ -27,7 +27,7 @@ regions_gdf = regionalizer.transform(area_gdf)
 
 processor = AlphaEarthProcessor(config)
 embeddings = processor.process(raw_data_path, regions_gdf)
-# Output: GeoDataFrame indexed by h3_index with A00..A66 columns
+# Output: GeoDataFrame indexed by region_id with A00..A63 columns
 ```
 
 ## Key Architecture Patterns

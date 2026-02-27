@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SubagentStart hook: inject scratchpad protocol + coordinator/ego context + own continuity into every specialist."""
 import json
+import re
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -101,9 +102,9 @@ def get_sibling_signals(agent_type: str) -> list[str]:
                 continue
             content_upper = content.upper()
             for keyword in SIGNAL_KEYWORDS:
-                if keyword in content_upper:
+                if re.search(r'\b' + keyword + r'\b', content_upper):
                     for line in content.splitlines():
-                        if keyword in line.upper() and line.strip():
+                        if re.search(r'\b' + keyword + r'\b', line.upper()) and line.strip():
                             signals.append(
                                 f"- **{agent_dir.name}** ({date_str}): {line.strip()[:120]}"
                             )
