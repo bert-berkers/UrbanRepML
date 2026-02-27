@@ -181,6 +181,14 @@ Plans with wave structures are saved to `.claude/plans/{descriptor}.md`. This di
 Invoke: `/coordinate .claude/plans/{this-file}.md`
 ```
 
+**CRITICAL -- save before asking**: When presenting a formal wave-based plan for user approval:
+1. FIRST save the plan to `.claude/plans/{descriptor}.md`
+2. THEN present it to the user and ask for approval
+3. The user's approval workflow is: review plan, `/clear` to wipe context, `/coordinate .claude/plans/{file}.md` to execute fresh
+4. If the plan is not saved to disk before asking, the `/clear` step destroys it -- the plan is gone and the work is wasted
+
+The plan file IS the persistence mechanism across the clear boundary. This ordering is non-negotiable.
+
 **Reading plans**: On coordinator startup, if $ARGUMENTS points to a plan file, that file IS your execution blueprint. Read it, follow its waves, report deviations.
 
 **Plan lifecycle**: Plans are not deleted after execution. They serve as historical record alongside scratchpads.

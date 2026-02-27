@@ -3,10 +3,12 @@
 import json
 import subprocess
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
+COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
+SESSION_ID_FILE = Path(__file__).resolve().parents[1] / "coordinators" / ".current_session_id"
 
 # Keywords that indicate a specialist left critical notes needing attention
 CRITICAL_KEYWORDS = ("BLOCKED", "URGENT", "CRITICAL", "BROKEN")
@@ -87,16 +89,103 @@ def staleness_note(entry: Path | None, label: str) -> str | None:
     return None
 
 
+def register_coordinator() -> tuple[str, list[dict]]:
+    """Register this session as an active coordinator.
+
+    Returns (session_id, list_of_existing_active_claims).
+    Silently no-ops on any error (fail open).
+    """
+    try:
+        # Import here so a missing PyYAML doesn't crash the whole hook
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import coordinator_registry as cr
+
+        COORDINATORS_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Read existing claims BEFORE writing our own
+        existing_claims = cr.read_all_claims(COORDINATORS_DIR)
+        active_claims = [c for c in existing_claims if not cr.is_stale(c)]
+
+        # Generate a unique session ID
+        session_id = cr.generate_session_id(COORDINATORS_DIR)
+
+        # Write initial claim (broad -- coordinator will narrow after user states task)
+        now = datetime.now().isoformat(timespec="seconds")
+        claim_data = {
+            "session_id": session_id,
+            "started_at": now,
+            "heartbeat_at": now,
+            "task_summary": "Starting up -- task not yet specified",
+            "domain": {
+                "primary": "unknown",
+                "description": "Coordinator registering; will narrow claimed_paths after task is known",
+            },
+            "claimed_paths": ["*"],
+            "read_only_paths": [],
+            "active_agents": [],
+        }
+        cr.write_claim(COORDINATORS_DIR, claim_data)
+
+        # Persist session_id for stop hook
+        SESSION_ID_FILE.write_text(session_id, encoding="utf-8")
+
+        # Cleanup obviously stale sessions (2h+ old) from prior crashes
+        cr.cleanup_stale(COORDINATORS_DIR, threshold_hours=2)
+
+        return session_id, active_claims
+    except Exception as exc:
+        print(f"session-start: coordinator registration failed: {exc}", file=sys.stderr)
+        return "", []
+
+
+def format_active_coordinators(active_claims: list[dict]) -> list[str]:
+    """Format active coordinator claims as human-readable lines."""
+    if not active_claims:
+        return []
+    lines = ["", "### Active Coordinator Sessions:"]
+    for claim in active_claims:
+        sid = claim.get("session_id", "unknown")
+        summary = claim.get("task_summary", "no summary")
+        paths = claim.get("claimed_paths", [])
+        heartbeat = claim.get("heartbeat_at", "unknown")
+        paths_str = ", ".join(str(p) for p in paths[:5])
+        if len(paths) > 5:
+            paths_str += f" (+{len(paths) - 5} more)"
+        lines.append(
+            f"- **{sid}**: {summary}\n"
+            f"  claiming: {paths_str}\n"
+            f"  last heartbeat: {heartbeat}"
+        )
+    lines.append(
+        "\nCheck claims before modifying shared files. "
+        "See `.claude/rules/coordinator-coordination.md`."
+    )
+    return lines
+
+
 def main() -> None:
     hook_input = json.loads(sys.stdin.read())
     source = hook_input.get("source", "")
 
-    # Only inject on fresh startup, not resume/compact
+    # Register coordinator regardless of source (handles resume/compact too)
+    session_id, active_claims = register_coordinator()
+
+    # Only inject full orientation context on fresh startup, not resume/compact
     if source not in ("startup", ""):
         json.dump({}, sys.stdout)
         return
 
     parts = ["## Session Orientation (auto-injected by SessionStart hook)"]
+
+    # Active coordinators (injected first -- most urgent info)
+    if session_id:
+        parts.append(f"\n**Your coordinator session ID**: `{session_id}`")
+        parts.append(
+            "Narrow your `claimed_paths` in `.claude/coordinators/` after the user states the task."
+        )
+    coord_lines = format_active_coordinators(active_claims)
+    parts.extend(coord_lines)
 
     # Most recent coordinator scratchpad
     coord_entry = latest_entry(SCRATCHPAD_ROOT / "coordinator")
