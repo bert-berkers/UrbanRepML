@@ -214,21 +214,23 @@ class RoadsProcessor(ModalityProcessor):
                 embeddings_df = embeddings_df.rename(columns=rename_map)
                 logger.info(f"Renamed {len(rename_map)} columns with '{prefix}' prefix")
 
-            # Format output for consistency
-            embeddings_df['h3_resolution'] = h3_resolution
+            # Keep only R-prefixed embedding columns (no metadata columns)
+            embedding_cols = [col for col in embeddings_df.columns
+                            if col.startswith(prefix) and col[len(prefix):].isdigit()]
+            embeddings_df = embeddings_df[embedding_cols]
+
+            # Ensure index is string-typed region_id
             embeddings_df.index = embeddings_df.index.astype(str)
             if embeddings_df.index.name != 'region_id':
                 embeddings_df.index.name = 'region_id'
 
             # Log embedding statistics
-            embedding_cols = [col for col in embeddings_df.columns
-                            if col.startswith(prefix) and col[1:].isdigit()]
             if embedding_cols:
                 sample_values = embeddings_df[embedding_cols].iloc[0].values
                 logger.info(f"Embedding dimensions: {len(embedding_cols)}")
                 logger.info(f"Sample embedding values: {sample_values[:5]}...")
 
-            return embeddings_df.reset_index()
+            return embeddings_df
 
         except Exception as e:
             logger.error(f"Highway2Vec training failed: {e}")
@@ -365,17 +367,18 @@ class RoadsProcessor(ModalityProcessor):
         embeddings_df = self.highway2vec(roads_gdf, area_gdf, h3_resolution, study_area_name)
 
         # Save embeddings using canonical StudyAreaPaths filename
+        # Convention: region_id as index, only embedding columns, saved with index=True
         if output_dir is not None:
             # Caller override: save to custom directory with canonical filename
             out_path = Path(output_dir) / paths.embedding_file("roads", h3_resolution, year).name
             Path(output_dir).mkdir(parents=True, exist_ok=True)
-            embeddings_df.to_parquet(out_path, index=False)
+            embeddings_df.to_parquet(out_path)
             output_path = str(out_path)
         else:
             # Standard path: use StudyAreaPaths.embedding_file() directly
             out_path = paths.embedding_file("roads", h3_resolution, year)
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            embeddings_df.to_parquet(out_path, index=False)
+            embeddings_df.to_parquet(out_path)
             output_path = str(out_path)
 
         logger.info(f"Roads embeddings saved to {output_path}")
