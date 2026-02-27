@@ -30,3 +30,22 @@ $ARGUMENTS
 
 1. Update `.claude/scratchpad/librarian/codebase_graph.md` in place
 2. Write a scratchpad entry to `.claude/scratchpad/librarian/YYYY-MM-DD.md` documenting what changed
+
+## Convention Discovery (Self-Assemblage)
+
+While updating the codebase graph, also scan for emergent conventions that may warrant formalization:
+
+1. **Repeated patterns**: New coding patterns used 3+ times across different files without a matching rule in `.claude/rules/`. Examples: consistent error handling patterns, import ordering conventions, data validation idioms.
+2. **Import conventions**: Import patterns that appear consistently — e.g., always importing from SRAI before h3, or always using `StudyAreaPaths` for path construction.
+3. **Naming conventions**: Consistent naming patterns emerging in new code that aren't documented anywhere.
+
+When a candidate convention is identified, note it in the librarian scratchpad as:
+
+```
+Candidate Convention: [pattern description]
+- Seen in: [file1, file2, file3]
+- Current rule: none / partial match in [rule file]
+- Recommendation: formalize as rule / monitor / too early to tell
+```
+
+This is how the rule system grows organically — conventions emerge from practice, get noticed by the librarian, and are formalized only after proving their value across multiple sessions.
