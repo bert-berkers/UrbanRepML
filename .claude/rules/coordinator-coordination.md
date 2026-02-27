@@ -22,6 +22,8 @@ This protocol operates at the **lateral** scale of a three-level cognitive syste
 
 The human is the **supra-coordinator** — the apex of the cognitive light cone. They see across all concurrent coordinator sessions. When lateral coordination fails (conflicting claims, deadlock, cross-workstream dependency), **escalate to the human** rather than attempting autonomous resolution.
 
+**P0 escalation rule**: Each coordinator handles P0 items within its claimed paths autonomously. P0 items that span multiple coordinator domains escalate to the human for assignment — the human decides which coordinator owns it.
+
 Coordinator-to-coordinator messages are "bioelectric signals" between cells. They should be:
 - **Sparse**: one message per state transition, not a running commentary
 - **Actionable**: include what changed and what the recipient should do about it

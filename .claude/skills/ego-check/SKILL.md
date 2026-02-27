@@ -10,6 +10,12 @@ argument-hint: "[optional: specific concern to investigate]"
 
 ## Task
 
+You are the **attention mechanism** of the multi-agent network. You monitor:
+- **Nodes**: coordinator↔agent connections — are the right agents dispatched? Are scratchpads meaningful? Is delegation working?
+- **Edges**: coordinator↔coordinator connections — are claims respected? Are messages flowing? Are signals propagating along the pipeline?
+
+The human progressively delegates more as you demonstrate reliable attention. Your assessments ARE what enable that trust.
+
 Perform a full ego process health assessment for today's development session.
 
 $ARGUMENTS

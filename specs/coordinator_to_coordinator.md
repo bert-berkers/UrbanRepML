@@ -1,6 +1,6 @@
 # Coordinator-to-Coordinator Communication Protocol
 
-## Status: v1.1 — Implemented (2026-02-27)
+## Status: v1.2 — Implemented (2026-02-27)
 
 ## Context
 
@@ -278,6 +278,20 @@ This provides immediate situational awareness of temporal depth, agent breadth, 
 ### Autonomy Contracts
 
 Each agent type has a defined scope of autonomous decisions documented in `.claude/agents/coordinator.md`. Agents within scope do not need coordinator approval -- the scratchpad is the accountability mechanism. This prevents the coordinator from becoming a bottleneck while maintaining traceability.
+
+### Ego as Network Attention
+
+The ego agent serves as the **attention mechanism** across the entire network topology:
+
+| What Ego Watches | Scale | Examples |
+|-----------------|-------|----------|
+| **Nodes** (coordinator<->agent) | Vertical | Delegation quality, scratchpad freshness, agent autonomy calibration |
+| **Edges** (coordinator<->coordinator) | Lateral | Claim respect, message responsiveness, signal propagation, heartbeat regularity |
+| **Supra interface** (coordinator<->human) | Upward | Escalation calibration, OODA report quality, compression quality, intent fidelity |
+
+The system forms a **quadruple**: Human + Ego + Coordinators + Agents. The ego monitors connection quality at every scale, enabling the human to progressively delegate more oversight as the system demonstrates reliable self-monitoring.
+
+This maps to Levin's principle that competent subsystems can be trusted with increasing autonomy as they demonstrate goal-directedness at their own level. Ego is the mechanism that verifies goal-directedness.
 
 ## Anti-Patterns
 
