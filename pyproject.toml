@@ -59,6 +59,7 @@ dependencies = [
     "pyproj>=3.5.0",
     "shapely>=2.0.0",
     "srai>=0.7.0",
+    "quackosm>=0.9.0",  # Required by srai[osm] for PBF loading
     "rioxarray>=0.15.0",
     "rasterio>=1.3.0",
 

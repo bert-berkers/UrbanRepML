@@ -82,7 +82,11 @@ class POIProcessor(ModalityProcessor):
 
         # GPU optimization parameters
         self.hex2vec_epochs = config.get('hex2vec_epochs', 10)
+        self.hex2vec_encoder_sizes = config.get('hex2vec_encoder_sizes', [150, 75, 50])
         self.geovex_epochs = config.get('geovex_epochs', 8)
+        self.geovex_embedding_size = config.get('geovex_embedding_size', 32)
+        self.geovex_neighbourhood_radius = config.get('geovex_neighbourhood_radius', 4)
+        self.geovex_convolutional_layers = config.get('geovex_convolutional_layers', 2)
         self.batch_size = config.get('batch_size', 256)
 
         # Intermediate data saving
@@ -186,12 +190,12 @@ class POIProcessor(ModalityProcessor):
             try:
                 neighbourhood = H3Neighbourhood(regions_gdf)
                 logger.info(f"Neighborhood graph ready with {len(regions_gdf)} regions")
-                
+
                 # Hex2VecEmbedder uses features to create skip-gram embeddings
-                logger.info("Initializing Hex2Vec model (32D skip-gram)...")
+                logger.info(f"Initializing Hex2Vec model (encoder_sizes={self.hex2vec_encoder_sizes})...")
                 hex2vec = Hex2VecEmbedder(
-                    encoder_sizes=[32],  # Single hidden layer with 32 units
-                    expected_output_features=list(self.poi_categories.keys())
+                    encoder_sizes=self.hex2vec_encoder_sizes,
+                    expected_output_features=self.poi_categories
                 )
                 
                 logger.info(f"Training Hex2Vec model (GPU, {self.hex2vec_epochs} epochs)...")
@@ -219,17 +223,17 @@ class POIProcessor(ModalityProcessor):
         # 6. GeoVex embeddings (if enabled)
         if self.use_geovex:
             logger.info("Starting GeoVex hexagonal convolutional embeddings...")
-            logger.info(f"Initializing GeoVex model (32D, {self.geovex_epochs} epochs, batch_size={self.batch_size})...")
+            logger.info(f"Initializing GeoVex model ({self.geovex_embedding_size}D, {self.geovex_epochs} epochs, batch_size={self.batch_size})...")
             try:
                 neighbourhood = H3Neighbourhood(regions_gdf)
 
                 # GeoVexEmbedder uses hexagonal convolutional approach with Poisson distribution
                 geovex = GeoVexEmbedder(
-                    target_features=list(self.poi_categories.keys()),
-                    embedding_size=32,
-                    neighbourhood_radius=3,  # Smaller radius for faster training
-                    convolutional_layers=2,
-                    batch_size=self.batch_size  # GPU-optimized batch size
+                    target_features=self.poi_categories,
+                    embedding_size=self.geovex_embedding_size,
+                    neighbourhood_radius=self.geovex_neighbourhood_radius,
+                    convolutional_layers=self.geovex_convolutional_layers,
+                    batch_size=self.batch_size
                 )
 
                 logger.info("Training GeoVex hexagonal convolutional model (GPU-optimized)...")
