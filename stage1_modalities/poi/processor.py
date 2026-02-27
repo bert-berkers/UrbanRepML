@@ -66,25 +66,29 @@ class POIProcessor(ModalityProcessor):
         super().__init__(config)
         self.validate_config()
 
+        # Study area and year for path construction
+        self.study_area_name = config.get('study_area', 'default')
+        self.year = config.get('year', 2022)
+
         # Data configuration
         self.data_source = config.get('data_source', 'osm_online')
-        self.pbf_path = config.get('pbf_path', None)
+        self.pbf_path = Path(config['pbf_path']) if config.get('pbf_path') else None
         self.poi_categories = config.get('poi_categories', self.DEFAULT_POI_CATEGORIES)
 
         # Feature configuration
         self.compute_diversity_metrics = config.get('compute_diversity_metrics', True)
         self.use_hex2vec = config.get('use_hex2vec', False) and HEX2VEC_AVAILABLE
         self.use_geovex = config.get('use_geovex', False) and GEOVEX_AVAILABLE
-        
+
         # GPU optimization parameters
         self.hex2vec_epochs = config.get('hex2vec_epochs', 10)
-        self.geovex_epochs = config.get('geovex_epochs', 8)  
+        self.geovex_epochs = config.get('geovex_epochs', 8)
         self.batch_size = config.get('batch_size', 256)
-        
+
         # Intermediate data saving
         self.save_intermediate = config.get('save_intermediate', False)
-        _poi_paths = StudyAreaPaths(config.get('study_area', 'default'))
-        self.intermediate_dir = Path(config.get('intermediate_dir', str(_poi_paths.intermediate("poi"))))
+        self._paths = StudyAreaPaths(self.study_area_name)
+        self.intermediate_dir = Path(config.get('intermediate_dir', str(self._paths.intermediate("poi"))))
 
         logger.info(f"Initialized POIProcessor. Hex2Vec: {self.use_hex2vec}, GeoVex: {self.use_geovex}")
         logger.info(f"GPU settings - Hex2Vec epochs: {self.hex2vec_epochs}, GeoVex epochs: {self.geovex_epochs}, Batch size: {self.batch_size}")
@@ -252,13 +256,27 @@ class POIProcessor(ModalityProcessor):
                 if "CUDA" in str(e) or "GPU" in str(e):
                     logger.info("GPU error detected. You may need to check CUDA/PyTorch setup.")
 
-        # Format output: ensure region_id is the canonical index name
-        embeddings_df['h3_resolution'] = h3_resolution
+        # Drop metadata columns -- only embedding features should remain
+        metadata_cols = ['total_poi_count', 'h3_resolution']
+        embeddings_df = embeddings_df.drop(
+            columns=[c for c in metadata_cols if c in embeddings_df.columns]
+        )
+
+        # Rename all columns to P00, P01, ... Pxx (canonical prefix convention)
+        n_cols = len(embeddings_df.columns)
+        width = max(2, len(str(n_cols - 1)))  # At least 2 digits
+        new_col_names = {
+            old: f"P{i:0{width}d}"
+            for i, old in enumerate(embeddings_df.columns)
+        }
+        embeddings_df = embeddings_df.rename(columns=new_col_names)
+
+        # Ensure region_id is the canonical index name
         embeddings_df.index = embeddings_df.index.astype(str)
         if embeddings_df.index.name != 'region_id':
             embeddings_df.index.name = 'region_id'
 
-        return embeddings_df.reset_index()
+        return embeddings_df
 
     def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
                                joint_gdf: gpd.GeoDataFrame, h3_resolution: int, study_area_name: str):
@@ -294,29 +312,41 @@ class POIProcessor(ModalityProcessor):
         logger.info(f"Intermediate data saved for {study_area_name} at resolution {h3_resolution}")
 
     def _calculate_diversity_metrics(self, embeddings_df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate POI diversity metrics."""
-        # Get category columns
-        category_cols = [col for col in embeddings_df.columns 
-                        if col in self.poi_categories.keys()]
-        
-        if not category_cols:
+        """Calculate POI diversity metrics.
+
+        CountEmbedder produces columns like ``amenity_restaurant``,
+        ``shop_bakery``, etc.  We aggregate by category prefix (the keys
+        of ``self.poi_categories``) to obtain per-category counts, then
+        compute Shannon entropy, Simpson diversity, richness, and evenness
+        across the category-level totals.
+        """
+        # Aggregate sub-type columns into per-category totals.
+        # E.g. amenity_restaurant + amenity_cafe + ... -> amenity_total
+        cat_totals = {}
+        for cat_key in self.poi_categories.keys():
+            prefix = cat_key + '_'
+            matching_cols = [c for c in embeddings_df.columns if c.startswith(prefix)]
+            if matching_cols:
+                cat_totals[cat_key] = embeddings_df[matching_cols].fillna(0).sum(axis=1)
+
+        if not cat_totals:
             return pd.DataFrame(index=embeddings_df.index)
 
-        counts = embeddings_df[category_cols].fillna(0)
+        counts = pd.DataFrame(cat_totals, index=embeddings_df.index).fillna(0)
         total = counts.sum(axis=1)
-        
+
         # Avoid division by zero
         proportions = counts.divide(total.replace(0, 1), axis=0)
 
         # Shannon entropy
         shannon_entropy = -1 * (proportions * np.log(proportions.replace(0, np.nan))).sum(axis=1, skipna=True)
-        
+
         # Simpson diversity
         simpson_diversity = 1 - (proportions**2).sum(axis=1)
-        
-        # Richness
+
+        # Richness (number of categories present)
         richness = (counts > 0).sum(axis=1)
-        
+
         # Evenness
         max_entropy = np.log(richness.replace(0, 1))
         evenness = shannon_entropy / max_entropy.replace(0, 1)
@@ -330,15 +360,18 @@ class POIProcessor(ModalityProcessor):
 
     def run_pipeline(self, study_area: Union[str, gpd.GeoDataFrame],
                     h3_resolution: int,
-                    output_dir: str = None,
                     study_area_name: str = None) -> str:
-        """Execute complete POI processing_modalities pipeline."""
-        logger.info(f"Starting POI pipeline for resolution {h3_resolution}")
+        """Execute complete POI processing pipeline.
 
-        # Use configured output dir if not specified
-        if output_dir is None:
-            _poi_paths = StudyAreaPaths(self.config.get('study_area', 'default'))
-            output_dir = self.config.get('output_dir', str(_poi_paths.stage1("poi")))
+        Args:
+            study_area: Path to a boundary file or a GeoDataFrame.
+            h3_resolution: H3 resolution level (e.g. 9, 10).
+            study_area_name: Optional override for study area name.
+
+        Returns:
+            Absolute path to the saved parquet file.
+        """
+        logger.info(f"Starting POI pipeline for resolution {h3_resolution}")
 
         # Load study area
         if isinstance(study_area, str):
@@ -348,7 +381,7 @@ class POIProcessor(ModalityProcessor):
         else:
             area_gdf = study_area
             if study_area_name is None:
-                study_area_name = "unnamed"
+                study_area_name = self.study_area_name
 
         # Load POI data
         pois_gdf = self.load_data(area_gdf)
@@ -356,14 +389,16 @@ class POIProcessor(ModalityProcessor):
             logger.warning("No POI data found for study area")
             return None
 
-        # Process to H3
+        # Process to H3 -- returns DataFrame indexed by region_id with P-prefixed columns
         embeddings_df = self.process_to_h3(pois_gdf, area_gdf, h3_resolution, study_area_name)
 
-        # Save embeddings
-        output_filename = f"poi_embeddings_res{h3_resolution}.parquet"
-        output_path = self.save_embeddings(embeddings_df, output_dir, output_filename)
+        # Save using StudyAreaPaths convention:
+        #   {study_area}_res{resolution}_{year}.parquet
+        output_path = self._paths.embedding_file("poi", h3_resolution, self.year)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        embeddings_df.to_parquet(output_path)
 
         logger.info(f"POI embeddings saved to {output_path}")
         logger.info(f"Processed {len(embeddings_df)} hexagons with {embeddings_df.shape[1]} features")
 
-        return output_path
+        return str(output_path)

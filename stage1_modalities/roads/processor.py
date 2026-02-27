@@ -53,10 +53,6 @@ class RoadsProcessor(ModalityProcessor):
     def __init__(self, config: Dict[str, Any]):
         """Initialize roads processor with configuration."""
         super().__init__(config)
-        
-        if not HIGHWAY2VEC_AVAILABLE:
-            raise RuntimeError("RoadsProcessor requires Highway2VecEmbedder. Install with: pip install srai[torch]")
-        
         self.validate_config()
         
         # Data configuration
@@ -115,9 +111,15 @@ class RoadsProcessor(ModalityProcessor):
         logger.info(f"Loaded {len(roads_gdf)} road segments")
         return roads_gdf
 
-    def highway2vec(self, roads_gdf: gpd.GeoDataFrame, area_gdf_or_regions: gpd.GeoDataFrame, 
+    def highway2vec(self, roads_gdf: gpd.GeoDataFrame, area_gdf_or_regions: gpd.GeoDataFrame,
                    h3_resolution: int, study_area_name: str = "unnamed") -> pd.DataFrame:
         """Train Highway2Vec model and generate road network embeddings using GPU."""
+        if not HIGHWAY2VEC_AVAILABLE:
+            raise RuntimeError(
+                "RoadsProcessor.highway2vec() requires Highway2VecEmbedder. "
+                "Install with: pip install srai[torch]"
+            )
+
         logger.info(f"Starting Highway2Vec training for H3 resolution {h3_resolution}")
         logger.info(f"Road segments: {len(roads_gdf):,}")
         
@@ -200,6 +202,18 @@ class RoadsProcessor(ModalityProcessor):
             # Convert to DataFrame format
             embeddings_df = pd.DataFrame(embeddings_gdf.drop(columns='geometry', errors='ignore'))
 
+            # Rename embedding columns to R-prefixed convention (R00, R01, ..., Rxx)
+            from stage1_modalities import MODALITY_PREFIXES
+            prefix = MODALITY_PREFIXES["roads"]  # "R"
+            rename_map = {}
+            for col in embeddings_df.columns:
+                if isinstance(col, int) or (isinstance(col, str) and col.isdigit()):
+                    idx = int(col)
+                    rename_map[col] = f"{prefix}{idx:02d}"
+            if rename_map:
+                embeddings_df = embeddings_df.rename(columns=rename_map)
+                logger.info(f"Renamed {len(rename_map)} columns with '{prefix}' prefix")
+
             # Format output for consistency
             embeddings_df['h3_resolution'] = h3_resolution
             embeddings_df.index = embeddings_df.index.astype(str)
@@ -208,7 +222,7 @@ class RoadsProcessor(ModalityProcessor):
 
             # Log embedding statistics
             embedding_cols = [col for col in embeddings_df.columns
-                            if col not in ['h3_resolution', 'region_id']]
+                            if col.startswith(prefix) and col[1:].isdigit()]
             if embedding_cols:
                 sample_values = embeddings_df[embedding_cols].iloc[0].values
                 logger.info(f"Embedding dimensions: {len(embedding_cols)}")
@@ -225,48 +239,66 @@ class RoadsProcessor(ModalityProcessor):
                 logger.info("  - Fallback to CPU: set CUDA_VISIBLE_DEVICES=''")
             raise
 
-    def _prepare_highway2vec_features(self, roads_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
+    def _prepare_highway2vec_features(self, roads_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame,
                                      joint_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-        """Prepare numerical features for Highway2Vec training."""
+        """Prepare numerical features for Highway2Vec training.
+
+        Highway2VecEmbedder.fit() strips geometry, then trains an autoencoder
+        on features_gdf.values. The index must be a named index that matches
+        joint_gdf.index.names[1] (the feature-level of the MultiIndex).
+        """
         logger.info("Preparing numerical features from roads data...")
-        
-        # Extract highway types and create numerical encodings
-        highway_types = roads_gdf['highway'].value_counts()
-        logger.info(f"Found {len(highway_types)} highway types: {list(highway_types.head().index)}")
-        
-        # Create a copy of roads_gdf for feature engineering
+
+        # Highway type distribution
+        highway_col = 'highway' if 'highway' in roads_gdf.columns else None
+        if highway_col:
+            highway_types = roads_gdf[highway_col].value_counts()
+            logger.info(f"Found {len(highway_types)} highway types: {list(highway_types.head().index)}")
+        else:
+            highway_types = pd.Series(dtype=int)
+            logger.warning("No 'highway' column found in roads data")
+
+        # Create a copy preserving the original index (from OSM loader)
         features_gdf = roads_gdf.copy()
-        
-        # 1. One-hot encode highway types (limited to most common to avoid too many features)
-        top_highway_types = highway_types.head(10).index  # Top 10 most common types
-        for highway_type in top_highway_types:
-            features_gdf[f'highway_{highway_type}'] = (features_gdf['highway'] == highway_type).astype(int)
-        
+
+        # 1. One-hot encode highway types (limited to most common)
+        if len(highway_types) > 0:
+            top_highway_types = highway_types.head(10).index
+            for highway_type in top_highway_types:
+                features_gdf[f'highway_{highway_type}'] = (features_gdf[highway_col] == highway_type).astype(int)
+
         # 2. Calculate geometric features
-        if features_gdf.crs != 'EPSG:4326':
+        if features_gdf.crs and features_gdf.crs != 'EPSG:4326':
             features_gdf = features_gdf.to_crs('EPSG:4326')
-            
-        # Road length (in degrees, will be normalized anyway)
+
+        # Road length (in degrees, will be normalized by autoencoder anyway)
         features_gdf['road_length'] = features_gdf.geometry.length
-        
+
         # Road complexity (number of coordinates)
         features_gdf['road_complexity'] = features_gdf.geometry.apply(
             lambda geom: len(geom.coords) if hasattr(geom, 'coords') else 1
         )
-        
-        # 3. Keep only numerical columns for Highway2Vec
-        numerical_cols = [col for col in features_gdf.columns 
+
+        # 3. Keep only numerical columns + geometry for Highway2Vec
+        numerical_cols = [col for col in features_gdf.columns
                          if col.startswith('highway_') or col in ['road_length', 'road_complexity']]
-        
+
         features_numerical = features_gdf[numerical_cols + ['geometry']].copy()
-        
-        # 4. Fill any remaining NaN values
+
+        # 4. Fill NaN values
         for col in numerical_cols:
             features_numerical[col] = features_numerical[col].fillna(0).astype(float)
-        
+
+        # 5. Ensure index name matches joint_gdf second level (SRAI _validate_indexes requirement)
+        if joint_gdf is not None and isinstance(joint_gdf.index, pd.MultiIndex):
+            expected_name = joint_gdf.index.names[1]
+            if features_numerical.index.name != expected_name:
+                logger.info(f"Aligning features index name: {features_numerical.index.name!r} -> {expected_name!r}")
+                features_numerical.index.name = expected_name
+
         logger.info(f"Created {len(numerical_cols)} numerical features: {numerical_cols[:5]}...")
         logger.info(f"Feature matrix shape: {features_numerical.shape}")
-        
+
         return features_numerical
     
     def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
@@ -305,15 +337,14 @@ class RoadsProcessor(ModalityProcessor):
     def run_pipeline(self, study_area: Union[str, gpd.GeoDataFrame],
                     h3_resolution: int,
                     output_dir: str = None,
-                    study_area_name: str = None) -> str:
+                    study_area_name: str = None,
+                    year: int = 2022) -> str:
         """Execute complete road processing_modalities pipeline."""
         logger.info(f"Starting roads pipeline for resolution {h3_resolution}")
-        
-        # Use configured output dir if not specified
-        if output_dir is None:
-            _roads_paths = StudyAreaPaths(self.config.get('study_area', 'default'))
-            output_dir = self.config.get('output_dir', str(_roads_paths.stage1("roads")))
-        
+
+        study_area_key = self.config.get('study_area', 'default')
+        paths = StudyAreaPaths(study_area_key)
+
         # Load study area
         if isinstance(study_area, str):
             area_gdf = gpd.read_file(study_area)
@@ -323,21 +354,31 @@ class RoadsProcessor(ModalityProcessor):
             area_gdf = study_area
             if study_area_name is None:
                 study_area_name = "unnamed"
-        
+
         # Load road data
         roads_gdf = self.load_data(area_gdf)
         if roads_gdf.empty:
             logger.warning("No road data found for study area")
             return None
-        
+
         # Train Highway2Vec and generate embeddings
         embeddings_df = self.highway2vec(roads_gdf, area_gdf, h3_resolution, study_area_name)
-        
-        # Save embeddings
-        output_filename = f"roads_embeddings_res{h3_resolution}.parquet"
-        output_path = self.save_embeddings(embeddings_df, output_dir, output_filename)
-        
+
+        # Save embeddings using canonical StudyAreaPaths filename
+        if output_dir is not None:
+            # Caller override: save to custom directory with canonical filename
+            out_path = Path(output_dir) / paths.embedding_file("roads", h3_resolution, year).name
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            embeddings_df.to_parquet(out_path, index=False)
+            output_path = str(out_path)
+        else:
+            # Standard path: use StudyAreaPaths.embedding_file() directly
+            out_path = paths.embedding_file("roads", h3_resolution, year)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            embeddings_df.to_parquet(out_path, index=False)
+            output_path = str(out_path)
+
         logger.info(f"Roads embeddings saved to {output_path}")
         logger.info(f"Completed! Processed {len(embeddings_df):,} hexagons with {self.embedding_size}D Highway2Vec embeddings")
-        
+
         return output_path
