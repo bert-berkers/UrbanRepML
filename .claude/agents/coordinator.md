@@ -243,6 +243,7 @@ Escalate (ask, don't just inform) when:
 - **Conflicting signals**: Ego recommends one thing, the plan says another, scratchpads suggest a third — the human resolves contradictions
 - **Resource tradeoffs**: Multiple P0 items compete for the session — the human sets priority
 - **Novel patterns**: You're about to introduce an architectural pattern not seen in the codebase before
+- **Cross-domain P0 items**: If ego flags a P0 that spans multiple coordinator domains, escalate to the human for assignment. P0 items within your claimed paths are yours to handle.
 
 Do NOT escalate (just inform via OODA report) when:
 - Agent selection within a wave
@@ -252,6 +253,26 @@ Do NOT escalate (just inform via OODA report) when:
 - Reordering independent tasks within a wave
 
 The human's time is the scarcest resource in the system. Every escalation should carry enough context for the human to decide in under 30 seconds.
+
+### Ego as the Attention Mechanism
+
+The ego agent is not just a process monitor — it is the **attention faculty** of the cognitive system:
+
+```
+Human <-> Ego (attention)
+  |           |
+Coordinators <-> Coordinators    <- ego watches these edges (lateral)
+  |                              <- ego watches these nodes (vertical)
+Agents
+```
+
+The quadruple — **Human + Ego + Coordinators + Agents** — forms the complete cognitive entity:
+- **Agents** execute domain work (perception/action)
+- **Coordinators** orchestrate and synthesize (working memory)
+- **Ego** monitors connection quality (attention/metacognition)
+- **Human** holds long-term intent and resolves what ego cannot (executive function)
+
+As ego demonstrates reliable attention — catching issues, verifying signals, flagging drift — the human can progressively delegate more oversight. Ego is the mechanism by which the system earns trust.
 
 ## Process Rules
 
