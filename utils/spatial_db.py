@@ -17,6 +17,7 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
+from srai.neighbourhoods import H3Neighbourhood
 
 from utils.paths import StudyAreaPaths
 
@@ -118,7 +119,7 @@ class SpatialDB:
             )
         gdf = gpd.read_parquet(path)
 
-        # Normalise index name — res10 file uses 'hex_id', others use 'region_id'
+        # Defensive normalisation: ensure index is named region_id.
         if gdf.index.name != "region_id":
             gdf.index.name = "region_id"
 
@@ -273,3 +274,126 @@ class SpatialDB:
             filtered = filtered.to_crs(epsg=crs)
         minx, miny, maxx, maxy = filtered.total_bounds
         return float(minx), float(miny), float(maxx), float(maxy)
+
+    def neighbours(
+        self,
+        hex_ids: HexIDs,
+        resolution: int,
+        k: int = 1,
+    ) -> dict[str, set[str]]:
+        """Return k-ring neighbours for each hex ID (topology only, no geometry).
+
+        Uses SRAI ``H3Neighbourhood`` for all topology lookups.  No SedonaDB
+        call is made; this method is always available regardless of backend.
+
+        Parameters
+        ----------
+        hex_ids:
+            Hex ID strings to look up.
+        resolution:
+            H3 resolution of the input hex IDs.  Not used in the SRAI call
+            itself, but retained in the signature for consistency with other
+            methods and for future validation.
+        k:
+            Neighbourhood distance.  ``k=1`` returns the 6 immediately
+            adjacent hexagons; ``k=2`` returns all hexagons within 2 steps,
+            excluding the center (18 total for interior hexagons), etc.
+
+        Returns
+        -------
+        dict[str, set[str]]
+            Mapping from each input hex ID to the set of neighbour hex IDs
+            within distance *k*.  The center hex is not included.
+        """
+        nh = H3Neighbourhood()
+        ids_arr = np.asarray(hex_ids, dtype=str)
+        return {
+            hex_id: nh.get_neighbours_up_to_distance(hex_id, k, unchecked=True)
+            for hex_id in ids_arr
+        }
+
+    def neighbours_geometry(
+        self,
+        hex_ids: HexIDs,
+        resolution: int,
+        k: int = 1,
+        crs: int = 4326,
+    ):
+        """Return a GeoDataFrame with polygon geometry for all k-ring neighbours.
+
+        Combines SRAI topology (``H3Neighbourhood``) with a single bulk
+        geometry lookup via ``geometry()``.  All unique neighbour IDs are
+        collected first; then a single SedonaDB or GeoPandas query retrieves
+        their geometries — no per-hex queries.
+
+        Parameters
+        ----------
+        hex_ids:
+            Hex ID strings whose neighbours to look up.
+        resolution:
+            H3 resolution of the input hex IDs.
+        k:
+            Neighbourhood distance.  See ``neighbours()`` for semantics.
+        crs:
+            Target EPSG code.  Defaults to 4326 (WGS84).
+
+        Returns
+        -------
+        geopandas.GeoDataFrame
+            Indexed by region_id, containing polygon geometry for all unique
+            neighbour hexagons (excluding the input hex IDs themselves).
+        """
+        neighbour_map = self.neighbours(hex_ids, resolution, k)
+        unique_neighbours = list(
+            {nbr for nbrs in neighbour_map.values() for nbr in nbrs}
+        )
+        if not unique_neighbours:
+            import geopandas as gpd
+            empty = gpd.GeoDataFrame(columns=["geometry"], crs=crs)
+            empty.index.name = "region_id"
+            return empty
+        return self.geometry(unique_neighbours, resolution, crs)
+
+    def k_ring_centroids(
+        self,
+        hex_ids: HexIDs,
+        resolution: int,
+        k: int = 1,
+        crs: int = 4326,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return flat centroid arrays for all unique k-ring neighbours.
+
+        Combines SRAI topology with a single bulk centroid lookup via
+        ``centroids()``.  All unique neighbour IDs are collected first; then
+        a single SedonaDB or GeoPandas query retrieves their centroids.
+
+        Parameters
+        ----------
+        hex_ids:
+            Hex ID strings whose neighbours to look up.
+        resolution:
+            H3 resolution of the input hex IDs.
+        k:
+            Neighbourhood distance.  See ``neighbours()`` for semantics.
+        crs:
+            Target EPSG code.  Defaults to 4326 (WGS84).
+
+        Returns
+        -------
+        (neighbour_ids, cx, cy):
+            Three arrays of equal length.  ``neighbour_ids`` is a string
+            array of unique neighbour hex IDs; ``cx`` and ``cy`` are float64
+            arrays of centroid coordinates in the requested CRS.  Order is
+            determined by the bulk centroid query and may not match input
+            order.
+        """
+        neighbour_map = self.neighbours(hex_ids, resolution, k)
+        unique_neighbours = list(
+            {nbr for nbrs in neighbour_map.values() for nbr in nbrs}
+        )
+        if not unique_neighbours:
+            empty = np.array([], dtype=str)
+            return empty, np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+        ids_arr = np.asarray(unique_neighbours, dtype=str)
+        cx, cy = self.centroids(ids_arr, resolution, crs)
+        return ids_arr, cx, cy
