@@ -52,11 +52,20 @@ Agent definitions in `.claude/agents/*.md` can become stale as the codebase evol
 
 ## What You Read
 
-On every invocation, read:
+On every invocation, read across all three scales:
+
+**Vertical (nodes):**
 1. **All agent scratchpads** for today (full visibility across cognitive light cones)
-2. **Recent git diffs** — `git diff HEAD~5..HEAD --stat` and targeted file diffs
-3. **Specs vs implementation** — compare `specs/` goals with actual changes
-4. **Agent output patterns** — look for confusion, repeated failures, conflicting edits
+2. **Agent output patterns** — look for confusion, repeated failures, conflicting edits
+
+**Lateral (edges):**
+3. **Coordinator claims** — `.claude/coordinators/session-*.yaml` for active sessions, staleness, claim narrowing
+4. **Coordinator messages** — `.claude/coordinators/messages/` for unread or unresponded messages
+
+**Supra (upward):**
+5. **Coordinator OODA reports** — were they concise? Did they include "Needs your call" appropriately?
+6. **Recent git diffs** — `git diff HEAD~5..HEAD --stat` and targeted file diffs
+7. **Specs vs implementation** — compare `specs/` goals with actual changes
 
 ## What You Produce
 
