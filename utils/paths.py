@@ -44,13 +44,27 @@ class StudyAreaPaths:
         return self.root / "stage1_unimodal" / modality
 
     def embedding_file(
-        self, modality: str, resolution: int, year: int = 2022
+        self,
+        modality: str,
+        resolution: int,
+        year: int = 2022,
+        sub_embedder: "str | None" = None,
     ) -> Path:
-        """Parquet file for full-dimensional unimodal embeddings."""
-        return (
-            self.stage1(modality)
-            / f"{self.study_area}_res{resolution}_{year}.parquet"
-        )
+        """Parquet file for full-dimensional unimodal embeddings.
+
+        Args:
+            modality: Modality name (e.g. ``"poi"``, ``"alphaearth"``).
+            resolution: H3 resolution integer.
+            year: Data year (default ``2022``).
+            sub_embedder: Optional sub-embedder name.  When provided, the file
+                is placed in a subdirectory of the modality's stage1 dir.
+                Example: ``sub_embedder="hex2vec"`` yields
+                ``stage1_unimodal/poi/hex2vec/netherlands_res10_2022.parquet``.
+        """
+        base = self.stage1(modality)
+        if sub_embedder:
+            base = base / sub_embedder
+        return base / f"{self.study_area}_res{resolution}_{year}.parquet"
 
     def pca_embedding_file(
         self, modality: str, resolution: int, n_components: int, year: int = 2022
