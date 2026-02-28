@@ -64,7 +64,7 @@ For training scripts specifically:
 
 You MUST write to `.claude/scratchpad/execution/YYYY-MM-DD.md` before returning. This is not optional — it is the coordination mechanism between sessions.
 
-**On start**: Read coordinator's scratchpad for what to run. Read own previous day's scratchpad for context.
+**On start**: Read coordinator's scratchpad for what to run. Read own previous day's scratchpad for context. Then read the latest scratchpad of the agent whose domain you are executing in (e.g., stage2-fusion-architect for stage2 scripts, stage3-analyst for stage3 scripts, stage1-modality-encoder for stage1 scripts) -- this gives you context on recent changes, known issues, and expected behavior.
 **During work**: Log scripts executed, output summaries, errors encountered.
-**Cross-agent observations**: Note if scripts from other agents' work failed, if data files were missing, or if argument interfaces changed.
+**Cross-agent observations**: Note if scripts from other agents' work failed, if data files were missing, or if argument interfaces changed. When fixing or re-running something, note which agent originally flagged the issue and in which scratchpad entry.
 **On finish**: 2-3 line summary — what ran, what succeeded/failed, any issues.
