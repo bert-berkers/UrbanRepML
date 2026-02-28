@@ -185,7 +185,7 @@ Steps 2 and 3 can run in parallel (both read the coordinator scratchpad, so step
 - Context window ≈ organism's metabolic budget. Don't waste it.
 - When a wave returns verbose results: compress to 3-5 key findings before next wave.
 - 80-line scratchpad limit forces signal clarity — this is a feature, not a limitation.
-- Session boundaries are "cell divisions" — scratchpads are the DNA that persists.
+- Scratchpads are stigmergic traces which coordinate context windows across sessions.
 - Write coordinator scratchpad EARLY when approaching session end; don't rush.
 
 ---
