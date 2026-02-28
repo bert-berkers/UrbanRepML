@@ -67,6 +67,7 @@ After observation, print this to the user:
 ## OODA Report
 
 **State**: [1-2 sentence summary of where things stand]
+**Lateral**: [other active coordinators and their claims, messages sent/received this wave, or "no other coordinators active"]
 **Blocked**: [what's stuck and why, or "nothing"]
 **Drifting**: [what's off-track from the goal, or "nothing"]
 **Task goal**: [restate what the user wants in your own words]
