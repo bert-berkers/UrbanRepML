@@ -87,7 +87,7 @@ class POIProcessor(ModalityProcessor):
         self.geovex_embedding_size = config.get('geovex_embedding_size', 32)
         self.geovex_neighbourhood_radius = config.get('geovex_neighbourhood_radius', 4)
         self.geovex_convolutional_layers = config.get('geovex_convolutional_layers', 2)
-        self.batch_size = config.get('batch_size', 256)
+        self.batch_size = config.get('batch_size', 4096)
 
         # Intermediate data saving
         self.save_intermediate = config.get('save_intermediate', False)
@@ -137,9 +137,273 @@ class POIProcessor(ModalityProcessor):
         
         return pois_gdf
 
-    def process_to_h3(self, pois_gdf: gpd.GeoDataFrame, area_gdf: gpd.GeoDataFrame, 
+    def load_intermediates(
+        self, h3_resolution: int, study_area_name: Optional[str] = None
+    ) -> tuple:
+        """Load pre-saved intermediate data (regions, features, joint).
+
+        Loads the three parquet files that ``_save_intermediate_data`` writes
+        during a full ``process_to_h3`` run.
+
+        Args:
+            h3_resolution: H3 resolution that was used during processing.
+            study_area_name: Study area name embedded in filenames.
+                Defaults to ``self.study_area_name``.
+
+        Returns:
+            Tuple of ``(regions_gdf, features_gdf, joint_gdf)``.
+
+        Raises:
+            FileNotFoundError: If any of the three parquet files is missing.
+        """
+        if study_area_name is None:
+            study_area_name = self.study_area_name
+
+        base_name = f"{study_area_name}_res{h3_resolution}"
+
+        regions_path = self.intermediate_dir / "regions_gdf" / f"{base_name}_regions.parquet"
+        features_path = self.intermediate_dir / "features_gdf" / f"{base_name}_features.parquet"
+        joint_path = self.intermediate_dir / "joint_gdf" / f"{base_name}_joint.parquet"
+
+        for path, label in [
+            (regions_path, "regions_gdf"),
+            (features_path, "features_gdf"),
+            (joint_path, "joint_gdf"),
+        ]:
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"Intermediate {label} not found at {path}. "
+                    f"Run the full pipeline with save_intermediate=True first."
+                )
+
+        logger.info(f"Loading intermediates for {study_area_name} res{h3_resolution}")
+
+        # Load parquets as plain DataFrames first (they may lack geo metadata)
+        regions_df = pd.read_parquet(regions_path)
+        features_df = pd.read_parquet(features_path)
+        joint_df = pd.read_parquet(joint_path)
+
+        # Convert to GeoDataFrames if geometry column exists
+        # Geometry may be stored as WKB binary, so deserialize it
+        def _to_geodataframe(df, name="data"):
+            if 'geometry' not in df.columns:
+                return df
+            from shapely import wkb
+            try:
+                # Try to deserialize WKB geometry
+                df['geometry'] = df['geometry'].apply(lambda x: wkb.loads(x) if isinstance(x, bytes) else x)
+                return gpd.GeoDataFrame(df, geometry='geometry', crs='EPSG:4326')
+            except Exception as e:
+                logger.warning(f"Failed to parse geometry for {name}: {e}. Returning as DataFrame.")
+                return df
+
+        regions_gdf = _to_geodataframe(regions_df, "regions")
+        features_gdf = _to_geodataframe(features_df, "features")
+        joint_gdf = _to_geodataframe(joint_df, "joint")
+
+        logger.info(
+            f"Loaded {len(regions_gdf):,} regions, "
+            f"{len(features_gdf):,} features, "
+            f"{len(joint_gdf):,} joint pairs"
+        )
+        return regions_gdf, features_gdf, joint_gdf
+
+    def run_count_embeddings(
+        self,
+        regions_gdf: gpd.GeoDataFrame,
+        features_gdf: gpd.GeoDataFrame,
+        joint_gdf: gpd.GeoDataFrame,
+    ) -> pd.DataFrame:
+        """Compute count-based POI embeddings with optional diversity metrics.
+
+        Runs SRAI's ``CountEmbedder``, adds a total POI count column, and
+        optionally appends Shannon entropy / Simpson diversity / richness /
+        evenness columns (controlled by ``self.compute_diversity_metrics``).
+
+        Args:
+            regions_gdf: H3 hexagonal regions.
+            features_gdf: POI features GeoDataFrame.
+            joint_gdf: Spatial join of regions and features.
+
+        Returns:
+            DataFrame with original column names (e.g. ``amenity_restaurant``,
+            ``poi_shannon_entropy``), indexed by ``region_id``.
+        """
+        logger.info("Computing count-based embeddings...")
+        count_embedder = CountEmbedder()
+        count_df = count_embedder.transform(
+            regions_gdf=regions_gdf,
+            features_gdf=features_gdf,
+            joint_gdf=joint_gdf,
+        )
+        logger.info(f"Count embeddings complete: {count_df.shape[1]} feature columns")
+
+        # CountEmbedder.transform returns pd.DataFrame (no geometry column)
+        embeddings_df = pd.DataFrame(count_df)
+
+        # Add total POI count per region (joint_gdf has MultiIndex: region_id, feature_id)
+        total_counts = joint_gdf.groupby(level=0).size()
+        embeddings_df["total_poi_count"] = total_counts
+        embeddings_df["total_poi_count"] = embeddings_df["total_poi_count"].fillna(0).astype(int)
+
+        # Diversity metrics
+        if self.compute_diversity_metrics:
+            logger.info("Calculating diversity metrics")
+            diversity_df = self._calculate_diversity_metrics(embeddings_df)
+            embeddings_df = embeddings_df.merge(
+                diversity_df, left_index=True, right_index=True, how="left"
+            )
+
+        # Ensure region_id index
+        embeddings_df.index = embeddings_df.index.astype(str)
+        if embeddings_df.index.name != "region_id":
+            embeddings_df.index.name = "region_id"
+
+        return embeddings_df
+
+    def run_hex2vec(
+        self,
+        regions_gdf: gpd.GeoDataFrame,
+        features_gdf: gpd.GeoDataFrame,
+        joint_gdf: gpd.GeoDataFrame,
+    ) -> pd.DataFrame:
+        """Compute Hex2Vec skip-gram embeddings.
+
+        Builds an H3 neighbourhood graph and trains a Hex2Vec encoder on the
+        POI feature matrix.
+
+        Args:
+            regions_gdf: H3 hexagonal regions.
+            features_gdf: POI features GeoDataFrame.
+            joint_gdf: Spatial join of regions and features.
+
+        Returns:
+            DataFrame with columns ``hex2vec_0 .. hex2vec_N``, indexed by
+            ``region_id``.
+
+        Raises:
+            ImportError: If ``srai[torch]`` is not installed.
+            RuntimeError: If the Hex2Vec training fails.
+        """
+        if not HEX2VEC_AVAILABLE:
+            raise ImportError(
+                "Hex2VecEmbedder not available. Install with: pip install srai[torch]"
+            )
+
+        logger.info("Starting Hex2Vec embeddings generation...")
+        logger.info("Computing H3 neighborhood graph...")
+        neighbourhood = H3Neighbourhood(regions_gdf)
+        logger.info(f"Neighborhood graph ready with {len(regions_gdf)} regions")
+
+        logger.info(f"Initializing Hex2Vec model (encoder_sizes={self.hex2vec_encoder_sizes})...")
+        hex2vec = Hex2VecEmbedder(
+            encoder_sizes=self.hex2vec_encoder_sizes,
+            expected_output_features=self.poi_categories,
+        )
+
+        logger.info(f"Training Hex2Vec model (GPU, {self.hex2vec_epochs} epochs, batch_size={self.batch_size})...")
+        hex2vec_embeddings = hex2vec.fit_transform(
+            regions_gdf=regions_gdf,
+            features_gdf=features_gdf,
+            joint_gdf=joint_gdf,
+            neighbourhood=neighbourhood,
+            batch_size=self.batch_size,
+            trainer_kwargs={
+                "accelerator": "auto",
+                "devices": 1,
+                "max_epochs": self.hex2vec_epochs,
+                "enable_progress_bar": True,
+            },
+        )
+
+        hex2vec_df = pd.DataFrame(hex2vec_embeddings)
+        hex2vec_df.columns = [f"hex2vec_{i}" for i in range(hex2vec_df.shape[1])]
+        logger.info(f"Hex2Vec complete! Added {hex2vec_df.shape[1]} dimensions")
+
+        # Ensure region_id index
+        hex2vec_df.index = hex2vec_df.index.astype(str)
+        if hex2vec_df.index.name != "region_id":
+            hex2vec_df.index.name = "region_id"
+
+        return hex2vec_df
+
+    def run_geovex(
+        self,
+        regions_gdf: gpd.GeoDataFrame,
+        features_gdf: gpd.GeoDataFrame,
+        joint_gdf: gpd.GeoDataFrame,
+    ) -> pd.DataFrame:
+        """Compute GeoVex hexagonal convolutional embeddings.
+
+        Trains a GeoVex variational autoencoder on the POI feature matrix
+        using a hexagonal convolutional neighbourhood.
+
+        Args:
+            regions_gdf: H3 hexagonal regions.
+            features_gdf: POI features GeoDataFrame.
+            joint_gdf: Spatial join of regions and features.
+
+        Returns:
+            DataFrame with columns ``geovex_0 .. geovex_N``, indexed by
+            ``region_id``.
+
+        Raises:
+            ImportError: If ``srai[torch]`` is not installed.
+            RuntimeError: If the GeoVex training fails.
+        """
+        if not GEOVEX_AVAILABLE:
+            raise ImportError(
+                "GeoVexEmbedder not available. Install with: pip install srai[torch]"
+            )
+
+        logger.info("Starting GeoVex hexagonal convolutional embeddings...")
+        logger.info(
+            f"Initializing GeoVex model ({self.geovex_embedding_size}D, "
+            f"{self.geovex_epochs} epochs, batch_size={self.batch_size})..."
+        )
+        neighbourhood = H3Neighbourhood(regions_gdf)
+
+        geovex = GeoVexEmbedder(
+            target_features=self.poi_categories,
+            embedding_size=self.geovex_embedding_size,
+            neighbourhood_radius=self.geovex_neighbourhood_radius,
+            convolutional_layers=self.geovex_convolutional_layers,
+            batch_size=self.batch_size,
+        )
+
+        logger.info("Training GeoVex hexagonal convolutional model (GPU-optimized)...")
+        geovex_embeddings = geovex.fit_transform(
+            regions_gdf=regions_gdf,
+            features_gdf=features_gdf,
+            joint_gdf=joint_gdf,
+            neighbourhood=neighbourhood,
+            trainer_kwargs={
+                "accelerator": "auto",
+                "devices": 1,
+                "max_epochs": self.geovex_epochs,
+                "enable_progress_bar": True,
+            },
+        )
+
+        geovex_df = pd.DataFrame(geovex_embeddings)
+        geovex_df.columns = [f"geovex_{i}" for i in range(geovex_df.shape[1])]
+        logger.info(f"GeoVex complete! Added {geovex_df.shape[1]} dimensions")
+
+        # Ensure region_id index
+        geovex_df.index = geovex_df.index.astype(str)
+        if geovex_df.index.name != "region_id":
+            geovex_df.index.name = "region_id"
+
+        return geovex_df
+
+    def process_to_h3(self, pois_gdf: gpd.GeoDataFrame, area_gdf: gpd.GeoDataFrame,
                      h3_resolution: int, study_area_name: str = "unnamed") -> pd.DataFrame:
-        """Process POI data into H3 hexagon embeddings."""
+        """Process POI data into H3 hexagon embeddings.
+
+        Orchestrates regionalization, spatial joining, and embedding generation.
+        Delegates to ``run_count_embeddings``, ``run_hex2vec``, and
+        ``run_geovex`` for the actual computation.
+        """
         logger.info(f"Processing POIs to H3 resolution {h3_resolution}")
 
         # 1. Regionalization
@@ -154,107 +418,31 @@ class POIProcessor(ModalityProcessor):
         joint_gdf = joiner.transform(regions=regions_gdf, features=pois_gdf)
         poi_region_matches = len(joint_gdf)
         logger.info(f"Joined {poi_region_matches:,} POI-region pairs")
-        
-        # Save intermediate embeddings stage1_modalities data if requested
+
+        # Save intermediate data if requested
         if self.save_intermediate:
             self._save_intermediate_data(pois_gdf, regions_gdf, joint_gdf, h3_resolution, study_area_name)
 
-        # 3. Count embeddings
-        logger.info("Step 3: Computing count-based embeddings...")
-        count_embedder = CountEmbedder()
-        count_df = count_embedder.transform(
-            regions_gdf=regions_gdf,
-            features_gdf=pois_gdf,
-            joint_gdf=joint_gdf
-        )
-        logger.info(f"Count embeddings complete: {count_df.shape[1]} feature columns")
+        # 3. Count embeddings (includes diversity metrics)
+        embeddings_df = self.run_count_embeddings(regions_gdf, pois_gdf, joint_gdf)
 
-        # CountEmbedder.transform returns pd.DataFrame (no geometry column)
-        embeddings_df = pd.DataFrame(count_df)
-
-        # Add total POI count per region (joint_gdf has MultiIndex: region_id, feature_id)
-        total_counts = joint_gdf.groupby(level=0).size()
-        embeddings_df['total_poi_count'] = total_counts
-        embeddings_df['total_poi_count'] = embeddings_df['total_poi_count'].fillna(0).astype(int)
-
-        # 4. Diversity metrics
-        if self.compute_diversity_metrics:
-            logger.info("Calculating diversity metrics")
-            diversity_df = self._calculate_diversity_metrics(embeddings_df)
-            embeddings_df = embeddings_df.merge(diversity_df, left_index=True, right_index=True, how='left')
-
-        # 5. Hex2Vec embeddings (if enabled)
+        # 4. Hex2Vec embeddings (if enabled)
         if self.use_hex2vec:
-            logger.info("Starting Hex2Vec embeddings generation...")
-            logger.info("Computing H3 neighborhood graph...")
             try:
-                neighbourhood = H3Neighbourhood(regions_gdf)
-                logger.info(f"Neighborhood graph ready with {len(regions_gdf)} regions")
-
-                # Hex2VecEmbedder uses features to create skip-gram embeddings
-                logger.info(f"Initializing Hex2Vec model (encoder_sizes={self.hex2vec_encoder_sizes})...")
-                hex2vec = Hex2VecEmbedder(
-                    encoder_sizes=self.hex2vec_encoder_sizes,
-                    expected_output_features=self.poi_categories
+                hex2vec_df = self.run_hex2vec(regions_gdf, pois_gdf, joint_gdf)
+                embeddings_df = embeddings_df.merge(
+                    hex2vec_df, left_index=True, right_index=True, how="left"
                 )
-                
-                logger.info(f"Training Hex2Vec model (GPU, {self.hex2vec_epochs} epochs)...")
-                hex2vec_embeddings = hex2vec.fit_transform(
-                    regions_gdf=regions_gdf,
-                    features_gdf=pois_gdf,
-                    joint_gdf=joint_gdf,
-                    neighbourhood=neighbourhood,
-                    trainer_kwargs={
-                        'accelerator': 'auto', 
-                        'devices': 1,
-                        'max_epochs': self.hex2vec_epochs,
-                        'enable_progress_bar': True
-                    }
-                )
-                
-                # Add hex2vec columns
-                hex2vec_df = pd.DataFrame(hex2vec_embeddings)
-                hex2vec_df.columns = [f'hex2vec_{i}' for i in range(hex2vec_df.shape[1])]
-                embeddings_df = embeddings_df.merge(hex2vec_df, left_index=True, right_index=True, how='left')
-                logger.info(f"Hex2Vec complete! Added {hex2vec_df.shape[1]} dimensions")
             except Exception as e:
                 logger.error(f"Hex2Vec embedding failed: {e}")
 
-        # 6. GeoVex embeddings (if enabled)
+        # 5. GeoVex embeddings (if enabled)
         if self.use_geovex:
-            logger.info("Starting GeoVex hexagonal convolutional embeddings...")
-            logger.info(f"Initializing GeoVex model ({self.geovex_embedding_size}D, {self.geovex_epochs} epochs, batch_size={self.batch_size})...")
             try:
-                neighbourhood = H3Neighbourhood(regions_gdf)
-
-                # GeoVexEmbedder uses hexagonal convolutional approach with Poisson distribution
-                geovex = GeoVexEmbedder(
-                    target_features=self.poi_categories,
-                    embedding_size=self.geovex_embedding_size,
-                    neighbourhood_radius=self.geovex_neighbourhood_radius,
-                    convolutional_layers=self.geovex_convolutional_layers,
-                    batch_size=self.batch_size
+                geovex_df = self.run_geovex(regions_gdf, pois_gdf, joint_gdf)
+                embeddings_df = embeddings_df.merge(
+                    geovex_df, left_index=True, right_index=True, how="left"
                 )
-
-                logger.info("Training GeoVex hexagonal convolutional model (GPU-optimized)...")
-                geovex_embeddings = geovex.fit_transform(
-                    regions_gdf=regions_gdf,
-                    features_gdf=pois_gdf,
-                    joint_gdf=joint_gdf,
-                    neighbourhood=neighbourhood,
-                    trainer_kwargs={
-                        'accelerator': 'auto',
-                        'devices': 1,
-                        'max_epochs': self.geovex_epochs,
-                        'enable_progress_bar': True
-                    }
-                )
-                
-                # Add geovex columns
-                geovex_df = pd.DataFrame(geovex_embeddings)
-                geovex_df.columns = [f'geovex_{i}' for i in range(geovex_df.shape[1])]
-                embeddings_df = embeddings_df.merge(geovex_df, left_index=True, right_index=True, how='left')
-                logger.info(f"GeoVex complete! Added {geovex_df.shape[1]} dimensions")
             except Exception as e:
                 logger.error(f"GeoVex embedding failed: {e}")
                 if "CUDA" in str(e) or "GPU" in str(e):
