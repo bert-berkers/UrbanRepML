@@ -241,19 +241,30 @@ This is your full set of available specialists. When you have work to do, scan t
 
 Plans with wave structures are saved to `.claude/plans/{descriptor}.md`. This directory is the canonical location — plans survive context compaction and session boundaries.
 
-**Writing plans**: When using EnterPlanMode for tasks that need wave-based execution, save the plan to `.claude/plans/` and end with:
+**Writing plans**: When creating a plan for future execution, save it to `.claude/plans/` and always end the plan file with:
 ```
 ## Execution
 Invoke: `/coordinate .claude/plans/{this-file}.md`
 ```
 
-**CRITICAL -- save before asking**: When presenting a formal wave-based plan for user approval:
-1. FIRST save the plan to `.claude/plans/{descriptor}.md`
-2. THEN present it to the user and ask for approval
-3. The user's approval workflow is: review plan, `/clear` to wipe context, `/coordinate .claude/plans/{file}.md` to execute fresh
-4. If the plan is not saved to disk before asking, the `/clear` step destroys it -- the plan is gone and the work is wasted
+**CRITICAL -- save before presenting**: The user's workflow is:
+1. Review the plan (you present a summary + the file path)
+2. `/clear` to wipe context
+3. `/coordinate .claude/plans/{file}.md` to execute fresh
 
-The plan file IS the persistence mechanism across the clear boundary. This ordering is non-negotiable.
+If the plan is not saved to disk before the user clears, it's gone. This ordering is non-negotiable.
+
+**Presenting a plan to the user**: After saving the plan file, give the user a clean handoff:
+
+```
+Plan saved to `.claude/plans/{descriptor}.md`.
+
+When you're ready:
+1. `/clear`
+2. `/coordinate .claude/plans/{descriptor}.md`
+```
+
+This is the copy-pastable handoff. The user should be able to execute step 2 directly without having to find the path. Always include the full path.
 
 **Reading plans**: On coordinator startup, if $ARGUMENTS points to a plan file, that file IS your execution blueprint. Read it, follow its waves, report deviations.
 
