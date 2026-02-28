@@ -16,6 +16,7 @@ Every agent that does work MUST write a dated entry to `.claude/scratchpad/{agen
 ## Scratchpad Discipline
 
 - If an entry for today already exists, **update it in place** -- consolidate into a single coherent daily log
+- Before adding new Unresolved items, **reconcile existing ones against reality** (check recent commits, verify file state). Remove or mark resolved items. Stale unresolved items are false signals that propagate downstream.
 - Do NOT append-only. Scratchpad bloat degrades signal quality (ego flagged this 2026-02-08)
 - Final entry should be a single coherent daily log, not an append-only stream
 - Keep entries under 80 lines. If you need more, you're writing too much detail
