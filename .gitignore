@@ -157,6 +157,12 @@ stage1_modalities/semantic_segmentation/
 log/
 logs/
 urban_embedding.log
+poi_run_log.txt
+
+# ==========================================
+# Runtime Output / Cache Directories
+# ==========================================
+files/
 *.tmp
 *.temp
 *.bak
