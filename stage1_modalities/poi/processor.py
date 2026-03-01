@@ -305,6 +305,7 @@ class POIProcessor(ModalityProcessor):
                 EarlyStopping(
                     monitor=loss_metric,
                     patience=self.early_stopping_patience,
+                    min_delta=1e-3,
                     mode="min",
                     verbose=True,
                     # Check at end of each training epoch (no val dataloader)
