@@ -57,6 +57,7 @@ class RoadsProcessor(ModalityProcessor):
         # Study area path helper (needed early for PBF auto-resolve)
         self._study_area_name = config.get('study_area', 'default')
         self._paths = StudyAreaPaths(self._study_area_name)
+        self.year = config.get('year', 2022)
 
         self.validate_config()
 
@@ -129,7 +130,8 @@ class RoadsProcessor(ModalityProcessor):
         return roads_gdf
 
     def highway2vec(self, roads_gdf: gpd.GeoDataFrame, area_gdf_or_regions: gpd.GeoDataFrame,
-                   h3_resolution: int, study_area_name: str = "unnamed") -> pd.DataFrame:
+                   h3_resolution: int, study_area_name: str = "unnamed",
+                   year: int = 2022) -> pd.DataFrame:
         """Train Highway2Vec model and generate road network embeddings using GPU."""
         if not HIGHWAY2VEC_AVAILABLE:
             raise RuntimeError(
@@ -172,9 +174,9 @@ class RoadsProcessor(ModalityProcessor):
             road_region_matches = len(joint_gdf)
             logger.info(f"Joined {road_region_matches:,} road-region pairs")
             
-            # Save intermediate embeddings stage1_modalities data if requested
+            # Save intermediate data if requested
             if self.save_intermediate:
-                self._save_intermediate_data(roads_gdf, regions_gdf, joint_gdf, h3_resolution, study_area_name)
+                self._save_intermediate_data(roads_gdf, regions_gdf, joint_gdf, h3_resolution, study_area_name, year)
         
         # 3. Prepare features for Highway2Vec
         logger.info("Step 3: Preparing features for Highway2Vec training...")
@@ -320,46 +322,58 @@ class RoadsProcessor(ModalityProcessor):
 
         return features_numerical
     
-    def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame, 
-                               joint_gdf: gpd.GeoDataFrame, h3_resolution: int, study_area_name: str):
-        """Save intermediate embeddings stage1_modalities SRAI data for debugging and analysis."""
-        logger.info("Saving intermediate embeddings stage1_modalities data...")
-        
+    def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame,
+                               joint_gdf: gpd.GeoDataFrame, h3_resolution: int,
+                               study_area_name: str, year: int = 2022):
+        """Save intermediate SRAI data for debugging and analysis.
+
+        Args:
+            features_gdf: Road features GeoDataFrame.
+            regions_gdf: H3 hexagonal regions.
+            joint_gdf: Spatial join of regions and features.
+            h3_resolution: H3 resolution level.
+            study_area_name: Study area identifier.
+            year: Data year for filename tagging (default 2022).
+        """
+        logger.info("Saving intermediate data...")
+
         # Create directories
         features_dir = self.intermediate_dir / 'features_gdf'
         regions_dir = self.intermediate_dir / 'regions_gdf'
         joint_dir = self.intermediate_dir / 'joint_gdf'
-        
+
         for dir_path in [features_dir, regions_dir, joint_dir]:
             dir_path.mkdir(parents=True, exist_ok=True)
-        
-        # Generate filenames with study area and resolution
-        base_name = f"{study_area_name}_res{h3_resolution}"
-        
+
+        # Generate filenames with study area, resolution, and year
+        base_name = f"{study_area_name}_res{h3_resolution}_{year}"
+
         # Save features (roads)
         features_path = features_dir / f"{base_name}_features.parquet"
         features_gdf.to_parquet(features_path)
         logger.info(f"Saved features_gdf to {features_path}")
-        
+
         # Save regions (H3 hexagons)
         regions_path = regions_dir / f"{base_name}_regions.parquet"
         regions_gdf.to_parquet(regions_path)
         logger.info(f"Saved regions_gdf to {regions_path}")
-        
+
         # Save joint (spatial join results)
         joint_path = joint_dir / f"{base_name}_joint.parquet"
         joint_gdf.to_parquet(joint_path)
         logger.info(f"Saved joint_gdf to {joint_path}")
-        
-        logger.info(f"Intermediate data saved for {study_area_name} at resolution {h3_resolution}")
+
+        logger.info(f"Intermediate data saved for {study_area_name} at resolution {h3_resolution} (year {year})")
 
     def run_pipeline(self, study_area: Union[str, gpd.GeoDataFrame],
                     h3_resolution: int,
                     output_dir: str = None,
                     study_area_name: str = None,
-                    year: int = 2022) -> str:
-        """Execute complete road processing_modalities pipeline."""
-        logger.info(f"Starting roads pipeline for resolution {h3_resolution}")
+                    year: int = None) -> str:
+        """Execute complete road processing pipeline."""
+        if year is None:
+            year = self.year
+        logger.info(f"Starting roads pipeline for resolution {h3_resolution}, year {year}")
 
         study_area_key = self.config.get('study_area', 'default')
         paths = StudyAreaPaths(study_area_key)
@@ -381,7 +395,7 @@ class RoadsProcessor(ModalityProcessor):
             return None
 
         # Train Highway2Vec and generate embeddings
-        embeddings_df = self.highway2vec(roads_gdf, area_gdf, h3_resolution, study_area_name)
+        embeddings_df = self.highway2vec(roads_gdf, area_gdf, h3_resolution, study_area_name, year)
 
         # Save embeddings using canonical StudyAreaPaths filename
         # Convention: region_id as index, only embedding columns, saved with index=True

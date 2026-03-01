@@ -131,8 +131,9 @@ def main():
         ),
     )
     parser.add_argument(
-        "--year", type=int, default=2022,
-        help="Data year for output filename (default: 2022)",
+        "--year", type=int, default=None,
+        help="Data year for output and intermediate filenames (default: 2022, "
+             "or auto-derived from --osm-date if provided)",
     )
     parser.add_argument(
         "--save-intermediate", action="store_true",
@@ -172,6 +173,21 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Resolve year: explicit --year > derived from --osm-date > default 2022
+    if args.year is None:
+        if args.osm_date and args.osm_date != "latest":
+            try:
+                args.year = int(args.osm_date.split("-")[0])
+                logger.info(f"Auto-derived --year={args.year} from --osm-date={args.osm_date}")
+            except (ValueError, IndexError):
+                args.year = 2022
+                logger.warning(
+                    f"Could not parse year from --osm-date={args.osm_date!r}, "
+                    f"falling back to --year=2022"
+                )
+        else:
+            args.year = 2022
 
     # Build config for POIProcessor
     #
