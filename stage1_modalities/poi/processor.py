@@ -202,6 +202,13 @@ class POIProcessor(ModalityProcessor):
         """Return the pickle path for a cached H3Neighbourhood object."""
         if study_area_name is None:
             study_area_name = self.study_area_name
+        base_name = f"{study_area_name}_res{h3_resolution}_{self.year}"
+        return self.intermediate_dir / "neighbourhood" / f"{base_name}_neighbourhood.pkl"
+
+    def _neighbourhood_path_yearless(self, h3_resolution: int, study_area_name: Optional[str] = None) -> Path:
+        """Return the old yearless pickle path for fallback loading."""
+        if study_area_name is None:
+            study_area_name = self.study_area_name
         base_name = f"{study_area_name}_res{h3_resolution}"
         return self.intermediate_dir / "neighbourhood" / f"{base_name}_neighbourhood.pkl"
 
@@ -235,6 +242,9 @@ class POIProcessor(ModalityProcessor):
     ) -> Optional["H3Neighbourhood"]:
         """Load a cached H3Neighbourhood from disk if it exists.
 
+        Tries the year-tagged path first, then falls back to the old yearless
+        filename for backward compatibility.
+
         Args:
             h3_resolution: H3 resolution used to construct the neighbourhood.
             study_area_name: Study area name for the filename.
@@ -244,7 +254,17 @@ class POIProcessor(ModalityProcessor):
         """
         path = self._neighbourhood_path(h3_resolution, study_area_name)
         if not path.exists():
-            return None
+            # Fallback: try old yearless filename
+            yearless_path = self._neighbourhood_path_yearless(h3_resolution, study_area_name)
+            if yearless_path.exists():
+                logger.warning(
+                    f"Year-tagged neighbourhood cache not found at {path.name}. "
+                    f"Falling back to yearless file: {yearless_path.name}. "
+                    f"Re-run with --save-intermediate to create year-tagged cache."
+                )
+                path = yearless_path
+            else:
+                return None
         logger.info(f"Loading cached neighbourhood graph from {path}")
         with open(path, "rb") as f:
             neighbourhood = pickle.load(f)
@@ -353,6 +373,9 @@ class POIProcessor(ModalityProcessor):
         during a full ``process_to_h3`` run.  Optionally loads the cached
         H3Neighbourhood object if ``include_neighbourhood=True``.
 
+        Filenames include year (e.g. ``netherlands_res10_2022_regions.parquet``).
+        Falls back to old yearless filenames if year-tagged files are not found.
+
         Args:
             h3_resolution: H3 resolution that was used during processing.
             study_area_name: Study area name embedded in filenames.
@@ -374,11 +397,29 @@ class POIProcessor(ModalityProcessor):
         if study_area_name is None:
             study_area_name = self.study_area_name
 
-        base_name = f"{study_area_name}_res{h3_resolution}"
+        base_name = f"{study_area_name}_res{h3_resolution}_{self.year}"
+        yearless_base = f"{study_area_name}_res{h3_resolution}"
 
         regions_path = self.intermediate_dir / "regions_gdf" / f"{base_name}_regions.parquet"
         features_path = self.intermediate_dir / "features_gdf" / f"{base_name}_features.parquet"
         joint_path = self.intermediate_dir / "joint_gdf" / f"{base_name}_joint.parquet"
+
+        # Fallback: if year-tagged files don't exist, try old yearless filenames
+        yearless_regions = self.intermediate_dir / "regions_gdf" / f"{yearless_base}_regions.parquet"
+        yearless_features = self.intermediate_dir / "features_gdf" / f"{yearless_base}_features.parquet"
+        yearless_joint = self.intermediate_dir / "joint_gdf" / f"{yearless_base}_joint.parquet"
+
+        using_yearless = False
+        if not regions_path.exists() and yearless_regions.exists():
+            logger.warning(
+                f"Year-tagged intermediates not found (e.g. {regions_path.name}). "
+                f"Falling back to yearless files (e.g. {yearless_regions.name}). "
+                f"Re-run with --save-intermediate to create year-tagged intermediates."
+            )
+            regions_path = yearless_regions
+            features_path = yearless_features
+            joint_path = yearless_joint
+            using_yearless = True
 
         for path, label in [
             (regions_path, "regions_gdf"),
@@ -391,7 +432,7 @@ class POIProcessor(ModalityProcessor):
                     f"Run the full pipeline with save_intermediate=True first."
                 )
 
-        logger.info(f"Loading intermediates for {study_area_name} res{h3_resolution}")
+        logger.info(f"Loading intermediates for {study_area_name} res{h3_resolution} year={self.year}")
 
         # Load parquets as plain DataFrames first (they may lack geo metadata)
         regions_df = pd.read_parquet(regions_path)
@@ -778,8 +819,8 @@ class POIProcessor(ModalityProcessor):
         for dir_path in [features_dir, regions_dir, joint_dir]:
             dir_path.mkdir(parents=True, exist_ok=True)
 
-        # Generate filenames with study area and resolution
-        base_name = f"{study_area_name}_res{h3_resolution}"
+        # Generate filenames with study area, resolution, and year
+        base_name = f"{study_area_name}_res{h3_resolution}_{self.year}"
 
         # Save features (POIs)
         features_path = features_dir / f"{base_name}_features.parquet"
@@ -800,7 +841,7 @@ class POIProcessor(ModalityProcessor):
         if neighbourhood is not None:
             self._save_neighbourhood(neighbourhood, h3_resolution, study_area_name)
 
-        logger.info(f"Intermediate data saved for {study_area_name} at resolution {h3_resolution}")
+        logger.info(f"Intermediate data saved for {study_area_name} at resolution {h3_resolution} year={self.year}")
 
     def _calculate_diversity_metrics(self, embeddings_df: pd.DataFrame) -> pd.DataFrame:
         """Calculate POI diversity metrics.

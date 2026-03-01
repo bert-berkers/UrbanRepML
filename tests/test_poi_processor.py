@@ -668,10 +668,10 @@ class TestNeighbourhoodCaching:
         assert result is None
 
     def test_neighbourhood_path_follows_convention(self, processor_with_tmp_dir):
-        """Neighbourhood file path matches intermediate dir pattern."""
+        """Neighbourhood file path includes year and matches intermediate dir pattern."""
         p = processor_with_tmp_dir
         path = p._neighbourhood_path(h3_resolution=10, study_area_name="netherlands")
-        assert path.name == "netherlands_res10_neighbourhood.pkl"
+        assert path.name == f"netherlands_res10_{p.year}_neighbourhood.pkl"
         assert path.parent.name == "neighbourhood"
 
     def test_load_intermediates_without_neighbourhood_flag(self, processor_with_tmp_dir, small_regions):
