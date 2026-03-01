@@ -15,6 +15,8 @@ import argparse
 import logging
 import sys
 
+print("Loading POI processor (importing dependencies)...", flush=True)
+
 import geopandas as gpd
 
 from stage1_modalities.poi.processor import POIProcessor
@@ -46,14 +48,21 @@ def _build_output_path(paths: StudyAreaPaths, embedder_name: str,
 def run_single_embedder(processor: POIProcessor, embedder_name: str,
                         resolution: int, year: int):
     """Load intermediates and run a single embedder, saving the result."""
-    regions_gdf, features_gdf, joint_gdf = processor.load_intermediates(resolution)
+    # Always load with neighbourhood -- it's None if no cache exists
+    regions_gdf, features_gdf, joint_gdf, neighbourhood = processor.load_intermediates(
+        resolution, include_neighbourhood=True,
+    )
 
     if embedder_name == "count":
         embeddings_df = processor.run_count_embeddings(regions_gdf, features_gdf, joint_gdf)
     elif embedder_name == "hex2vec":
-        embeddings_df = processor.run_hex2vec(regions_gdf, features_gdf, joint_gdf)
+        embeddings_df = processor.run_hex2vec(
+            regions_gdf, features_gdf, joint_gdf, neighbourhood=neighbourhood,
+        )
     elif embedder_name == "geovex":
-        embeddings_df = processor.run_geovex(regions_gdf, features_gdf, joint_gdf)
+        embeddings_df = processor.run_geovex(
+            regions_gdf, features_gdf, joint_gdf, neighbourhood=neighbourhood,
+        )
     else:
         raise ValueError(f"Unknown embedder: {embedder_name}. Valid: {VALID_EMBEDDERS}")
 
@@ -98,6 +107,11 @@ def run_full_pipeline(processor: POIProcessor, study_area_name: str,
 
 
 def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+    )
+
     parser = argparse.ArgumentParser(
         description="POI modality processor for UrbanRepML Stage 1",
     )
@@ -130,7 +144,16 @@ def main():
     )
     parser.add_argument(
         "--batch-size", type=int, default=4096,
-        help="Batch size for hex2vec/geovex training (default: 4096)",
+        help="Target batch size for hex2vec/geovex training (default: 4096). "
+             "Training starts at --initial-batch-size and ramps up to this value.",
+    )
+    parser.add_argument(
+        "--initial-batch-size", type=int, default=512,
+        help="Initial batch size at epoch 0; ramps up to --batch-size (default: 512)",
+    )
+    parser.add_argument(
+        "--early-stopping-patience", type=int, default=3,
+        help="EarlyStopping patience in epochs (0 to disable; default: 3)",
     )
 
     args = parser.parse_args()
@@ -147,6 +170,8 @@ def main():
         "year": args.year,
         "save_intermediate": args.save_intermediate,
         "batch_size": args.batch_size,
+        "initial_batch_size": args.initial_batch_size,
+        "early_stopping_patience": args.early_stopping_patience,
     }
 
     if args.pbf_path:
