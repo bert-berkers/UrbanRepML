@@ -61,6 +61,7 @@ YEAR = 2022
 MODALITY_REGISTRY = [
     ("poi", None, "POI Count"),
     ("poi", "hex2vec", "POI Hex2Vec"),
+    ("poi", "hex2vec_27feat", "POI Hex2Vec (27-feat)"),
     ("poi", "geovex", "POI GeoVeX"),
     ("roads", None, "Roads Highway2Vec"),
 ]
