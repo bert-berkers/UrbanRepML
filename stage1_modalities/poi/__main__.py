@@ -140,7 +140,22 @@ def main():
     )
     parser.add_argument(
         "--pbf-path", default=None,
-        help="Path to OSM PBF file (uses Overpass API if not provided)",
+        help="Path to OSM PBF file. If omitted with --data-source pbf, "
+             "auto-resolves from data/study_areas/{area}/osm/",
+    )
+    parser.add_argument(
+        "--data-source", choices=("osm_online", "pbf"), default=None,
+        help="Data source: 'osm_online' (Overpass API) or 'pbf' (local PBF file). "
+             "Default: 'osm_online', or 'pbf' if --pbf-path is provided.",
+    )
+    parser.add_argument(
+        "--osm-date", default="latest",
+        help="OSM snapshot date (e.g. '2022-01-01') when auto-resolving PBF path. "
+             "Default: 'latest'. Only used when --data-source pbf without --pbf-path.",
+    )
+    parser.add_argument(
+        "--device", choices=("auto", "cpu", "gpu"), default="auto",
+        help="Accelerator for hex2vec/geovex training: auto (default), cpu, or gpu",
     )
     parser.add_argument(
         "--batch-size", type=int, default=4096,
@@ -172,11 +187,20 @@ def main():
         "batch_size": args.batch_size,
         "initial_batch_size": args.initial_batch_size,
         "early_stopping_patience": args.early_stopping_patience,
+        "accelerator": args.device,
     }
 
-    if args.pbf_path:
+    # Determine data source: explicit flag > inferred from --pbf-path > default
+    if args.data_source:
+        config["data_source"] = args.data_source
+    elif args.pbf_path:
         config["data_source"] = "pbf"
+
+    if args.pbf_path:
         config["pbf_path"] = args.pbf_path
+
+    # Pass osm_date so auto-resolve picks the right snapshot
+    config["osm_date"] = args.osm_date
 
     processor = POIProcessor(config)
 

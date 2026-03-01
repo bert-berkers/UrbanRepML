@@ -168,6 +168,44 @@ class StudyAreaPaths:
             / f"parent_to_children_res{parent_res}_to_{target_res}.pkl"
         )
 
+    def osm_dir(self) -> Path:
+        """Directory for historical OSM PBF files.
+
+        Layout::
+
+            data/study_areas/{area}/osm/
+            ├── {area}-internal.osh.pbf      # Full OSM history extract
+            ├── {area}-latest.osm.pbf        # Most recent snapshot
+            └── {area}-2022-01-01.osm.pbf    # Date-specific snapshot
+
+        Both POI and roads processors use files from this directory
+        via SRAI's ``OSMPbfLoader``.
+        """
+        return self.root / "osm"
+
+    def osm_history_pbf(self) -> Path:
+        """Full OSM history PBF file (``*.osh.pbf``).
+
+        This is the complete history extract from which date-specific
+        snapshots are derived using ``osmium time-filter``.
+        """
+        return self.osm_dir() / f"{self.study_area}-internal.osh.pbf"
+
+    def osm_snapshot_pbf(self, date: str = "latest") -> Path:
+        """OSM PBF snapshot for a specific date.
+
+        Args:
+            date: Date string (e.g. ``"2022-01-01"``) or ``"latest"``
+                for the most recent snapshot.
+
+        Returns:
+            Path to the PBF file.  The file may not exist on disk yet;
+            the caller is responsible for downloading or extracting it.
+        """
+        if date == "latest":
+            return self.osm_dir() / f"{self.study_area}-latest.osm.pbf"
+        return self.osm_dir() / f"{self.study_area}-{date}.osm.pbf"
+
     def accessibility(self) -> Path:
         """Directory for accessibility graph artifacts."""
         return self.root / "accessibility"

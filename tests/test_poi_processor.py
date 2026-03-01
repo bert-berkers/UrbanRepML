@@ -387,6 +387,100 @@ class TestCLIConfigWiring:
         p = _make_processor()
         assert p.early_stopping_patience == 3
 
+    def test_accelerator_wired_from_config(self):
+        """Explicit accelerator value is stored on the processor."""
+        p = _make_processor({"accelerator": "cpu"})
+        assert p.accelerator == "cpu"
+
+    def test_accelerator_gpu_wired_from_config(self):
+        p = _make_processor({"accelerator": "gpu"})
+        assert p.accelerator == "gpu"
+
+    def test_default_accelerator_is_auto(self):
+        """Default accelerator is 'auto' when not in config."""
+        p = _make_processor()
+        assert p.accelerator == "auto"
+
+
+# ---------------------------------------------------------------------------
+# Accelerator passed to trainer_kwargs
+# ---------------------------------------------------------------------------
+
+
+class TestAcceleratorInTrainerKwargs:
+    """Verify that the accelerator attribute is forwarded to fit_transform trainer_kwargs."""
+
+    @pytest.fixture()
+    def srai_triple(self):
+        """Small SRAI triple for mock-based tests."""
+        import geopandas as gpd
+        from shapely.geometry import Point, box
+        from srai.regionalizers import H3Regionalizer
+        from srai.joiners import IntersectionJoiner
+
+        area = gpd.GeoDataFrame(
+            geometry=[box(4.3, 52.0, 4.32, 52.02)], crs="EPSG:4326"
+        )
+        regions_gdf = H3Regionalizer(resolution=9).transform(area)
+
+        features_gdf = gpd.GeoDataFrame(
+            {
+                "amenity": ["restaurant", "cafe"],
+                "geometry": [Point(4.305, 52.01), Point(4.31, 52.015)],
+            },
+            crs="EPSG:4326",
+        )
+        features_gdf.index.name = "feature_id"
+
+        joint_gdf = IntersectionJoiner().transform(
+            regions=regions_gdf, features=features_gdf
+        )
+        return regions_gdf, features_gdf, joint_gdf
+
+    def test_hex2vec_trainer_kwargs_uses_accelerator(self, srai_triple):
+        """run_hex2vec passes self.accelerator to trainer_kwargs, not hardcoded 'auto'."""
+        from unittest.mock import patch, MagicMock
+
+        regions_gdf, features_gdf, joint_gdf = srai_triple
+        p = _make_processor({"accelerator": "cpu"})
+
+        mock_embedder = MagicMock()
+        mock_embedder.fit_transform.return_value = pd.DataFrame(
+            np.ones((len(regions_gdf), 8), dtype=np.float32),
+            index=regions_gdf.index,
+            columns=[f"dim_{i}" for i in range(8)],
+        )
+
+        with patch("stage1_modalities.poi.processor.Hex2VecEmbedder", return_value=mock_embedder), \
+             patch("stage1_modalities.poi.processor.HEX2VEC_AVAILABLE", True):
+            p.run_hex2vec(regions_gdf, features_gdf, joint_gdf)
+
+        call_kwargs = mock_embedder.fit_transform.call_args
+        trainer_kwargs = call_kwargs.kwargs.get("trainer_kwargs") or call_kwargs[1].get("trainer_kwargs")
+        assert trainer_kwargs["accelerator"] == "cpu"
+
+    def test_hex2vec_trainer_kwargs_auto_default(self, srai_triple):
+        """Default accelerator 'auto' is forwarded to hex2vec trainer_kwargs."""
+        from unittest.mock import patch, MagicMock
+
+        regions_gdf, features_gdf, joint_gdf = srai_triple
+        p = _make_processor()  # default accelerator = "auto"
+
+        mock_embedder = MagicMock()
+        mock_embedder.fit_transform.return_value = pd.DataFrame(
+            np.ones((len(regions_gdf), 8), dtype=np.float32),
+            index=regions_gdf.index,
+            columns=[f"dim_{i}" for i in range(8)],
+        )
+
+        with patch("stage1_modalities.poi.processor.Hex2VecEmbedder", return_value=mock_embedder), \
+             patch("stage1_modalities.poi.processor.HEX2VEC_AVAILABLE", True):
+            p.run_hex2vec(regions_gdf, features_gdf, joint_gdf)
+
+        call_kwargs = mock_embedder.fit_transform.call_args
+        trainer_kwargs = call_kwargs.kwargs.get("trainer_kwargs") or call_kwargs[1].get("trainer_kwargs")
+        assert trainer_kwargs["accelerator"] == "auto"
+
 
 # ---------------------------------------------------------------------------
 # run_hex2vec / run_geovex signature checks (no training, just init)

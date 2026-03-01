@@ -87,6 +87,24 @@ uv sync --extra dev  # Include dev tools
 - **`utils/paths.py`** — `StudyAreaPaths`: single source of truth for all data path construction
 - **`utils/spatial_db.py`** — `SpatialDB`: SedonaDB spatial engine with GeoPandas fallback for bulk H3 geometry queries (centroids, geometry, extent). Preferred over raw `h3_to_geoseries` for all visualization and analysis code.
 
+### Study Area Data Layout
+
+```
+data/study_areas/{area_name}/
+├── area_gdf/              # Study area boundary
+├── regions_gdf/           # H3 tessellation
+├── osm/                   # Historical OSM PBF files (shared by POI + roads)
+│   ├── {area}-internal.osh.pbf    # Full history extract
+│   ├── {area}-latest.osm.pbf     # Most recent snapshot
+│   └── {area}-2022-01-01.osm.pbf # Date-specific snapshot
+└── stage1_unimodal/       # Per-modality embeddings
+    ├── alphaearth/
+    ├── poi/
+    └── roads/
+```
+
+Access via `StudyAreaPaths.osm_dir()`, `.osm_snapshot_pbf(date)`, `.osm_history_pbf()`. POI and roads processors auto-resolve PBF paths from `osm/` when `data_source='pbf'` and no explicit path is given.
+
 ## Script Organization
 
 Three tiers in `scripts/`:

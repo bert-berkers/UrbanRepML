@@ -132,10 +132,19 @@ class POIProcessor(ModalityProcessor):
         # Study area and year for path construction
         self.study_area_name = config.get('study_area', 'default')
         self.year = config.get('year', 2022)
+        self._paths = StudyAreaPaths(self.study_area_name)
 
         # Data configuration
         self.data_source = config.get('data_source', 'osm_online')
-        self.pbf_path = Path(config['pbf_path']) if config.get('pbf_path') else None
+        if config.get('pbf_path'):
+            self.pbf_path = Path(config['pbf_path'])
+        elif self.data_source == 'pbf':
+            # Auto-resolve from study area osm/ directory
+            osm_date = config.get('osm_date', 'latest')
+            self.pbf_path = self._paths.osm_snapshot_pbf(osm_date)
+            logger.info(f"Auto-resolved PBF path: {self.pbf_path}")
+        else:
+            self.pbf_path = None
         self.poi_categories = config.get('poi_categories') or self.DEFAULT_POI_CATEGORIES
 
         # Feature configuration
@@ -158,9 +167,11 @@ class POIProcessor(ModalityProcessor):
         # Early stopping
         self.early_stopping_patience = config.get('early_stopping_patience', 3)
 
+        # Lightning accelerator (auto | cpu | gpu)
+        self.accelerator = config.get('accelerator', 'auto')
+
         # Intermediate data saving
         self.save_intermediate = config.get('save_intermediate', False)
-        self._paths = StudyAreaPaths(self.study_area_name)
         self.intermediate_dir = Path(config.get('intermediate_dir', str(self._paths.intermediate("poi"))))
 
         logger.info(f"Initialized POIProcessor. Hex2Vec: {self.use_hex2vec}, GeoVex: {self.use_geovex}")
@@ -174,9 +185,14 @@ class POIProcessor(ModalityProcessor):
             logger.info(f"Intermediate data will be saved to: {self.intermediate_dir}")
 
     def validate_config(self):
-        """Validate configuration parameters."""
-        if self.config.get('data_source') == 'pbf' and not self.config.get('pbf_path'):
-            raise ValueError("PBF data source requires 'pbf_path' in config")
+        """Validate configuration parameters.
+
+        When ``data_source`` is ``'pbf'`` and no explicit ``pbf_path`` is
+        provided, the processor auto-resolves the PBF path from the study
+        area's ``osm/`` directory via :pymethod:`StudyAreaPaths.osm_snapshot_pbf`.
+        """
+        # No longer raise when pbf_path is missing -- auto-resolve in __init__
+        pass
 
     # -----------------------------------------------------------------
     # Neighbourhood caching
@@ -537,7 +553,7 @@ class POIProcessor(ModalityProcessor):
             neighbourhood=neighbourhood,
             batch_size=self.initial_batch_size,
             trainer_kwargs={
-                "accelerator": "auto",
+                "accelerator": self.accelerator,
                 "devices": 1,
                 "max_epochs": self.hex2vec_epochs,
                 "enable_progress_bar": True,
@@ -625,7 +641,7 @@ class POIProcessor(ModalityProcessor):
             joint_gdf=joint_gdf,
             neighbourhood=neighbourhood,
             trainer_kwargs={
-                "accelerator": "auto",
+                "accelerator": self.accelerator,
                 "devices": 1,
                 "max_epochs": self.geovex_epochs,
                 "enable_progress_bar": True,
