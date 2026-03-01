@@ -64,6 +64,7 @@ MODALITY_REGISTRY = [
     ("poi", "hex2vec_27feat", "POI Hex2Vec (27-feat)"),
     ("poi", "geovex", "POI GeoVeX"),
     ("roads", None, "Roads Highway2Vec"),
+    ("alphaearth", None, "AlphaEarth"),
 ]
 
 logger = logging.getLogger(__name__)
