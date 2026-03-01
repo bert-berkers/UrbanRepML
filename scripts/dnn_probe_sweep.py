@@ -15,9 +15,9 @@ Output:
     - sweep_bar_chart.png (all configs sorted by mean R2)
 
 Usage:
-    python scripts/one_off/dnn_probe_sweep.py
-    python scripts/one_off/dnn_probe_sweep.py --dry-run
-    python scripts/one_off/dnn_probe_sweep.py --max-epochs 50 --no-viz
+    python scripts/dnn_probe_sweep.py
+    python scripts/dnn_probe_sweep.py --dry-run
+    python scripts/dnn_probe_sweep.py --max-epochs 50 --no-viz
 """
 
 import argparse
