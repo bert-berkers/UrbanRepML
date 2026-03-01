@@ -40,6 +40,15 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
 4. **Discover active plan**: Check if `$ARGUMENTS` references a plan file (e.g. `.claude/plans/foo.md`). If so, read it — this is your blueprint. If `$ARGUMENTS` is a task description without a plan file reference, check `.claude/plans/` for recent files (by modification time). If a plan with a wave structure exists, ask the user: "I found plan `{file}`. Should I follow it?"
 5. If a plan specifies waves: **follow them exactly**. Do not redesign the wave structure. The plan was written with full context that may have been lost to compaction.
 6. **Read session name** from `.claude/coordinators/.current_session_id` (written by SessionStart hook). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
+7. **Hello broadcast** -- write an `info` message to `"all"` via `coordinator_registry.write_message()`:
+   ```
+   HELLO {session_id}
+   Task: {1-sentence summary of $ARGUMENTS}
+   Intent: {what you plan to do, e.g. "dispatch stage1 encoder + QAQC verification"}
+   Risk: {specific files/dirs you expect to modify}
+   Claimed: {initial claimed_paths, to be narrowed in first OODA cycle}
+   ```
+   This fires ALWAYS, even with no other active coordinators. The message is for future coordinators, not just current ones.
 
 This is non-negotiable. Ego flagged commit debt in 5/6 process assessments.
 
