@@ -87,6 +87,18 @@ uv sync --extra dev  # Include dev tools
 - **`utils/paths.py`** — `StudyAreaPaths`: single source of truth for all data path construction
 - **`utils/spatial_db.py`** — `SpatialDB`: SedonaDB spatial engine with GeoPandas fallback for bulk H3 geometry queries (centroids, geometry, extent). Preferred over raw `h3_to_geoseries` for all visualization and analysis code.
 
+## Script Organization
+
+Three tiers in `scripts/`:
+
+- **`scripts/{domain}/`** — Durable scripts that are part of the active workflow. Must have a module docstring and use `StudyAreaPaths` for all paths.
+- **`scripts/one_off/`** — Temporary scripts (debug, migration, one-time plots). 30-day shelf life; coordinator flags stale ones for archive or deletion.
+- **`scripts/archive/{category}/`** — Historical scripts kept for reference. Read-only.
+
+**Every new script** requires a module docstring stating its purpose, lifetime (`durable`/`temporary`), and which stage it exercises. No hardcoded `data/study_areas/...` paths.
+
+**No tests in scripts/**. Tests go in `tests/`. Debug scripts go in `one_off/`.
+
 ## Key Commands
 
 ```bash
