@@ -80,17 +80,20 @@ h3_resolutions:
   default: 9
 
 # Data sources by region
+# PBF files live in data/study_areas/{area}/osm/ and are auto-resolved
+# by StudyAreaPaths.osm_snapshot_pbf() when data_source='pbf' and no
+# explicit pbf_path is given. The paths below are kept for reference only.
 data_sources:
   netherlands:
     source: pbf
     pbf_url: "https://download.geofabrik.de/europe/netherlands-latest.osm.pbf"
-    pbf_path: "data/raw/osm/netherlands-latest.osm.pbf"
-  
+    # Auto-resolved: data/study_areas/netherlands/osm/netherlands-latest.osm.pbf
+
   cascadia:
     source: pbf
     pbf_url: "https://download.geofabrik.de/north-america/us-west-latest.osm.pbf"
-    pbf_path: "data/raw/osm/us-west-latest.osm.pbf"
-  
+    # Auto-resolved: data/study_areas/cascadia/osm/cascadia-latest.osm.pbf
+
   default:
     source: osm_online
 

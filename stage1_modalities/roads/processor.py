@@ -53,24 +53,36 @@ class RoadsProcessor(ModalityProcessor):
     def __init__(self, config: Dict[str, Any]):
         """Initialize roads processor with configuration."""
         super().__init__(config)
+
+        # Study area path helper (needed early for PBF auto-resolve)
+        self._study_area_name = config.get('study_area', 'default')
+        self._paths = StudyAreaPaths(self._study_area_name)
+
         self.validate_config()
-        
+
         # Data configuration
         self.data_source = config.get('data_source', 'osm_online')
-        self.pbf_path = config.get('pbf_path', None)
+        if config.get('pbf_path'):
+            self.pbf_path = Path(config['pbf_path'])
+        elif self.data_source == 'pbf':
+            # Auto-resolve from study area osm/ directory
+            osm_date = config.get('osm_date', 'latest')
+            self.pbf_path = self._paths.osm_snapshot_pbf(osm_date)
+            logger.info(f"Auto-resolved PBF path: {self.pbf_path}")
+        else:
+            self.pbf_path = None
         self.road_types = config.get('road_types', DEFAULT_ROAD_TYPES)
-        
+
         # Highway2Vec parameters from config section
         highway2vec_config = config.get('highway2vec', {})
         self.embedding_size = highway2vec_config.get('embedding_size', config.get('embedding_size', 30))
         self.hidden_size = highway2vec_config.get('hidden_size', config.get('hidden_size', 64))
         self.highway2vec_epochs = highway2vec_config.get('epochs', config.get('highway2vec_epochs', 25))
         self.highway2vec_batch_size = highway2vec_config.get('batch_size', config.get('highway2vec_batch_size', 128))
-        
+
         # Intermediate data saving
         self.save_intermediate = config.get('save_intermediate', False)
-        _roads_paths = StudyAreaPaths(config.get('study_area', 'default'))
-        self.intermediate_dir = Path(config.get('intermediate_dir', str(_roads_paths.intermediate("roads"))))
+        self.intermediate_dir = Path(config.get('intermediate_dir', str(self._paths.intermediate("roads"))))
         
         logger.info(f"Initialized RoadsProcessor with Highway2Vec (embedding_size={self.embedding_size})")
         logger.info(f"Highway2Vec epochs: {self.highway2vec_epochs}, batch_size: {self.highway2vec_batch_size}")
@@ -78,9 +90,14 @@ class RoadsProcessor(ModalityProcessor):
             logger.info(f"Intermediate data will be saved to: {self.intermediate_dir}")
 
     def validate_config(self):
-        """Validate configuration parameters."""
-        if self.config.get('data_source') == 'pbf' and not self.config.get('pbf_path'):
-            raise ValueError("PBF data source requires 'pbf_path' in config")
+        """Validate configuration parameters.
+
+        When ``data_source`` is ``'pbf'`` and no explicit ``pbf_path`` is
+        provided, the processor auto-resolves the PBF path from the study
+        area's ``osm/`` directory via :pymethod:`StudyAreaPaths.osm_snapshot_pbf`.
+        """
+        # No longer raise when pbf_path is missing -- auto-resolve in __init__
+        pass
 
     def load_data(self, area_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """Load road network data for the study area."""
