@@ -218,6 +218,25 @@ Attunement applied:
 
 Only show dimensions that changed. Group unchanged dimensions into a count.
 
+### Step 7: Handoff to Coordinator
+
+After attunement is applied and the summary is shown, offer to launch the coordinator:
+
+```
+Ready to work. What's the task?
+  a) Follow the forward-look recommendations
+  b) [contextual suggestion from focus directive, e.g. "hex2vec results review"]
+  c) Tell me what you want to do
+```
+
+**If the user provides a task** (either by picking an option or typing freely), invoke `/coordinate` with that task as the argument. The attunement is already applied — the coordinator will pick it up via the session-start hook.
+
+**If the user says "skip"**, "not yet", or similar — end the skill. The human may want to read more or work without coordination.
+
+**If the morning inread (Step 3.5) surfaced a forward-look with specific wave recommendations**, option (a) should reference the forward-look file path so the coordinator can follow it as a plan: e.g., "Follow forward-look (.claude/scratchpad/coordinator/2026-03-06-forward-look.md)".
+
+This makes `/attune` the single entry point for all sessions: orient → tune → work.
+
 ## Behavioral Rules
 
 - **Speed over thoroughness**: This skill should complete in one exchange (shorthand) or two exchanges (questionnaire + answers). Do not over-explain.
