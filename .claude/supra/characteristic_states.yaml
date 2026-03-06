@@ -1,0 +1,12 @@
+mode: exploratory
+dimensions:
+  execution_speed: 3
+  exploration_vs_exploitation: 3
+  code_quality: 3
+  test_coverage: 3
+  spatial_correctness: 3
+  model_architecture: 3
+focus: []
+suppress: []
+last_attuned: null
+last_attuned_by: null

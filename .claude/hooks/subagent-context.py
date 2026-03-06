@@ -43,10 +43,14 @@ def last_lines(path: Path, n: int = CONTEXT_LINES) -> str:
 
 
 def latest_entry(agent_dir: Path) -> Path | None:
-    """Find the most recent YYYY-MM-DD.md file in an agent's scratchpad directory."""
+    """Find the most recent dated .md file in an agent's scratchpad directory.
+
+    Matches both daily entries (YYYY-MM-DD.md) and suffixed entries
+    (YYYY-MM-DD-forward-look.md, etc.).
+    """
     if not agent_dir.is_dir():
         return None
-    entries = sorted(agent_dir.glob("????-??-??.md"), reverse=True)
+    entries = sorted(agent_dir.glob("????-??-??*.md"), reverse=True)
     return entries[0] if entries else None
 
 
@@ -55,7 +59,7 @@ def staleness_warning(entry: Path | None, label: str) -> str | None:
     if not entry:
         return None
     try:
-        entry_date = date.fromisoformat(entry.stem)
+        entry_date = date.fromisoformat(entry.stem[:10])
         days_old = (date.today() - entry_date).days
         if days_old > 3:
             return f"  (stale: {label} is {days_old} days old -- treat as low-confidence)"
@@ -256,6 +260,19 @@ def main() -> None:
             "### Pipeline Signals (from adjacent agents):",
             *sibling_signals,
         ])
+
+    # Inject supra precision weights filtered for this agent type
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import supra_reader
+        supra_states = supra_reader.read_states()
+        schema = supra_reader.read_schema()
+        if supra_states and schema:
+            agent_weights = supra_reader.format_for_agent(supra_states, schema, agent_type)
+            if agent_weights:
+                parts.extend(["", "### Human's Precision Weights:", agent_weights])
+    except Exception as exc:
+        print(f"subagent-context: supra state read failed: {exc}", file=sys.stderr)
 
     # Inject unread coordinator messages (lateral awareness every wave)
     coord_messages = get_coordinator_messages()

@@ -40,7 +40,7 @@ Write to `.claude/scratchpad/ego/YYYY-MM-DD.md` (today's date) with:
   - *Recommendation closure*: are previously flagged issues being addressed?
 - **Forward-Look**: recommendations for next session
 
-Then write the forward-look to `.claude/scratchpad/coordinator/YYYY-MM-DD+1.md` (tomorrow's date) to seed the next OODA cycle.
+Then write the forward-look to `.claude/scratchpad/coordinator/YYYY-MM-DD-forward-look.md` (today's date with suffix) to seed the next OODA cycle. The forward-look is dated to when it was *written*, not when it will be *read*.
 
 ## Lateral Coordination Health
 

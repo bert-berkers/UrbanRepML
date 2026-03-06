@@ -1,0 +1,91 @@
+groups:
+  execution:
+    label: "Execution Posture"
+    description: "How you want work to flow"
+  quality:
+    label: "Quality Attention"
+    description: "How much to invest in correctness and testing"
+  domain:
+    label: "Domain Focus"
+    description: "Which technical domains to amplify"
+
+dimensions:
+  execution_speed:
+    description: "How fast vs how careful"
+    group: execution
+    default: 3
+    low_label: "Careful & thorough"
+    high_label: "Fast & decisive"
+    agent_relevance:
+      coordinator: 1.0
+      execution: 1.0
+      qaqc: 0.7
+      devops: 0.6
+
+  exploration_vs_exploitation:
+    description: "Try new approaches vs use proven ones"
+    group: execution
+    default: 3
+    low_label: "Proven approaches"
+    high_label: "Explore new ideas"
+    agent_relevance:
+      coordinator: 1.0
+      spec-writer: 1.0
+      stage2-fusion-architect: 0.7
+
+  code_quality:
+    description: "Investment in clean code, typing, structure"
+    group: quality
+    default: 3
+    low_label: "Good enough"
+    high_label: "Production-grade"
+    agent_relevance:
+      qaqc: 1.0
+      devops: 0.8
+      coordinator: 0.6
+
+  test_coverage:
+    description: "How much testing to do"
+    group: quality
+    default: 3
+    low_label: "Skip tests"
+    high_label: "Thorough coverage"
+    agent_relevance:
+      qaqc: 1.0
+      devops: 0.6
+
+  spatial_correctness:
+    description: "Verify spatial operations, CRS, H3 conventions"
+    group: domain
+    default: 3
+    low_label: "Trust it works"
+    high_label: "Verify rigorously"
+    agent_relevance:
+      srai-spatial: 1.0
+      stage1-modality-encoder: 0.8
+      qaqc: 0.6
+
+  model_architecture:
+    description: "Focus on model design, loss functions, architecture"
+    group: domain
+    default: 3
+    low_label: "Don't overthink"
+    high_label: "Deep architectural care"
+    agent_relevance:
+      stage2-fusion-architect: 1.0
+      stage3-analyst: 0.6
+      spec-writer: 0.7
+
+modes:
+  exploratory:
+    description: "Open-ended, creative, follow interesting threads"
+    biases: {exploration_vs_exploitation: +1, execution_speed: -1}
+  focused:
+    description: "Clear goal, execute efficiently"
+    biases: {execution_speed: +1, exploration_vs_exploitation: -1}
+  sprint:
+    description: "Ship it. Speed over perfection"
+    biases: {execution_speed: +2, code_quality: -1, test_coverage: -1}
+  creative:
+    description: "Architecture and invention mode. Ideas over output"
+    biases: {exploration_vs_exploitation: +2, execution_speed: -1}

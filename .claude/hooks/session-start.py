@@ -30,10 +30,14 @@ def read_file(path: Path, max_lines: int = 30) -> str:
 
 
 def latest_entry(agent_dir: Path) -> Path | None:
-    """Find the most recent YYYY-MM-DD.md file in an agent's scratchpad directory."""
+    """Find the most recent dated .md file in an agent's scratchpad directory.
+
+    Matches both daily entries (YYYY-MM-DD.md) and suffixed entries
+    (YYYY-MM-DD-forward-look.md, etc.).
+    """
     if not agent_dir.is_dir():
         return None
-    entries = sorted(agent_dir.glob("????-??-??.md"), reverse=True)
+    entries = sorted(agent_dir.glob("????-??-??*.md"), reverse=True)
     return entries[0] if entries else None
 
 
@@ -119,7 +123,7 @@ def staleness_note(entry: Path | None, label: str) -> str | None:
     if not entry:
         return None
     try:
-        entry_date = date.fromisoformat(entry.stem)
+        entry_date = date.fromisoformat(entry.stem[:10])
         days_old = (date.today() - entry_date).days
         if days_old > 3:
             return f"  (stale: {label} is {days_old} days old -- may not reflect current state)"
@@ -258,6 +262,22 @@ def main() -> None:
             stale = staleness_note(ego_entry, "ego assessment")
             if stale:
                 parts.append(stale)
+
+    # Supra attentional landscape (human's current precision weights)
+    try:
+        # Ensure hooks dir is on sys.path for supra_reader import
+        _hooks_dir = str(Path(__file__).resolve().parent)
+        if _hooks_dir not in sys.path:
+            sys.path.insert(0, _hooks_dir)
+        import supra_reader
+        supra_states = supra_reader.read_states()
+        schema = supra_reader.read_schema()
+        if supra_states and schema:
+            landscape = supra_reader.format_for_coordinator(supra_states, schema)
+            if landscape:
+                parts.extend(["", "### Human's Attentional Landscape:", landscape])
+    except Exception as exc:
+        print(f"session-start: supra state read failed: {exc}", file=sys.stderr)
 
     # Critical signals from specialist scratchpads
     signals = scan_critical_signals()

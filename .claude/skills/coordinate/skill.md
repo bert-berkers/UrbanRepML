@@ -40,7 +40,8 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
 4. **Discover active plan**: Check if `$ARGUMENTS` references a plan file (e.g. `.claude/plans/foo.md`). If so, read it — this is your blueprint. If `$ARGUMENTS` is a task description without a plan file reference, check `.claude/plans/` for recent files (by modification time). If a plan with a wave structure exists, ask the user: "I found plan `{file}`. Should I follow it?"
 5. If a plan specifies waves: **follow them exactly**. Do not redesign the wave structure. The plan was written with full context that may have been lost to compaction.
 6. **Read session name** from `.claude/coordinators/.current_session_id` (written by SessionStart hook). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
-7. **Hello broadcast** -- write an `info` message to `"all"` via `coordinator_registry.write_message()`:
+7. **Check supra states**: Read `.claude/supra/characteristic_states.yaml`. If `last_attuned` is null or >24 hours old, suggest to the user: "Your precision weights haven't been set recently. Run `/attune` to tune them, or I'll use defaults." Include the current mode in your OODA report.
+8. **Hello broadcast** -- write an `info` message to `"all"` via `coordinator_registry.write_message()`:
    ```
    HELLO {session_id}
    Task: {1-sentence summary of $ARGUMENTS}
@@ -77,6 +78,7 @@ After observation, print this to the user:
 ## OODA Report
 
 **Session**: [session-name from .claude/coordinators/.current_session_id]
+**Mode**: [current supra mode from characteristic_states.yaml, e.g. "creative"]
 **State**: [1-2 sentence summary of where things stand]
 **Lateral**: [other active coordinators and their claims, messages sent/received this wave, or "no other coordinators active"]
 **Blocked**: [what's stuck and why, or "nothing"]
@@ -129,6 +131,8 @@ The human does NOT need to approve:
 - Ordering of independent tasks within a wave
 
 Then ask the user: "Proceed with this plan, or adjust?" — wait for confirmation before spawning.
+
+**Precision-weighted prioritization**: When multiple tasks compete for the same wave slot, use the human's supra precision weights as tiebreaker. Higher-weighted domains get priority. Scale QAQC depth with `code_quality` and `test_coverage` weights (1-2 = light check, 3 = standard, 4-5 = thorough).
 
 **Wave design principles:**
 - **Within a wave**: tasks are independent and run in parallel (single message, multiple Task calls)

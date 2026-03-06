@@ -5,7 +5,8 @@
       "Skill(coordinate)",
       "Skill(summarize-scratchpads)",
       "Skill(ego-check)",
-      "Skill(librarian-update)"
+      "Skill(librarian-update)",
+      "Skill(attune)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
