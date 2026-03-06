@@ -49,6 +49,12 @@ If the user passed arguments (via `$ARGUMENTS`), parse them as shorthand and **s
 
 Additional shorthand syntax:
 - Mode names recognized directly: `exploratory`, `focused`, `sprint`, `creative`
+- **Compound state names** recognized directly: `creative-prototyping`, `production-hardening`, `deep-investigation`, `sprint-shipping`, `careful-exploration`, `training-run`
+  - A compound state sets specific dimensions to absolute values and optionally sets the mode
+  - Compound state dimensions are defined in `schema.yaml` under `compound_states:`
+  - Dimensions NOT specified by the compound state are left at their current values
+  - Any explicit dimension overrides in the same command take precedence over the compound state's values
+  - Example: `/attune deep-investigation, speed 2` applies deep-investigation then overrides execution_speed to 2
 - `focus "..."` sets the focus directive (replaces existing focus list with single item)
 - `suppress "..."` sets the suppress directive (replaces existing suppress list with single item)
 - Bare dimension names without a value are treated as amplify (set to 4)
@@ -68,10 +74,19 @@ Additional shorthand syntax:
 - `/attune sprint` -- sets mode to sprint
 - `/attune focused, model 5, focus "prove hex2vec works"` -- mode=focused, model_architecture=5, focus set
 - `/attune explore` -- ambiguous: could mean mode=exploratory or exploration_vs_exploitation=4. Resolve: if no number follows, check if it matches a mode name first. `explore` is not a mode name, so it maps to the dimension at value 4. `exploratory` IS a mode name.
+
+**Resolution order for bare names** (no number follows):
+1. Check compound state names first (e.g., `creative-prototyping` -- hyphenated names are always compound states)
+2. Check mode names (`exploratory`, `focused`, `sprint`, `creative`)
+3. Check dimension shorthands (`speed`, `explore`, `quality`, `tests`, `spatial`, `model`)
+4. Check profile operations (`profiles`, `list`, `save:`, `load:`)
 - `/attune save:creative-evening` -- saves current state as "creative-evening"
 - `/attune load:training` -- restores the "training" profile
 - `/attune sprint, speed 5, tests 1, save:ship-it` -- applies sprint + overrides, saves as "ship-it"
 - `/attune profiles` -- lists all saved profiles
+- `/attune creative-prototyping` -- applies the creative-prototyping compound state (sets explore=5, speed=4, quality=2, tests=1, mode=creative)
+- `/attune deep-investigation, focus "understand hex2vec loss landscape"` -- applies compound state + sets focus
+- `/attune training-run, speed 4` -- applies training-run then overrides execution_speed to 4
 
 If shorthand is provided, apply changes and jump to Step 6 (print summary). Do not ask questions.
 

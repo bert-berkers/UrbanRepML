@@ -72,6 +72,53 @@ def apply_mode_biases(states: dict, schema: dict) -> dict:
         effective[name] = max(1, min(5, r + biases.get(name, 0)))
     return {**states, "effective_dimensions": effective}
 
+# -- Compound state detection ------------------------------------------------
+
+def detect_compound_state(effective_dims: dict, schema: dict) -> dict | None:
+    """Check if effective dimensions match a compound state within +/-1 tolerance.
+
+    Returns the matching compound state dict (with name, description, tension_warning)
+    or None. If multiple match, returns the one with the most dimensions specified.
+    """
+    compounds = schema.get("compound_states", {})
+    if not compounds:
+        return None
+
+    best_match: dict | None = None
+    best_specificity = 0
+
+    for name, spec in compounds.items():
+        target_dims = spec.get("dimensions", {})
+        if not target_dims:
+            continue
+
+        all_match = True
+        for dim_name, target_val in target_dims.items():
+            eff_val = effective_dims.get(dim_name)
+            if eff_val is None:
+                all_match = False
+                break
+            try:
+                if abs(int(eff_val) - int(target_val)) > 1:
+                    all_match = False
+                    break
+            except (TypeError, ValueError):
+                all_match = False
+                break
+
+        if all_match and len(target_dims) > best_specificity:
+            best_specificity = len(target_dims)
+            best_match = {
+                "name": name,
+                "description": spec.get("description", ""),
+                "tension_warning": spec.get("tension_warning"),
+                "mode": spec.get("mode"),
+                "dimensions": dict(target_dims),
+            }
+
+    return best_match
+
+
 # -- Formatting --------------------------------------------------------------
 
 def _staleness(last_attuned) -> str:
@@ -115,6 +162,13 @@ def format_for_coordinator(states: dict, schema: dict) -> str:
         eff = eff_dims.get(name, raw)
         d = dim_defs.get(name, {})
         lines.append(f"| {name} | {raw} | {eff} | {_arrow_label(eff, d.get('low_label', 'low'), d.get('high_label', 'high'))} |")
+    # Compound state detection
+    compound = detect_compound_state(eff_dims, schema)
+    if compound:
+        cs_line = f"**Compound state**: {compound['name']} -- {compound['description']}"
+        lines.append(cs_line)
+        if compound.get("tension_warning"):
+            lines.append(f"**Warning**: {compound['tension_warning']}")
     focus, suppress = states.get("focus", []), states.get("suppress", [])
     focus_str = ', '.join(f'"{item}"' for item in focus) if focus else "(none)"
     lines.append(f"**Focus**: {focus_str}")

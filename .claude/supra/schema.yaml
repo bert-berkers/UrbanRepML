@@ -89,3 +89,61 @@ modes:
   creative:
     description: "Architecture and invention mode. Ideas over output"
     biases: {exploration_vs_exploitation: +2, execution_speed: -1}
+
+compound_states:
+  creative-prototyping:
+    description: "Try things fast, expect rough edges. Rapid iteration over polish."
+    dimensions:
+      exploration_vs_exploitation: 5
+      execution_speed: 4
+      code_quality: 2
+      test_coverage: 1
+    mode: creative
+    tension_warning: null
+
+  production-hardening:
+    description: "Lock it down, verify everything. Correctness over speed."
+    dimensions:
+      code_quality: 5
+      test_coverage: 5
+      execution_speed: 2
+      spatial_correctness: 4
+    mode: focused
+    tension_warning: null
+
+  deep-investigation:
+    description: "Understand deeply, no rush. Read more than write."
+    dimensions:
+      exploration_vs_exploitation: 5
+      model_architecture: 5
+      execution_speed: 1
+    mode: exploratory
+    tension_warning: null
+
+  sprint-shipping:
+    description: "Get it out the door. Speed over everything."
+    dimensions:
+      execution_speed: 5
+      code_quality: 2
+      test_coverage: 1
+      exploration_vs_exploitation: 1
+    mode: sprint
+    tension_warning: null
+
+  careful-exploration:
+    description: "Explore but do it right. Investigate thoroughly with quality gates."
+    dimensions:
+      exploration_vs_exploitation: 5
+      code_quality: 4
+      execution_speed: 2
+    mode: exploratory
+    tension_warning: "Tension: explore and quality can fight each other. The explorer wants to try things; the quality gate rejects half of them. Expect slower iteration than pure exploration."
+
+  training-run:
+    description: "Let the model cook. Monitor, do not interrupt."
+    dimensions:
+      model_architecture: 5
+      execution_speed: 3
+      exploration_vs_exploitation: 2
+    mode: focused
+    tension_warning: null
