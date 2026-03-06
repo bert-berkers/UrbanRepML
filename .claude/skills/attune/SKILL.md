@@ -90,6 +90,41 @@ Additional shorthand syntax:
 
 If shorthand is provided, apply changes and jump to Step 6 (print summary). Do not ask questions.
 
+### Step 3.5: Morning Inread (when no shorthand AND session appears to be first of the day)
+
+If all of these are true: (a) no shorthand was provided, (b) `last_attuned` is from a previous day or null, and (c) a saved profile exists — this is likely the human's first session of the day. Before jumping to the questionnaire, offer a **morning inread**: a curated reading list to orient the human with their cup of tea.
+
+**Build the reading list** by scanning for the most informative files from the previous session(s):
+
+1. **Coordinator forward-look** (highest priority): `.claude/scratchpad/coordinator/YYYY-MM-DD-forward-look.md` from the most recent date. This is written specifically to seed the next session.
+2. **Ego assessment** (high priority): `.claude/scratchpad/ego/YYYY-MM-DD.md` from the most recent date. Process health, attention needed, metrics table.
+3. **Recent git log**: `git log --oneline -10` — what actually shipped.
+4. **Active coordinator messages**: any unread messages in `.claude/coordinators/messages/` from after last attunement.
+5. **Any specialist scratchpads newer than last attunement** — only mention these by name and one-line summary, don't dump content.
+
+**Present the inread** as a compact recommendation:
+
+```
+Good morning. Here's your inread before we attune:
+
+📖 Reading list:
+  1. Coordinator forward-look (2026-03-06) — tomorrow's plan, hex2vec hard rule
+  2. Ego assessment (2026-03-06) — 4/5, hex2vec finally running, 3 commits
+  3. git log: 3 commits yesterday (supra core, profiles, compound states)
+  4. No unread coordinator messages.
+
+Saved profile ready: "saturday-morning" (focused, model=5, speed=4, suppress infra)
+
+Take your time reading. When you're ready, I'll ask 4 quick questions — or just say
+"load saturday-morning" to jump straight in.
+```
+
+**Key principles:**
+- This is a PAUSE, not a speedbump. The human should feel invited to read, not rushed.
+- Keep the list to 3-5 items max. Compress aggressively — file paths + one-line summary.
+- If a saved profile exists with "morning", "saturday", "sunday", or "weekend" in the name, surface it prominently as a quick-start option.
+- After presenting the inread, WAIT for the human to respond before proceeding to the questionnaire. They might say "load saturday-morning" (shorthand, skip questionnaire), or "ok ready" (proceed to questionnaire), or ask a question about something they read.
+
 ### Step 4: Questionnaire (if no shorthand)
 
 Ask the user up to 4 questions. Keep it fast -- the user should be able to attune in under 30 seconds. Present all answerable questions in a single message, numbered. The user can answer with just numbers or short phrases.
