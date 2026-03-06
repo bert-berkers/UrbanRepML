@@ -1,12 +1,14 @@
-mode: exploratory
+mode: focused
 dimensions:
-  execution_speed: 3
-  exploration_vs_exploitation: 3
+  execution_speed: 4
+  exploration_vs_exploitation: 2
   code_quality: 3
-  test_coverage: 3
+  test_coverage: 2
   spatial_correctness: 3
-  model_architecture: 3
-focus: []
-suppress: []
-last_attuned: null
-last_attuned_by: null
+  model_architecture: 5
+focus:
+- hex2vec results review + next pipeline step
+suppress:
+- supra infrastructure
+last_attuned: "2026-03-06T21:45:00Z"
+last_attuned_by: "manual"

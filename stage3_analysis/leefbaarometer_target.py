@@ -64,8 +64,8 @@ class LeefbaarometerConfig:
         if self.scores_csv is None:
             self.scores_csv = str(
                 paths.target("leefbaarometer")
-                / "open-data-leefbaarometer-meting-2022_2023-11-21_1035"
-                / "Leefbaarometer-scores grids 2002-2022.csv"
+                / "Leefbaarometer 3.0 - Meting 2024 - open data"
+                / "Leefbaarometer-scores grids 2002-2024.csv"
             )
         if self.grid_gpkg is None:
             self.grid_gpkg = str(

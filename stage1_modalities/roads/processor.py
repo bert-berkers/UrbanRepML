@@ -152,7 +152,6 @@ class RoadsProcessor(ModalityProcessor):
             # For intermediate embeddings stage1_modalities data, we need to create a joint_gdf
             # This is a simplified version - in real use, joint_gdf should be loaded too
             logger.info("Creating spatial join for Highway2Vec (this may take time)...")
-            from srai.joiners import IntersectionJoiner
             joiner = IntersectionJoiner()
             joint_gdf = joiner.transform(regions=regions_gdf, features=roads_gdf)
             logger.info(f"Created {len(joint_gdf):,} road-region pairs")
@@ -208,10 +207,14 @@ class RoadsProcessor(ModalityProcessor):
                     'accelerator': 'auto',  # Use GPU if available
                     'devices': 1,
                     'max_epochs': self.highway2vec_epochs,  # GPU-optimized epochs
-                    'enable_progress_bar': True
+                    'enable_progress_bar': True,
+                    'logger': False,
+                    'enable_model_summary': False,
+                    'num_sanity_val_steps': 0
                 },
                 dataloader_kwargs={
-                    'batch_size': self.highway2vec_batch_size
+                    'batch_size': self.highway2vec_batch_size,
+                    'num_workers': 0
                 }
             )
             
