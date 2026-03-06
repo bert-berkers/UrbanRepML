@@ -1,0 +1,13 @@
+mode: focused
+dimensions:
+  execution_speed: 3
+  exploration_vs_exploitation: 4
+  code_quality: 3
+  test_coverage: 3
+  spatial_correctness: 3
+  model_architecture: 4
+focus:
+- hex2vec and highway2vec 2022 implementation + leefbaarometer yearly data availability
+- generous delegation with integrator/synthesizer middle-wave agents
+suppress: []
+saved_at: '2026-03-06T17:27:22.658559+00:00'

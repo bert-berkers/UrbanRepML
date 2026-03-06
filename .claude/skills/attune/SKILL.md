@@ -53,12 +53,25 @@ Additional shorthand syntax:
 - `suppress "..."` sets the suppress directive (replaces existing suppress list with single item)
 - Bare dimension names without a value are treated as amplify (set to 4)
 - Values are integers 1-5
+- `save:name` saves current state as a named profile (after applying any other changes in the same command)
+- `load:name` loads a saved profile, replacing mode, dimensions, focus, and suppress
+- `profiles` or `list` lists all saved profiles
+
+**Profile operations:**
+- Profiles are stored in `.claude/supra/profiles/{name}.yaml`
+- `save:` runs AFTER other shorthand changes, so `/attune sprint, save:sprint-default` first applies sprint mode, then saves the result
+- `load:` runs BEFORE other shorthand changes, so `/attune load:training, speed 5` loads the training profile then overrides speed
+- Use `supra_reader.save_profile()`, `supra_reader.load_profile()`, and `supra_reader.list_profiles()` from `.claude/hooks/supra_reader.py`
 
 **Examples:**
 - `/attune speed 5, tests 1` -- sets execution_speed=5, test_coverage=1
 - `/attune sprint` -- sets mode to sprint
 - `/attune focused, model 5, focus "prove hex2vec works"` -- mode=focused, model_architecture=5, focus set
 - `/attune explore` -- ambiguous: could mean mode=exploratory or exploration_vs_exploitation=4. Resolve: if no number follows, check if it matches a mode name first. `explore` is not a mode name, so it maps to the dimension at value 4. `exploratory` IS a mode name.
+- `/attune save:creative-evening` -- saves current state as "creative-evening"
+- `/attune load:training` -- restores the "training" profile
+- `/attune sprint, speed 5, tests 1, save:ship-it` -- applies sprint + overrides, saves as "ship-it"
+- `/attune profiles` -- lists all saved profiles
 
 If shorthand is provided, apply changes and jump to Step 6 (print summary). Do not ask questions.
 

@@ -1,0 +1,11 @@
+mode: exploratory
+dimensions:
+  execution_speed: 1
+  exploration_vs_exploitation: 5
+  code_quality: 3
+  test_coverage: 2
+  spatial_correctness: 4
+  model_architecture: 5
+focus: []
+suppress: []
+saved_at: '2026-03-06T17:27:37.558676+00:00'

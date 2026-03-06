@@ -1,0 +1,11 @@
+mode: sprint
+dimensions:
+  execution_speed: 5
+  exploration_vs_exploitation: 1
+  code_quality: 2
+  test_coverage: 1
+  spatial_correctness: 3
+  model_architecture: 2
+focus: []
+suppress: []
+saved_at: '2026-03-06T17:27:37.559748+00:00'

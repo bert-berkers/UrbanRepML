@@ -1,0 +1,12 @@
+mode: focused
+dimensions:
+  execution_speed: 4
+  exploration_vs_exploitation: 2
+  code_quality: 3
+  test_coverage: 2
+  spatial_correctness: 3
+  model_architecture: 5
+focus: []
+suppress:
+- cleanup tasks
+saved_at: '2026-03-06T17:27:37.557553+00:00'

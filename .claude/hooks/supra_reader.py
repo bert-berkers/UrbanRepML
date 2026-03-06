@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shared library for reading/writing human characteristic states (supra layer)."""
 import os, re, sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 try:
@@ -78,7 +78,11 @@ def _staleness(last_attuned) -> str:
     if not last_attuned:
         return "never (stale -- consider running /attune)"
     try:
-        age = datetime.now() - datetime.fromisoformat(str(last_attuned))
+        parsed = datetime.fromisoformat(str(last_attuned))
+        # Normalise to UTC-aware so naive/aware subtraction never raises TypeError
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        age = datetime.now(tz=timezone.utc) - parsed
         if age < timedelta(hours=24):
             return f"{last_attuned} (fresh)"
         return f"{last_attuned} (stale -- {age.days}d ago, consider /attune)"
@@ -141,6 +145,51 @@ def format_for_agent(states: dict, schema: dict, agent_type: str) -> str:
     if suppress:
         lines.append(f"Suppress: {', '.join(f'\"{s}\"' for s in suppress)}")
     return "\n".join(lines)
+
+# -- Named profiles ----------------------------------------------------------
+
+PROFILES_DIR = SUPRA_DIR / "profiles"
+
+
+def list_profiles() -> list[str]:
+    """Return sorted list of saved profile names."""
+    if not PROFILES_DIR.is_dir():
+        return []
+    return sorted(p.stem for p in PROFILES_DIR.glob("*.yaml"))
+
+
+def save_profile(name: str, states: dict) -> bool:
+    """Save current states as a named profile. Returns True on success."""
+    if yaml is None:
+        return False
+    try:
+        PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+        snapshot = {
+            "mode": states.get("mode", "exploratory"),
+            "dimensions": dict(states.get("dimensions", {})),
+            "focus": list(states.get("focus", [])),
+            "suppress": list(states.get("suppress", [])),
+            "saved_at": datetime.now(tz=timezone.utc).isoformat(),
+        }
+        path = PROFILES_DIR / f"{name}.yaml"
+        tmp = path.with_suffix(".yaml.tmp")
+        tmp.write_text(
+            yaml.dump(snapshot, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        os.replace(str(tmp), str(path))
+        return True
+    except Exception as exc:
+        print(f"supra_reader: failed to save profile {name}: {exc}", file=sys.stderr)
+        return False
+
+
+def load_profile(name: str) -> dict | None:
+    """Load a named profile. Returns states dict or None if not found."""
+    path = PROFILES_DIR / f"{name}.yaml"
+    data = _read_yaml(path)
+    return data if data else None
+
 
 # -- Dimension recommendation ------------------------------------------------
 
