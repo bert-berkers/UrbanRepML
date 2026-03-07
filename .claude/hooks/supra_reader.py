@@ -13,6 +13,8 @@ except ImportError:
 SUPRA_DIR = Path(__file__).resolve().parents[1] / "supra"
 STATES_PATH = SUPRA_DIR / "characteristic_states.yaml"
 SCHEMA_PATH = SUPRA_DIR / "schema.yaml"
+SESSIONS_DIR = SUPRA_DIR / "sessions"
+COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
 LEVEL_LABELS = {1: "SUPPRESS", 2: "LOW", 3: "NEUTRAL", 4: "HIGH", 5: "AMPLIFY"}
 
 # -- Core I/O ---------------------------------------------------------------
@@ -56,6 +58,61 @@ def write_states(states: dict) -> bool:
         except Exception:
             pass
         return False
+
+# -- Session-scoped states ---------------------------------------------------
+
+def _current_session_id() -> str | None:
+    """Read the current session ID from the coordinators directory."""
+    sid_path = COORDINATORS_DIR / ".current_session_id"
+    if sid_path.is_file():
+        try:
+            return sid_path.read_text(encoding="utf-8").strip() or None
+        except Exception:
+            return None
+    return None
+
+
+def _session_states_path(session_id: str) -> Path:
+    return SESSIONS_DIR / f"{session_id}.yaml"
+
+
+def read_session_states(session_id: str | None = None) -> dict:
+    """Read session-scoped states, falling back to global characteristic_states.yaml."""
+    if session_id is None:
+        session_id = _current_session_id()
+    if session_id:
+        session_data = _read_yaml(_session_states_path(session_id))
+        if session_data:
+            return session_data
+    return read_states()
+
+
+def write_session_states(states: dict, session_id: str | None = None) -> bool:
+    """Write states to session-scoped file. Returns True on success."""
+    if yaml is None:
+        return False
+    if session_id is None:
+        session_id = _current_session_id()
+    if not session_id:
+        return write_states(states)
+    try:
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        path = _session_states_path(session_id)
+        tmp = path.with_suffix(".yaml.tmp")
+        tmp.write_text(
+            yaml.dump(states, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        os.replace(str(tmp), str(path))
+        return True
+    except Exception as exc:
+        print(f"supra_reader: failed to write session states for {session_id}: {exc}", file=sys.stderr)
+        try:
+            tmp.unlink(missing_ok=True)  # type: ignore[possibly-undefined]
+        except Exception:
+            pass
+        return False
+
 
 # -- Mode bias application ---------------------------------------------------
 

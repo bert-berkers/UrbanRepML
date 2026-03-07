@@ -270,7 +270,7 @@ def main() -> None:
         if _hooks_dir not in sys.path:
             sys.path.insert(0, _hooks_dir)
         import supra_reader
-        supra_states = supra_reader.read_states()
+        supra_states = supra_reader.read_session_states()
         schema = supra_reader.read_schema()
         if supra_states and schema:
             landscape = supra_reader.format_for_coordinator(supra_states, schema)

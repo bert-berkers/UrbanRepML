@@ -319,6 +319,8 @@ config.local.yaml
 .claude/settings.local.json
 .claude/scratchpad/
 .claude/coordinators/
+.claude/timers/
+.claude/supra/sessions/
 
 # ==========================================
 # Package Management

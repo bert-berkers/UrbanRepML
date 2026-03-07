@@ -3,7 +3,7 @@
 import json
 import re
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
@@ -265,7 +265,7 @@ def main() -> None:
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import supra_reader
-        supra_states = supra_reader.read_states()
+        supra_states = supra_reader.read_session_states()
         schema = supra_reader.read_schema()
         if supra_states and schema:
             agent_weights = supra_reader.format_for_agent(supra_states, schema, agent_type)
@@ -277,6 +277,18 @@ def main() -> None:
     # Inject unread coordinator messages (lateral awareness every wave)
     coord_messages = get_coordinator_messages()
     parts.extend(coord_messages)
+
+    # Inject mortality awareness (context window = lifespan)
+    try:
+        _hooks = str(Path(__file__).resolve().parent)
+        if _hooks not in sys.path:
+            sys.path.insert(0, _hooks)
+        import agent_timer
+        agent_id = datetime.now().strftime("%H%M%S")
+        timer = agent_timer.birth(agent_type, agent_id)
+        parts.append(agent_timer.format_mortality_context(timer))
+    except Exception as exc:
+        print(f"subagent-context: timer registration failed: {exc}", file=sys.stderr)
 
     context = "\n".join(parts)
 

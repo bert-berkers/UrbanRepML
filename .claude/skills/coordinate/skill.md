@@ -40,7 +40,7 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
 4. **Discover active plan**: Check if `$ARGUMENTS` references a plan file (e.g. `.claude/plans/foo.md`). If so, read it — this is your blueprint. If `$ARGUMENTS` is a task description without a plan file reference, check `.claude/plans/` for recent files (by modification time). If a plan with a wave structure exists, ask the user: "I found plan `{file}`. Should I follow it?"
 5. If a plan specifies waves: **follow them exactly**. Do not redesign the wave structure. The plan was written with full context that may have been lost to compaction.
 6. **Read session name** from `.claude/coordinators/.current_session_id` (written by SessionStart hook). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
-7. **Check supra states**: Read `.claude/supra/characteristic_states.yaml`. If `last_attuned` is null or >24 hours old, suggest to the user: "Your precision weights haven't been set recently. Run `/attune` to tune them, or I'll use defaults." Include the current mode in your OODA report.
+7. **Check supra states**: Read session-scoped states from `.claude/supra/sessions/{session_id}.yaml` first, falling back to `.claude/supra/characteristic_states.yaml` (global prior). If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/attune` to set your weights, or I'll use defaults."
 8. **Hello broadcast** -- write an `info` message to `"all"` via `coordinator_registry.write_message()`:
    ```
    HELLO {session_id}
@@ -61,33 +61,53 @@ For each work wave, follow these steps:
 
 #### 1. OBSERVE — gather state
 
-Quick things you do directly:
+**Wave 0 observation** (session start — do this once):
 - `git log --oneline -10` and `git status`
 - Invoke `/summarize-scratchpads` skill for multi-agent state across all scratchpads
-- Check coordinator messages from `.claude/coordinators/messages/` addressed to this session_id or "all". Surface relevant messages in the OODA report.
-- Update heartbeat via `coordinator_registry.update_heartbeat()` (the SubagentStop hook does this automatically per agent completion, but do it explicitly at OBSERVE for long gaps between waves).
-- Review the human's original task statement — are you still aligned with their intent, or has scope drifted?
+- Check coordinator messages from `.claude/coordinators/messages/` addressed to this session_id or "all"
+- Update heartbeat via `coordinator_registry.update_heartbeat()`
+- Read the ego's most recent forward-look for deferred P0 items
+
+**Between-wave observation** (after each work wave returns):
+- Read only the returning agents' scratchpads (not all scratchpads — save context)
+- Compare agent output against the acceptance criteria you specified in the delegation prompt
+- Check for new coordinator messages (lightweight: ls the messages dir, only read if new files)
+- Re-read the human's original task statement
 
 If you need deeper codebase understanding, delegate it (see agent landscape below).
 
-#### 2. ORIENT — print the OODA report
+#### 2. ORIENT — print the report
 
-After observation, print this to the user:
+Two formats depending on when in the session:
+
+**Wave 0 Report** (session start — printed once before first delegation plan):
 
 ```markdown
-## OODA Report
-
-**Session**: [session-name from .claude/coordinators/.current_session_id]
-**Mode**: [current supra mode from characteristic_states.yaml, e.g. "creative"]
-**State**: [1-2 sentence summary of where things stand]
-**Lateral**: [other active coordinators and their claims, messages sent/received this wave, or "no other coordinators active"]
-**Blocked**: [what's stuck and why, or "nothing"]
-**Drifting**: [what's off-track from the goal, or "nothing"]
-**Task goal**: [restate what the user wants in your own words]
-**Needs your call**: [decisions that require human input, or "nothing — proceeding as planned"]
+## Session: [name from .claude/coordinators/.current_session_id]
+**Goal**: [restate user task in own words]
+**Git**: [clean/dirty, unpushed commit count]
+**Lateral**: [other active coordinators and claims, or "solo"]
+**Deferred P0s**: [items from ego forward-look flagged 2+ sessions, with session count — or "none"]
+**Needs your call**: [decisions requiring human input, or "none"]
 ```
 
-This is mandatory. The user needs to see your understanding before you act.
+**Wave Results** (printed after each work wave returns):
+
+```markdown
+## Wave N Results
+**Delivered**: [1-2 lines per agent: what it returned vs what was asked]
+**Surprises**: [unexpected findings from agent scratchpads, or "none"]
+**Still on goal?**: [see protocol below]
+**Needs your call**: [human decisions, or "none — proceeding to Wave N+1: {description}"]
+```
+
+**"Still on goal?" protocol** — this field requires a gap statement, not just "yes":
+1. Quote or paraphrase the user's original task
+2. List what has been accomplished so far
+3. State what remains between accomplished and goal
+4. If the gap has grown (scope creep) or shifted (drift), say so
+
+Writing "Still on goal? Yes" without the gap statement is a protocol violation. The gap statement IS the check.
 
 #### 3. DECIDE — propose a wave-based delegation plan
 
@@ -161,12 +181,13 @@ This gate exists because ego flagged coordinator-as-implementer in 6/8 sessions.
 #### 5. LOOP — advance to next wave or close out
 
 After agents return:
-1. Print updated `## OODA Report`
-2. If more work waves remain: present results summary and ask "Wave N+1 does [X]. Continue, adjust, or pivot?" — give the human enough context to make a real decision, not just rubber-stamp
-3. If work is complete: **proceed to Final Wave**
+1. Print `## Wave N Results` (see ORIENT format above)
+2. If more work waves remain and "Needs your call" has items: wait for human response
+3. If more work waves remain and "Needs your call" is empty: apply gating policy below
+4. If work is complete: **proceed to Final Wave**
 
 **Gating policy** (plan-dependent):
-- Following a pre-approved plan file → auto-proceed through waves when "Needs your call: nothing". The human already approved the structure.
+- Following a pre-approved plan file → auto-proceed through waves when "Needs your call: none". The human already approved the structure.
 - Ad-hoc task (no plan file) → always pause at wave transitions for human confirmation. The human is actively steering.
 
 ### QAQC Response Protocol

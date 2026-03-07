@@ -17,9 +17,12 @@ $ARGUMENTS
 
 ### Step 1: Read Current State
 
-Read these two files:
-- `.claude/supra/characteristic_states.yaml` -- current dimension values, mode, focus/suppress
-- `.claude/supra/schema.yaml` -- dimension definitions, groups, mode biases, agent relevance
+Read session ID from `.claude/coordinators/.current_session_id`. Then read states:
+1. Try `.claude/supra/sessions/{session_id}.yaml` (session-scoped, takes priority)
+2. Fall back to `.claude/supra/characteristic_states.yaml` (global default/prior)
+3. Read `.claude/supra/schema.yaml` for dimension definitions, groups, mode biases, agent relevance
+
+The global file is the prior — it provides defaults for sessions that haven't attuned yet. Your attunement writes session-scoped only, so parallel sessions with different goals don't overwrite each other.
 
 ### Step 2: Show Current Landscape
 
@@ -188,7 +191,7 @@ Based on user answers (from questionnaire or shorthand):
 5. **Focus/suppress**: Replace the lists with the user's selections. If user said "skip", leave unchanged.
 6. **Metadata**: Set `last_attuned` to current ISO timestamp, `last_attuned_by` to the session name (read from `.claude/coordinators/.current_session_id` if it exists, otherwise use "manual")
 
-Write states back using the same YAML structure as `characteristic_states.yaml`. The file format is:
+Write states to the **session-scoped file** at `.claude/supra/sessions/{session_id}.yaml` using `supra_reader.write_session_states()`. Do NOT write to the global `characteristic_states.yaml` — that file is the prior/default for sessions that haven't attuned. The file format is:
 ```yaml
 mode: {mode}
 dimensions:
@@ -200,6 +203,8 @@ suppress: [{items}]
 last_attuned: "{ISO timestamp}"
 last_attuned_by: "{session id}"
 ```
+
+If no session ID is available (e.g. running outside coordinator mode), fall back to writing the global file.
 
 If adding new dimensions to `schema.yaml`, preserve the existing structure and append the new dimension under the appropriate group.
 
