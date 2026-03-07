@@ -6,7 +6,7 @@ Processes OpenStreetMap road network data into H3 hexagon embeddings using SRAI'
 
 import logging
 from pathlib import Path
-from typing import Dict, Any, Union
+from typing import Dict, Any, Optional, Union
 import warnings
 
 import pandas as pd
@@ -63,6 +63,15 @@ class RoadsProcessor(ModalityProcessor):
 
         # Data configuration
         self.data_source = config.get('data_source', 'osm_online')
+
+        # Guard rail: Overpass (osm_online) returns current data, not historical
+        if self.data_source == 'osm_online' and self.year != 'latest':
+            raise ValueError(
+                f"data_source='osm_online' (Overpass API) returns current OSM data, "
+                f"not a historical snapshot. Cannot use year={self.year!r}. "
+                f"Either set year='latest' or use data_source='pbf' with a "
+                f"date-specific PBF file for historical data."
+            )
         if config.get('pbf_path'):
             self.pbf_path = Path(config['pbf_path'])
         elif self.data_source == 'pbf':
@@ -131,7 +140,7 @@ class RoadsProcessor(ModalityProcessor):
 
     def highway2vec(self, roads_gdf: gpd.GeoDataFrame, area_gdf_or_regions: gpd.GeoDataFrame,
                    h3_resolution: int, study_area_name: str = "unnamed",
-                   year: int = 2022) -> pd.DataFrame:
+                   year: Union[int, str] = 2022) -> pd.DataFrame:
         """Train Highway2Vec model and generate road network embeddings using GPU."""
         if not HIGHWAY2VEC_AVAILABLE:
             raise RuntimeError(
@@ -327,7 +336,7 @@ class RoadsProcessor(ModalityProcessor):
     
     def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame,
                                joint_gdf: gpd.GeoDataFrame, h3_resolution: int,
-                               study_area_name: str, year: int = 2022):
+                               study_area_name: str, year: Union[int, str] = 2022):
         """Save intermediate SRAI data for debugging and analysis.
 
         Args:

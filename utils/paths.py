@@ -12,6 +12,7 @@ import json
 import re
 import subprocess
 from datetime import date, datetime
+from typing import Union
 from pathlib import Path
 
 
@@ -47,7 +48,7 @@ class StudyAreaPaths:
         self,
         modality: str,
         resolution: int,
-        year: int = 2022,
+        year: Union[int, str] = 2022,
         sub_embedder: "str | None" = None,
     ) -> Path:
         """Parquet file for full-dimensional unimodal embeddings.
@@ -55,7 +56,8 @@ class StudyAreaPaths:
         Args:
             modality: Modality name (e.g. ``"poi"``, ``"alphaearth"``).
             resolution: H3 resolution integer.
-            year: Data year (default ``2022``).
+            year: Data year (default ``2022``).  Can be an integer (e.g. ``2022``)
+                or a string (e.g. ``"latest"``) for Overpass-sourced data.
             sub_embedder: Optional sub-embedder name.  When provided, the file
                 is placed in a subdirectory of the modality's stage1 dir.
                 Example: ``sub_embedder="hex2vec"`` yields

@@ -136,6 +136,16 @@ class POIProcessor(ModalityProcessor):
 
         # Data configuration
         self.data_source = config.get('data_source', 'osm_online')
+
+        # Guard rail: Overpass (osm_online) returns current data, not historical
+        if self.data_source == 'osm_online' and self.year != 'latest':
+            raise ValueError(
+                f"data_source='osm_online' (Overpass API) returns current OSM data, "
+                f"not a historical snapshot. Cannot use year={self.year!r}. "
+                f"Either set year='latest' or use data_source='pbf' with a "
+                f"date-specific PBF file for historical data."
+            )
+
         if config.get('pbf_path'):
             self.pbf_path = Path(config['pbf_path'])
         elif self.data_source == 'pbf':

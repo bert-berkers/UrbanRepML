@@ -131,9 +131,10 @@ def main():
         ),
     )
     parser.add_argument(
-        "--year", type=int, default=None,
-        help="Data year for output and intermediate filenames (default: 2022, "
-             "or auto-derived from --osm-date if provided)",
+        "--year", default=None,
+        help="Data year for output and intermediate filenames. Use 'latest' for "
+             "Overpass/osm_online data (default), or an integer year (e.g. 2022) "
+             "for PBF-sourced historical data. Auto-derived from --osm-date if provided.",
     )
     parser.add_argument(
         "--save-intermediate", action="store_true",
@@ -174,20 +175,25 @@ def main():
 
     args = parser.parse_args()
 
-    # Resolve year: explicit --year > derived from --osm-date > default 2022
-    if args.year is None:
-        if args.osm_date and args.osm_date != "latest":
-            try:
-                args.year = int(args.osm_date.split("-")[0])
-                logger.info(f"Auto-derived --year={args.year} from --osm-date={args.osm_date}")
-            except (ValueError, IndexError):
-                args.year = 2022
-                logger.warning(
-                    f"Could not parse year from --osm-date={args.osm_date!r}, "
-                    f"falling back to --year=2022"
-                )
-        else:
-            args.year = 2022
+    # Resolve year: explicit --year > derived from --osm-date > default 'latest'
+    if args.year is not None:
+        # Try to parse as int if it looks like a number
+        try:
+            args.year = int(args.year)
+        except (ValueError, TypeError):
+            pass  # Keep as string (e.g. 'latest')
+    elif args.osm_date and args.osm_date != "latest":
+        try:
+            args.year = int(args.osm_date.split("-")[0])
+            logger.info(f"Auto-derived --year={args.year} from --osm-date={args.osm_date}")
+        except (ValueError, IndexError):
+            args.year = "latest"
+            logger.warning(
+                f"Could not parse year from --osm-date={args.osm_date!r}, "
+                f"falling back to --year='latest'"
+            )
+    else:
+        args.year = "latest"
 
     # Build config for POIProcessor
     #
