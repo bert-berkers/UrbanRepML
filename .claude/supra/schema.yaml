@@ -76,6 +76,17 @@ dimensions:
       stage3-analyst: 0.6
       spec-writer: 0.7
 
+  urgency:
+    description: "How aggressively to prioritize long-deferred items and housekeeping"
+    group: execution
+    default: 3
+    low_label: "Let it ride"
+    high_label: "Clear the backlog now"
+    agent_relevance:
+      devops: 1.0
+      coordinator: 0.8
+      qaqc: 0.6
+
 modes:
   exploratory:
     description: "Open-ended, creative, follow interesting threads"

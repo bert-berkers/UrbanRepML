@@ -244,8 +244,49 @@ def perform_minibatch_clustering(
 
 
 def add_coordinate_grid_and_labels(ax, bounds, target_crs: str):
-    """Add coordinate grid with proper lat/lon labels."""
-    if target_crs == 'EPSG:3857':
+    """Add coordinate grid with proper labels for the target CRS.
+
+    Supports EPSG:3857 (Web Mercator) and EPSG:28992 (RD New / Amersfoort).
+    """
+    if target_crs == 'EPSG:28992':
+        # RD New (Amersfoort) grid — 50 km step, labels as RD coordinate values
+        step = 50_000
+        x_grid = np.arange(
+            np.floor(bounds[0] / step) * step,
+            np.ceil(bounds[2] / step) * step + step,
+            step,
+        )
+        y_grid = np.arange(
+            np.floor(bounds[1] / step) * step,
+            np.ceil(bounds[3] / step) * step + step,
+            step,
+        )
+
+        for x in x_grid:
+            if bounds[0] <= x <= bounds[2]:
+                ax.axvline(x, color='grey', alpha=0.3, linewidth=0.5, zorder=10)
+        for y in y_grid:
+            if bounds[1] <= y <= bounds[3]:
+                ax.axhline(y, color='grey', alpha=0.3, linewidth=0.5, zorder=10)
+
+        for x in x_grid:
+            if bounds[0] <= x <= bounds[2]:
+                ax.text(
+                    x, bounds[1] - (bounds[3] - bounds[1]) * 0.015,
+                    f'{x:.0f}',
+                    ha='center', va='top', fontsize=7, color='#555555',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7),
+                )
+        for y in y_grid:
+            if bounds[1] <= y <= bounds[3]:
+                ax.text(
+                    bounds[0] - (bounds[2] - bounds[0]) * 0.01, y,
+                    f'{y:.0f}',
+                    ha='right', va='center', fontsize=7, color='#555555',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7),
+                )
+
+    elif target_crs == 'EPSG:3857':
         transformer_to_latlon = Transformer.from_crs("epsg:3857", "epsg:4326", always_xy=True)
         lon_min, lat_min = transformer_to_latlon.transform(bounds[0], bounds[1])
         lon_max, lat_max = transformer_to_latlon.transform(bounds[2], bounds[3])
@@ -383,7 +424,7 @@ def create_cluster_visualization(
         spine.set_visible(False)
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
 
     print(f"  Saved: {output_path.name}")

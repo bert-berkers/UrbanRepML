@@ -92,6 +92,23 @@ def main() -> None:
                 file=sys.stderr,
             )
 
+        # Record agent death in timer registry
+        try:
+            _hooks = str(Path(__file__).resolve().parent)
+            if _hooks not in sys.path:
+                sys.path.insert(0, _hooks)
+            import agent_timer
+            obituary = agent_timer.death(agent_type)
+            if obituary:
+                lived = obituary.get("lived_min", "?")
+                tokens = obituary.get("estimated_tokens_used", "?")
+                print(
+                    f"SubagentStop: {agent_type} died after {lived}m (~{tokens} tokens)",
+                    file=sys.stderr,
+                )
+        except Exception as exc:
+            print(f"SubagentStop: timer death failed: {exc}", file=sys.stderr)
+
         print(
             f"SubagentStop: {agent_type} wrote scratchpad ({len(non_empty)} lines), allowing",
             file=sys.stderr,

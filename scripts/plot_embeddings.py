@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Comprehensive EDA plots for stage1 unimodal embeddings.
 
-Generates ~7 exploratory plots per modality:
+Generates ~8 exploratory plots per modality:
   1. Dimension grid (4x3, first 12 dims) -- spatial rasterized maps
   2. Summary stats (mean + std across dims) -- per-hex aggregation maps
   3. PCA top-3 components (3-panel) -- spatial maps of PC1, PC2, PC3
@@ -10,16 +10,29 @@ Generates ~7 exploratory plots per modality:
   5. MiniBatchKMeans clusters (k=8, 12, 16) -- cluster maps
   6. Correlation heatmap -- seaborn heatmap (non-spatial)
   7. Coverage map -- binary rasterize of embedding presence
+  8. Leefbaarometer target distributions -- KDE+histogram per score (target only)
+
+Lifetime: durable
+Stage: 1 (data) + 3 (analysis/visualization)
 
 Usage:
-    # All modalities
+    # All modalities at res10 (default)
     python scripts/plot_embeddings.py --study-area netherlands
+
+    # All modalities at res9
+    python scripts/plot_embeddings.py --study-area netherlands --resolution 9
 
     # Single modality
     python scripts/plot_embeddings.py --study-area netherlands --modality poi
 
     # Specific sub-embedder
     python scripts/plot_embeddings.py --study-area netherlands --modality poi --sub-embedder hex2vec
+
+    # Leefbaarometer target only
+    python scripts/plot_embeddings.py --study-area netherlands --modality leefbaarometer --resolution 9
+
+    # Specify year override
+    python scripts/plot_embeddings.py --study-area netherlands --year 2022
 """
 
 import argparse
@@ -54,18 +67,27 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 DPI = 300
 RASTER_W = 2000
 RASTER_H = 2400
-RESOLUTION = 10
-YEAR = 2022
 
-# Modality registry: (modality_name, sub_embedder_or_None, display_name)
+# Modality registry: (modality_name, sub_embedder_or_None, display_name, year)
+# year: "2022" for AlphaEarth, "latest" for Overpass-sourced modalities
 MODALITY_REGISTRY = [
-    ("poi", None, "POI Count"),
-    ("poi", "hex2vec", "POI Hex2Vec"),
-    ("poi", "hex2vec_27feat", "POI Hex2Vec (27-feat)"),
-    ("poi", "geovex", "POI GeoVeX"),
-    ("roads", None, "Roads Highway2Vec"),
-    ("alphaearth", None, "AlphaEarth"),
+    ("poi", None, "POI Count", "latest"),
+    ("poi", "hex2vec", "POI Hex2Vec", "latest"),
+    ("poi", "hex2vec_27feat", "POI Hex2Vec (27-feat)", "2022"),
+    ("poi", "geovex", "POI GeoVeX", "latest"),
+    ("roads", None, "Roads Highway2Vec", "latest"),
+    ("alphaearth", None, "AlphaEarth", "2022"),
 ]
+
+# Leefbaarometer score display names
+TARGET_SCORE_NAMES = {
+    "lbm": "Overall Liveability",
+    "fys": "Physical Environment",
+    "onv": "Safety",
+    "soc": "Social Cohesion",
+    "vrz": "Amenities",
+    "won": "Housing",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +130,20 @@ def load_boundary(paths: StudyAreaPaths) -> gpd.GeoDataFrame:
 # ---------------------------------------------------------------------------
 
 
+def _stamp_pixels(image, py, px, rgb, stamp, height, width):
+    """Write RGB values to image with a square stamp of given radius."""
+    if stamp <= 1:
+        image[py, px, :3] = rgb
+        image[py, px, 3] = 1.0
+    else:
+        for dy in range(-stamp + 1, stamp):
+            for dx in range(-stamp + 1, stamp):
+                sy = np.clip(py + dy, 0, height - 1)
+                sx = np.clip(px + dx, 0, width - 1)
+                image[sy, sx, :3] = rgb
+                image[sy, sx, 3] = 1.0
+
+
 def rasterize_continuous(
     cx: np.ndarray,
     cy: np.ndarray,
@@ -118,6 +154,7 @@ def rasterize_continuous(
     cmap: str = "viridis",
     vmin: float | None = None,
     vmax: float | None = None,
+    stamp: int = 1,
 ) -> np.ndarray:
     """Rasterize continuous values to an RGBA image.
 
@@ -128,6 +165,7 @@ def rasterize_continuous(
         width, height: output image dimensions.
         cmap: matplotlib colormap name.
         vmin, vmax: value range for colormap normalization.
+        stamp: pixel radius per point (1=single pixel, 2+=fills gaps at coarser res).
 
     Returns:
         (height, width, 4) RGBA float32 array with white background.
@@ -154,8 +192,7 @@ def rasterize_continuous(
     rgb = colormap_obj(norm(val_m))[:, :3].astype(np.float32)
 
     image = np.ones((height, width, 4), dtype=np.float32)  # white bg
-    image[py, px, :3] = rgb
-    image[py, px, 3] = 1.0
+    _stamp_pixels(image, py, px, rgb, stamp, height, width)
     return image
 
 
@@ -166,6 +203,7 @@ def rasterize_rgb(
     extent: tuple,
     width: int = RASTER_W,
     height: int = RASTER_H,
+    stamp: int = 1,
 ) -> np.ndarray:
     """Rasterize pre-computed RGB values to an RGBA image.
 
@@ -176,6 +214,7 @@ def rasterize_rgb(
         rgb_array: (N, 3) float array with R, G, B in [0, 1].
         extent: (minx, miny, maxx, maxy) in EPSG:28992.
         width, height: output image dimensions.
+        stamp: pixel radius per point.
 
     Returns:
         (height, width, 4) RGBA float32 array with white background.
@@ -195,8 +234,7 @@ def rasterize_rgb(
     np.clip(py, 0, height - 1, out=py)
 
     image = np.ones((height, width, 4), dtype=np.float32)
-    image[py, px, :3] = rgb_masked
-    image[py, px, 3] = 1.0
+    _stamp_pixels(image, py, px, rgb_masked, stamp, height, width)
     return image
 
 
@@ -207,6 +245,7 @@ def rasterize_binary(
     width: int = RASTER_W,
     height: int = RASTER_H,
     color: tuple = (0.2, 0.5, 0.8),
+    stamp: int = 1,
 ) -> np.ndarray:
     """Rasterize binary presence to an RGBA image.
 
@@ -215,6 +254,7 @@ def rasterize_binary(
         extent: (minx, miny, maxx, maxy) in EPSG:28992.
         width, height: output image dimensions.
         color: RGB tuple for presence pixels.
+        stamp: pixel radius per point.
 
     Returns:
         (height, width, 4) RGBA float32 array with white background.
@@ -228,11 +268,10 @@ def rasterize_binary(
     np.clip(px, 0, width - 1, out=px)
     np.clip(py, 0, height - 1, out=py)
 
+    n = len(px)
+    rgb = np.broadcast_to(np.array(color, dtype=np.float32), (n, 3)).copy()
     image = np.ones((height, width, 4), dtype=np.float32)
-    image[py, px, 0] = color[0]
-    image[py, px, 1] = color[1]
-    image[py, px, 2] = color[2]
-    image[py, px, 3] = 1.0
+    _stamp_pixels(image, py, px, rgb, stamp, height, width)
     return image
 
 
@@ -245,6 +284,7 @@ def rasterize_categorical(
     width: int = RASTER_W,
     height: int = RASTER_H,
     cmap: str = "tab20",
+    stamp: int = 1,
 ) -> np.ndarray:
     """Rasterize integer cluster labels to an RGBA image.
 
@@ -255,6 +295,7 @@ def rasterize_categorical(
         n_clusters: total number of clusters (for colormap scaling).
         width, height: output image dimensions.
         cmap: matplotlib colormap name.
+        stamp: pixel radius per point (1=single pixel, 2+=fills gaps at coarser res).
 
     Returns:
         (height, width, 4) RGBA float32 array with white background.
@@ -273,8 +314,7 @@ def rasterize_categorical(
     rgb = colormap_obj(norm_vals)[:, :3].astype(np.float32)
 
     image = np.ones((height, width, 4), dtype=np.float32)
-    image[py, px, :3] = rgb
-    image[py, px, 3] = 1.0
+    _stamp_pixels(image, py, px, rgb, stamp, height, width)
     return image
 
 
@@ -291,8 +331,44 @@ def _clean_map_axes(ax):
     ax.set_ylabel("")
 
 
+def _add_rd_grid(ax, extent):
+    """Add RD New (EPSG:28992) coordinate grid lines and labels."""
+    minx, miny, maxx, maxy = extent
+    step = 50_000  # 50 km grid
+    x_grid = np.arange(
+        np.floor(minx / step) * step,
+        np.ceil(maxx / step) * step + step,
+        step,
+    )
+    y_grid = np.arange(
+        np.floor(miny / step) * step,
+        np.ceil(maxy / step) * step + step,
+        step,
+    )
+    for x in x_grid:
+        if minx <= x <= maxx:
+            ax.axvline(x, color='grey', alpha=0.3, linewidth=0.5, zorder=10)
+    for y in y_grid:
+        if miny <= y <= maxy:
+            ax.axhline(y, color='grey', alpha=0.3, linewidth=0.5, zorder=10)
+    for x in x_grid:
+        if minx <= x <= maxx:
+            ax.text(
+                x, miny - (maxy - miny) * 0.015, f'{x:.0f}',
+                ha='center', va='top', fontsize=7, color='#555555',
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7),
+            )
+    for y in y_grid:
+        if miny <= y <= maxy:
+            ax.text(
+                minx - (maxx - minx) * 0.01, y, f'{y:.0f}',
+                ha='right', va='center', fontsize=7, color='#555555',
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7),
+            )
+
+
 def plot_spatial_map(ax, image, extent, boundary_gdf, title=""):
-    """Render a rasterized image on an axes with boundary underlay."""
+    """Render a rasterized image on an axes with boundary underlay and RD grid."""
     if boundary_gdf is not None:
         boundary_gdf.plot(
             ax=ax, facecolor="#f0f0f0", edgecolor="#cccccc", linewidth=0.5,
@@ -306,6 +382,7 @@ def plot_spatial_map(ax, image, extent, boundary_gdf, title=""):
         interpolation="nearest",
         zorder=2,
     )
+    _add_rd_grid(ax, extent)
     ax.set_xlim(minx, maxx)
     ax.set_ylim(miny, maxy)
     _clean_map_axes(ax)
@@ -359,9 +436,15 @@ def detect_embedding_columns(df: pd.DataFrame) -> list[str]:
     return cols
 
 
-def load_embeddings(paths: StudyAreaPaths, modality: str, sub_embedder: str | None) -> pd.DataFrame | None:
+def load_embeddings(
+    paths: StudyAreaPaths,
+    modality: str,
+    resolution: int,
+    year: str,
+    sub_embedder: str | None,
+) -> pd.DataFrame | None:
     """Load embedding parquet file. Returns None if file does not exist."""
-    emb_path = paths.embedding_file(modality, RESOLUTION, YEAR, sub_embedder=sub_embedder)
+    emb_path = paths.embedding_file(modality, resolution, year, sub_embedder=sub_embedder)
 
     if not emb_path.exists():
         logger.warning("Embedding file not found, skipping: %s", emb_path)
@@ -370,11 +453,15 @@ def load_embeddings(paths: StudyAreaPaths, modality: str, sub_embedder: str | No
     logger.info("Loading embeddings: %s", emb_path)
     df = pd.read_parquet(emb_path)
 
-    # Ensure region_id is the index
+    # Handle AlphaEarth h3_index inconsistency: it uses h3_index instead of region_id
     if df.index.name != "region_id":
-        if "region_id" in df.columns:
+        if "h3_index" in df.columns:
+            df = df.set_index("h3_index")
+            df.index.name = "region_id"
+        elif "region_id" in df.columns:
             df = df.set_index("region_id")
-        df.index.name = "region_id"
+        else:
+            df.index.name = "region_id"
 
     emb_cols = detect_embedding_columns(df)
     if not emb_cols:
@@ -385,12 +472,21 @@ def load_embeddings(paths: StudyAreaPaths, modality: str, sub_embedder: str | No
     return df[emb_cols]
 
 
-def get_plot_dir(paths: StudyAreaPaths, modality: str, sub_embedder: str | None) -> Path:
-    """Get the output plot directory next to the embedding data."""
+def get_plot_dir(
+    paths: StudyAreaPaths,
+    modality: str,
+    sub_embedder: str | None,
+    resolution: int,
+) -> Path:
+    """Get the output plot directory next to the embedding data.
+
+    Plots go to ``{modality}/plots/res{resolution}/`` to keep different
+    resolutions separated.
+    """
     base = paths.stage1(modality)
     if sub_embedder:
         base = base / sub_embedder
-    plot_dir = base / "plots"
+    plot_dir = base / "plots" / f"res{resolution}"
     plot_dir.mkdir(parents=True, exist_ok=True)
     return plot_dir
 
@@ -408,6 +504,8 @@ def plot_dim_grid(
     boundary_gdf,
     out_dir: Path,
     display_name: str,
+    resolution: int,
+    stamp: int = 1,
 ):
     """4x3 grid showing the first 12 embedding dimensions as spatial maps."""
     cols = list(emb_df.columns)
@@ -422,14 +520,14 @@ def plot_dim_grid(
         if i < n_show:
             col = cols[i]
             vals = emb_df[col].values.astype(np.float32)
-            image = rasterize_continuous(cx, cy, vals, extent, cmap="viridis")
+            image = rasterize_continuous(cx, cy, vals, extent, cmap="viridis", stamp=stamp)
             plot_spatial_map(ax, image, extent, boundary_gdf, title=col)
         else:
             ax.set_visible(False)
 
     fig.suptitle(
         f"{display_name} -- First {n_show} Embedding Dimensions\n"
-        f"H3 res{RESOLUTION} | {len(emb_df):,} hexagons | viridis [p2, p98]",
+        f"H3 res{resolution} | {len(emb_df):,} hexagons | viridis [p2, p98]",
         fontsize=14, fontweight="bold", y=0.995,
     )
     plt.tight_layout(rect=[0, 0, 1, 0.98])
@@ -452,6 +550,8 @@ def plot_summary_stats(
     boundary_gdf,
     out_dir: Path,
     display_name: str,
+    resolution: int,
+    stamp: int = 1,
 ):
     """Two-panel map: per-hex mean and std across all embedding dims."""
     vals = emb_df.values.astype(np.float32)
@@ -462,20 +562,20 @@ def plot_summary_stats(
     fig.set_facecolor("white")
 
     # Mean map
-    img_mean = rasterize_continuous(cx, cy, hex_mean, extent, cmap="viridis")
+    img_mean = rasterize_continuous(cx, cy, hex_mean, extent, cmap="viridis", stamp=stamp)
     plot_spatial_map(axes[0], img_mean, extent, boundary_gdf, title="Mean across dims")
     v2, v98 = np.nanpercentile(hex_mean, [2, 98])
     _add_colorbar(fig, axes[0], "viridis", v2, v98, label="Mean")
 
     # Std map
-    img_std = rasterize_continuous(cx, cy, hex_std, extent, cmap="inferno")
+    img_std = rasterize_continuous(cx, cy, hex_std, extent, cmap="inferno", stamp=stamp)
     plot_spatial_map(axes[1], img_std, extent, boundary_gdf, title="Std across dims")
     v2, v98 = np.nanpercentile(hex_std, [2, 98])
     _add_colorbar(fig, axes[1], "inferno", v2, v98, label="Std dev")
 
     fig.suptitle(
         f"{display_name} -- Summary Statistics (Mean / Std)\n"
-        f"H3 res{RESOLUTION} | {len(emb_df):,} hexagons | {emb_df.shape[1]} dims",
+        f"H3 res{resolution} | {len(emb_df):,} hexagons | {emb_df.shape[1]} dims",
         fontsize=14, fontweight="bold", y=0.995,
     )
     plt.tight_layout(rect=[0, 0, 1, 0.97])
@@ -498,6 +598,8 @@ def plot_pca_top3(
     boundary_gdf,
     out_dir: Path,
     display_name: str,
+    resolution: int,
+    stamp: int = 1,
 ):
     """3-panel spatial map of PC1, PC2, PC3."""
     n_components = min(3, emb_df.shape[1])
@@ -510,7 +612,7 @@ def plot_pca_top3(
     for i in range(3):
         if i < n_components:
             vals = reduced[:, i]
-            image = rasterize_continuous(cx, cy, vals, extent, cmap="RdBu_r")
+            image = rasterize_continuous(cx, cy, vals, extent, cmap="RdBu_r", stamp=stamp)
             var_pct = pca.explained_variance_ratio_[i] * 100
             plot_spatial_map(
                 axes[i], image, extent, boundary_gdf,
@@ -524,7 +626,7 @@ def plot_pca_top3(
     total_var = sum(pca.explained_variance_ratio_[:n_components]) * 100
     fig.suptitle(
         f"{display_name} -- PCA Top-3 Components\n"
-        f"H3 res{RESOLUTION} | {len(emb_df):,} hexagons | "
+        f"H3 res{resolution} | {len(emb_df):,} hexagons | "
         f"Total variance: {total_var:.1f}%",
         fontsize=14, fontweight="bold", y=0.995,
     )
@@ -550,6 +652,8 @@ def plot_pca_rgb(
     boundary_gdf,
     out_dir: Path,
     display_name: str,
+    resolution: int,
+    stamp: int = 1,
     pca_result: tuple | None = None,
 ):
     """RGB composite map: PC1->R, PC2->G, PC3->B with p2/p98 normalization.
@@ -579,7 +683,7 @@ def plot_pca_rgb(
         rgb_array[:, ch] = normalized
 
     # Rasterize RGB
-    image = rasterize_rgb(cx, cy, rgb_array.astype(np.float32), extent)
+    image = rasterize_rgb(cx, cy, rgb_array.astype(np.float32), extent, stamp=stamp)
 
     fig, ax = plt.subplots(figsize=(12, 14), dpi=DPI)
     fig.set_facecolor("white")
@@ -612,7 +716,7 @@ def plot_pca_rgb(
     ax.set_title(
         f"{display_name} -- PCA RGB Composite\n"
         f"PC1->R, PC2->G, PC3->B | p2/p98 normalized\n"
-        f"H3 res{RESOLUTION} | {len(emb_df):,} hexagons | "
+        f"H3 res{resolution} | {len(emb_df):,} hexagons | "
         f"Total variance: {total_var:.1f}%",
         fontsize=12, fontweight="bold", pad=10,
     )
@@ -647,8 +751,10 @@ def plot_clusters(
     boundary_gdf,
     out_dir: Path,
     display_name: str,
+    resolution: int,
+    stamp: int = 1,
 ):
-    """Cluster maps for k=8, 12, 16 using MiniBatchKMeans."""
+    """Cluster maps for k=8, 12, 16 using rasterized centroid rendering."""
     k_list = [8, 12, 16]
     embeddings = emb_df.values.astype(np.float32)
 
@@ -667,12 +773,12 @@ def plot_clusters(
         fig, ax = plt.subplots(figsize=(12, 14), dpi=DPI)
         fig.set_facecolor("white")
 
-        image = rasterize_categorical(cx, cy, labels, extent, n_clusters=k, cmap="tab20")
+        image = rasterize_categorical(cx, cy, labels, extent, n_clusters=k, cmap="tab20", stamp=stamp)
         plot_spatial_map(ax, image, extent, boundary_gdf)
 
         ax.set_title(
             f"{display_name} -- MiniBatchKMeans k={k}\n"
-            f"H3 res{RESOLUTION} | {len(emb_df):,} hexagons",
+            f"H3 res{resolution} | {len(emb_df):,} hexagons",
             fontsize=12, fontweight="bold", pad=10,
         )
 
@@ -765,17 +871,19 @@ def plot_coverage(
     boundary_gdf,
     out_dir: Path,
     display_name: str,
+    resolution: int,
+    stamp: int = 1,
 ):
     """Binary map showing which hexagons have embedding data."""
     fig, ax = plt.subplots(figsize=(12, 14), dpi=DPI)
     fig.set_facecolor("white")
 
-    image = rasterize_binary(cx, cy, extent, color=(0.2, 0.5, 0.8))
+    image = rasterize_binary(cx, cy, extent, color=(0.2, 0.5, 0.8), stamp=stamp)
     plot_spatial_map(ax, image, extent, boundary_gdf)
 
     ax.set_title(
         f"{display_name} -- Coverage Map\n"
-        f"H3 res{RESOLUTION} | {len(emb_df):,} hexagons with embeddings",
+        f"H3 res{resolution} | {len(emb_df):,} hexagons with embeddings",
         fontsize=12, fontweight="bold", pad=10,
     )
 
@@ -784,6 +892,98 @@ def plot_coverage(
     fig.savefig(path, dpi=DPI, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     logger.info("  Saved: %s", path)
+
+
+# ---------------------------------------------------------------------------
+# Plot 8: Leefbaarometer target distributions
+# ---------------------------------------------------------------------------
+
+
+def plot_leefbaarometer_distributions(
+    paths: StudyAreaPaths,
+    resolution: int,
+    year: int = 2022,
+):
+    """Generate 2x3 grid of KDE + histogram for leefbaarometer scores.
+
+    Output goes to the target data directory (not embedding directory)
+    because this is TARGET data. Uses a warm color palette to visually
+    distinguish from embedding plots.
+    """
+    target_path = paths.target_file("leefbaarometer", resolution, year)
+
+    if not target_path.exists():
+        logger.warning("Leefbaarometer target not found, skipping: %s", target_path)
+        return
+
+    logger.info("Loading leefbaarometer target: %s", target_path)
+    df = pd.read_parquet(target_path)
+    if df.index.name != "region_id" and "region_id" in df.columns:
+        df = df.set_index("region_id")
+
+    score_cols = [c for c in TARGET_SCORE_NAMES.keys() if c in df.columns]
+    if not score_cols:
+        logger.warning("No score columns found in leefbaarometer target. Available: %s", list(df.columns))
+        return
+
+    n_hexagons = len(df)
+
+    # 2x3 grid
+    fig, axes = plt.subplots(2, 3, figsize=(16, 10))
+    axes = axes.flatten()
+
+    # Distinct warm palette for target data (vs cool blues/greens for embeddings)
+    target_colors = ["#d62728", "#ff7f0e", "#8c564b", "#e377c2", "#bcbd22", "#17becf"]
+
+    from scipy.stats import gaussian_kde
+
+    for i, col in enumerate(score_cols):
+        ax = axes[i]
+        vals = df[col].dropna().values
+        n_valid = len(vals)
+
+        ax.hist(vals, bins=80, density=True, alpha=0.5, color=target_colors[i], edgecolor="none")
+
+        # KDE overlay
+        try:
+            kde = gaussian_kde(vals)
+            x_range = np.linspace(vals.min(), vals.max(), 300)
+            ax.plot(x_range, kde(x_range), color=target_colors[i], linewidth=2)
+        except Exception:
+            pass
+
+        mean_val = np.mean(vals)
+        median_val = np.median(vals)
+        ax.axvline(mean_val, color="black", linestyle="--", linewidth=1.2, alpha=0.8)
+        ax.axvline(median_val, color="black", linestyle=":", linewidth=1.2, alpha=0.8)
+
+        full_name = TARGET_SCORE_NAMES.get(col, col)
+        ax.set_title(f"{full_name} ({col})", fontsize=11, fontweight="bold")
+        ax.annotate(
+            f"N={n_valid:,}\nmean={mean_val:.3f}\nmedian={median_val:.3f}\nstd={np.std(vals):.3f}",
+            xy=(0.97, 0.97), xycoords="axes fraction",
+            ha="right", va="top", fontsize=8,
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
+        )
+        ax.set_ylabel("Density" if i % 3 == 0 else "")
+
+    # Hide unused axes
+    for i in range(len(score_cols), len(axes)):
+        axes[i].set_visible(False)
+
+    fig.suptitle(
+        f"Leefbaarometer Target Distributions (Res {resolution}, {year})\n"
+        f"{n_hexagons:,} hexagons | -- mean  : median",
+        fontsize=14, fontweight="bold", y=1.02,
+    )
+
+    output_dir = paths.target("leefbaarometer") / "plots"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"res{resolution}_distributions.png"
+    plt.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    logger.info("  Saved: %s", output_path)
 
 
 # ---------------------------------------------------------------------------
@@ -796,6 +996,8 @@ def process_modality(
     modality: str,
     sub_embedder: str | None,
     display_name: str,
+    year: str,
+    resolution: int,
     boundary_gdf: gpd.GeoDataFrame | None,
 ):
     """Run all 7 plots for a single modality."""
@@ -804,46 +1006,49 @@ def process_modality(
     logger.info("=" * 60)
 
     # Load embeddings
-    emb_df = load_embeddings(paths, modality, sub_embedder)
+    emb_df = load_embeddings(paths, modality, resolution, year, sub_embedder)
     if emb_df is None:
         return
 
-    # Output directory
-    out_dir = get_plot_dir(paths, modality, sub_embedder)
+    # Output directory (resolution-specific subdirectory)
+    out_dir = get_plot_dir(paths, modality, sub_embedder, resolution)
     logger.info("  Output dir: %s", out_dir)
 
     # Get centroids via SpatialDB (single call, cached)
     db = SpatialDB.for_study_area(paths.study_area)
-    cx, cy = db.centroids(emb_df.index, resolution=RESOLUTION, crs=28992)
+    cx, cy = db.centroids(emb_df.index, resolution=resolution, crs=28992)
     logger.info("  Centroids loaded: %d points", len(cx))
 
     # Compute extent from boundary or centroids
     if boundary_gdf is not None:
         ext = boundary_gdf.total_bounds
     else:
-        ext = db.extent(emb_df.index, resolution=RESOLUTION, crs=28992)
+        ext = db.extent(emb_df.index, resolution=resolution, crs=28992)
     minx, miny, maxx, maxy = ext
     pad = (maxx - minx) * 0.03
     extent = (minx - pad, miny - pad, maxx + pad, maxy + pad)
 
+    # Stamp size: at coarser resolutions, each centroid paints more pixels to fill gaps
+    stamp = max(1, 11 - resolution)  # res10=1, res9=2, res8=3
+
     # Plot 1: Dimension grid
     logger.info("[1/7] Dimension grid...")
-    plot_dim_grid(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name)
+    plot_dim_grid(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
 
     # Plot 2: Summary stats
     logger.info("[2/7] Summary stats...")
-    plot_summary_stats(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name)
+    plot_summary_stats(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
 
     # Plot 3 & 4: PCA (share computation)
     logger.info("[3/7] PCA top-3 components...")
-    pca_result = plot_pca_top3(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name)
+    pca_result = plot_pca_top3(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
 
     logger.info("[4/7] PCA RGB composite...")
-    plot_pca_rgb(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, pca_result=pca_result)
+    plot_pca_rgb(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp, pca_result=pca_result)
 
     # Plot 5: Clusters
     logger.info("[5/7] MiniBatchKMeans clusters...")
-    plot_clusters(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name)
+    plot_clusters(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
 
     # Plot 6: Correlation heatmap
     logger.info("[6/7] Correlation heatmap...")
@@ -851,9 +1056,9 @@ def process_modality(
 
     # Plot 7: Coverage map
     logger.info("[7/7] Coverage map...")
-    plot_coverage(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name)
+    plot_coverage(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
 
-    logger.info("Completed %s: 7+ plots saved to %s", display_name, out_dir)
+    logger.info("Completed %s: 7 plots saved to %s", display_name, out_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -864,10 +1069,13 @@ def process_modality(
 def filter_modalities(
     modality: str | None,
     sub_embedder: str | None,
-) -> list[tuple[str, str | None, str]]:
-    """Filter MODALITY_REGISTRY based on CLI args."""
+) -> list[tuple[str, str | None, str, str]]:
+    """Filter MODALITY_REGISTRY based on CLI args.
+
+    Returns list of (modality, sub_embedder, display_name, year) tuples.
+    """
     result = []
-    for mod, sub, name in MODALITY_REGISTRY:
+    for mod, sub, name, year in MODALITY_REGISTRY:
         if modality and mod != modality:
             continue
         if sub_embedder is not None:
@@ -878,7 +1086,7 @@ def filter_modalities(
             # If only --modality given (no --sub-embedder), include
             # the base modality AND its sub-embedders
             pass
-        result.append((mod, sub, name))
+        result.append((mod, sub, name, year))
     return result
 
 
@@ -891,8 +1099,16 @@ def main():
         help="Study area name (default: netherlands)",
     )
     parser.add_argument(
+        "--resolution", type=int, default=10,
+        help="H3 resolution (default: 10)",
+    )
+    parser.add_argument(
+        "--year", default=None,
+        help="Data year override (e.g. 2022, latest). Default: auto per modality.",
+    )
+    parser.add_argument(
         "--modality", default=None,
-        help="Single modality to process (e.g. poi, roads). Default: all.",
+        help="Single modality to process (e.g. poi, roads, leefbaarometer). Default: all.",
     )
     parser.add_argument(
         "--sub-embedder", default=None,
@@ -908,6 +1124,15 @@ def main():
     )
 
     paths = StudyAreaPaths(args.study_area)
+    resolution = args.resolution
+
+    # Handle leefbaarometer-only mode
+    if args.modality == "leefbaarometer":
+        lbm_year = int(args.year) if args.year and args.year.isdigit() else 2022
+        logger.info("Generating leefbaarometer target distributions (res%d, year=%d)", resolution, lbm_year)
+        plot_leefbaarometer_distributions(paths, resolution, lbm_year)
+        logger.info("All done.")
+        return
 
     # Filter modalities
     modalities = filter_modalities(args.modality, args.sub_embedder)
@@ -919,19 +1144,27 @@ def main():
         sys.exit(1)
 
     logger.info(
-        "Study area: %s | Modalities to process: %d",
-        args.study_area, len(modalities),
+        "Study area: %s | Resolution: %d | Modalities to process: %d",
+        args.study_area, resolution, len(modalities),
     )
-    for mod, sub, name in modalities:
+    for mod, sub, name, year in modalities:
+        effective_year = args.year if args.year else year
         label = f"{mod}/{sub}" if sub else mod
-        logger.info("  - %s (%s)", label, name)
+        logger.info("  - %s (%s, year=%s)", label, name, effective_year)
 
     # Load boundary once (shared across all modalities)
     boundary_gdf = load_boundary(paths)
 
     # Process each modality
-    for mod, sub, name in modalities:
-        process_modality(paths, mod, sub, name, boundary_gdf)
+    for mod, sub, name, year in modalities:
+        effective_year = args.year if args.year else year
+        process_modality(paths, mod, sub, name, effective_year, resolution, boundary_gdf)
+
+    # Plot 8: Leefbaarometer distributions (when running all modalities)
+    if args.modality is None:
+        lbm_year = int(args.year) if args.year and args.year.isdigit() else 2022
+        logger.info("[8] Leefbaarometer target distributions...")
+        plot_leefbaarometer_distributions(paths, resolution, lbm_year)
 
     logger.info("All done.")
 
