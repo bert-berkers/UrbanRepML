@@ -208,6 +208,15 @@ class StudyAreaPaths:
             return self.osm_dir() / f"{self.study_area}-latest.osm.pbf"
         return self.osm_dir() / f"{self.study_area}-{date}.osm.pbf"
 
+    def neighbourhood_dir(self) -> Path:
+        """Directory for neighbourhood graph pickles (shared across modalities).
+
+        Layout::
+
+            data/study_areas/{area}/neighbourhood/
+        """
+        return self.root / "neighbourhood"
+
     def accessibility(self) -> Path:
         """Directory for accessibility graph artifacts."""
         return self.root / "accessibility"

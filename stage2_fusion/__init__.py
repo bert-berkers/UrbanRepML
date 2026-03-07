@@ -14,13 +14,9 @@ Import directly from submodules as needed.
 #   from stage2_fusion.data.study_area_loader import StudyAreaLoader
 
 __all__ = [
-    # Pipeline
-    'UrbanEmbeddingPipeline',
-
     # Models
     'ConeBatchingUNet', 'ConeBatchingUNetConfig',
     'FullAreaUNet',
-    'AccessibilityUNet',
 
     # Data
     'StudyAreaLoader',

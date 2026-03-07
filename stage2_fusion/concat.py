@@ -21,13 +21,45 @@ logger = logging.getLogger(__name__)
 
 
 def _load_modality(paths: StudyAreaPaths, modality: str, resolution: int, year: int) -> pd.DataFrame:
-    """Load a single modality embedding parquet and validate its index."""
+    """Load a single modality embedding parquet and normalize its index to ``region_id``.
+
+    Some stage-1 processors (e.g. AlphaEarth) write the H3 index under
+    ``h3_index`` instead of the canonical ``region_id``.  This function
+    normalizes any known variant so downstream joins always work on a
+    common index name.
+    """
     path = paths.embedding_file(modality, resolution, year)
     if not path.exists():
-        raise FileNotFoundError(f"Embedding file not found: {path}")
+        # Some modalities use "latest" instead of a numeric year
+        fallback = paths.embedding_file(modality, resolution, "latest")
+        if fallback.exists():
+            logger.info("  %s: year=%s not found, falling back to 'latest'", modality, year)
+            path = fallback
+        else:
+            raise FileNotFoundError(
+                f"Embedding file not found: {path} (also tried {fallback})"
+            )
     df = pd.read_parquet(path)
+
+    # --- Normalize index name to ``region_id`` ---
+    # Case 1: h3_index is a column (index is default RangeIndex)
+    if "h3_index" in df.columns and df.index.name != "region_id":
+        df = df.set_index("h3_index")
+        df.index.name = "region_id"
+    # Case 2: h3_index is the index name
+    elif df.index.name == "h3_index":
+        df.index.name = "region_id"
+
     if df.index.name != "region_id":
         raise ValueError(f"{modality}: expected index name 'region_id', got '{df.index.name}'")
+
+    # Drop metadata columns that are not embedding features
+    _META_COLS = {"pixel_count", "tile_count", "h3_resolution", "geometry"}
+    drop = [c for c in df.columns if c in _META_COLS]
+    if drop:
+        logger.info("  %s: dropping metadata columns %s", modality, drop)
+        df = df.drop(columns=drop)
+
     return df
 
 
