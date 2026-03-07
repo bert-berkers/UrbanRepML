@@ -1,0 +1,13 @@
+mode: focused
+dimensions:
+  execution_speed: 4
+  exploration_vs_exploitation: 2
+  code_quality: 3
+  test_coverage: 2
+  spatial_correctness: 3
+  model_architecture: 5
+focus:
+- hex2vec results review + next pipeline step
+suppress:
+- supra infrastructure
+saved_at: "2026-03-06T21:45:00Z"

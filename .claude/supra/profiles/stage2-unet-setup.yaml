@@ -15,4 +15,4 @@ suppress:
 - "supra infrastructure"
 - "highway2vec debugging"
 last_attuned: "2026-03-07T12:00:00Z"
-last_attuned_by: "profile:stage2-unet-setup"
+last_attuned_by: "manual"
