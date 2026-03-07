@@ -6,7 +6,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from typing import Dict, Tuple, Optional
-from datetime import datetime
 from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
@@ -144,17 +143,28 @@ class DecoderBlock(nn.Module):
         return F.normalize(out, p=2, dim=-1, eps=1e-8)
 
 class FullAreaUNet(nn.Module):
-    """Multi-resolution U-Net for urban representation learning."""
+    """Multi-resolution U-Net for urban representation learning.
+
+    Supports any 3-level resolution hierarchy (e.g. [10,9,8] or [9,8,7]).
+    Resolutions are ordered finest-to-coarsest internally.
+    """
     def __init__(
             self,
             feature_dims: Dict[str, int],
             hidden_dim: int = 128,
             output_dim: int = 32,
             num_convs: int = 4,
-            device: str = "cuda"
+            device: str = "cuda",
+            resolutions: Optional[list] = None
     ):
         super().__init__()
         self.device = device
+
+        # Resolution configuration: finest to coarsest
+        resolutions = resolutions or [10, 9, 8]
+        self.resolutions = sorted(resolutions, reverse=True)  # [finest, mid, coarsest]
+        assert len(self.resolutions) == 3, "FullAreaUNet requires exactly 3 resolution levels"
+        self.res_fine, self.res_mid, self.res_coarse = self.resolutions
 
         # Initial fusion
         self.fusion = ModalityFusion(feature_dims, hidden_dim)
@@ -172,12 +182,12 @@ class FullAreaUNet(nn.Module):
         self.dec2 = DecoderBlock(hidden_dim, num_convs)
         self.dec1 = DecoderBlock(hidden_dim, num_convs)
 
-        # Final projection to output dimension
+        # Final projection to output dimension (keyed by actual resolutions)
         self.output = nn.ModuleDict({
             str(res): nn.Sequential(
                 nn.Linear(hidden_dim, output_dim),
                 nn.LayerNorm(output_dim)
-            ) for res in [8, 9, 10]
+            ) for res in self.resolutions
         })
 
         # Reconstruction heads
@@ -208,37 +218,40 @@ class FullAreaUNet(nn.Module):
             embeddings: Learned embeddings per resolution
             reconstructed: Reconstructed features per modality
         """
+        # Resolution aliases for readability
+        rf, rm, rc = self.res_fine, self.res_mid, self.res_coarse
+
         # Initial fusion
         x = self.fusion(features_dict)
 
         # Encoder path (fine to coarse)
-        e1 = self.enc1(x, edge_indices[10], edge_weights[10])
-        e1_mapped = self.mapping_transform(e1, mappings[(10, 9)].t())
+        e1 = self.enc1(x, edge_indices[rf], edge_weights[rf])
+        e1_mapped = self.mapping_transform(e1, mappings[(rf, rm)].t())
 
-        e2 = self.enc2(e1_mapped, edge_indices[9], edge_weights[9])
-        e2_mapped = self.mapping_transform(e2, mappings[(9, 8)].t())
+        e2 = self.enc2(e1_mapped, edge_indices[rm], edge_weights[rm])
+        e2_mapped = self.mapping_transform(e2, mappings[(rm, rc)].t())
 
-        e3 = self.enc3(e2_mapped, edge_indices[8], edge_weights[8])
+        e3 = self.enc3(e2_mapped, edge_indices[rc], edge_weights[rc])
 
         # Decoder path with skip connections (coarse to fine)
-        d3 = self.dec3(e3, e3, edge_indices[8], edge_weights[8])
-        d3_mapped = self.mapping_transform(d3, mappings[(9, 8)])  # Map 8->9
+        d3 = self.dec3(e3, e3, edge_indices[rc], edge_weights[rc])
+        d3_mapped = self.mapping_transform(d3, mappings[(rm, rc)])  # Map coarse->mid
 
-        d2 = self.dec2(d3_mapped, e2, edge_indices[9], edge_weights[9])
-        d2_mapped = self.mapping_transform(d2, mappings[(10, 9)])  # Map 9->10
+        d2 = self.dec2(d3_mapped, e2, edge_indices[rm], edge_weights[rm])
+        d2_mapped = self.mapping_transform(d2, mappings[(rf, rm)])  # Map mid->fine
 
-        d1 = self.dec1(d2_mapped, e1, edge_indices[10], edge_weights[10])
+        d1 = self.dec1(d2_mapped, e1, edge_indices[rf], edge_weights[rf])
 
-        # Generate embeddings
+        # Generate embeddings at each resolution
         embeddings = {
-            10: F.normalize(self.output['10'](d1), p=2, dim=-1, eps=1e-8),
-            9: F.normalize(self.output['9'](d2), p=2, dim=-1, eps=1e-8),
-            8: F.normalize(self.output['8'](d3), p=2, dim=-1, eps=1e-8)
+            rf: F.normalize(self.output[str(rf)](d1), p=2, dim=-1, eps=1e-8),
+            rm: F.normalize(self.output[str(rm)](d2), p=2, dim=-1, eps=1e-8),
+            rc: F.normalize(self.output[str(rc)](d3), p=2, dim=-1, eps=1e-8)
         }
 
         # Generate reconstructions from finest resolution
         reconstructed = {
-            name: F.normalize(self.reconstructors[name](embeddings[10]), p=2, dim=-1, eps=1e-8)
+            name: F.normalize(self.reconstructors[name](embeddings[rf]), p=2, dim=-1, eps=1e-8)
             for name in features_dict.keys()
         }
 

@@ -10,10 +10,7 @@ import geopandas as gpd
 import torch
 from torch.utils.data import Dataset, DataLoader
 from typing import Dict, List, Tuple, Optional, Union
-# MIGRATION: Replaced direct h3 import with SRAI (per CLAUDE.md)
-from srai.regionalizers import H3Regionalizer
-from srai.neighbourhoods import H3Neighbourhood
-# Note: SRAI provides H3 functionality with additional spatial analysis tools
+import h3  # Required for h3.cell_to_parent (hierarchy traversal, not tessellation — h3-py OK per CLAUDE.md)
 from pathlib import Path
 from dataclasses import dataclass
 import pickle
@@ -184,7 +181,7 @@ class SpatialBatcher:
         
         for hex_id in hex_ids:
             try:
-                parent_id = h3.h3_to_parent(hex_id, self.config.grouping_resolution)
+                parent_id = h3.cell_to_parent(hex_id, self.config.grouping_resolution)
                 if parent_id not in parent_to_children:
                     parent_to_children[parent_id] = []
                 parent_to_children[parent_id].append(hex_id)
