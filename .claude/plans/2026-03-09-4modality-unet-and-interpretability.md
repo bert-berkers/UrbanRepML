@@ -52,6 +52,16 @@
 - **Plots**: (1) PCA alignment between old/new, (2) spatial difference map (where do embeddings change most?), (3) probe R² comparison if time permits
 - **Accept**: at least 2 comparison plots
 
+### 3b. stage3-analyst: DNN probe on 4-modality concat (raw, no UNet)
+- **What**: Probe the raw 845D concat directly against leefbaarometer to measure the R² ceiling without UNet processing
+- **Input**: `data/study_areas/netherlands/stage2_multimodal/concat/embeddings/netherlands_res9_20mix_raw.parquet`
+- **Output**: R² score comparison: raw concat vs UNet 128D
+- **Accept**: R² number reported, comparison to UNet baseline (0.501)
+- **Note**: Ego flagged this as high-value, low-cost (~15 min). If raw concat beats UNet, it redirects Phase 2 entirely.
+
+### Note on UNet++
+UNet++ was originally planned for Wave 3 but is now OFF THE TABLE. Skip connection collapse investigation (cos_sim=0.9994 between res8/res9, diagnosed by stage2-fusion-architect on 2026-03-08) showed denser skip connections would worsen the problem. The revised Phase 2a direction is gated skip connections + consistency loss removal — separate plan needed.
+
 ## Wave 4 — Commit + Close-out
 
 ### 4a. devops: Commit all changes
