@@ -108,16 +108,20 @@ def main():
     args = parser.parse_args()
 
     # Import here to defer heavy imports
-    from stage3_analysis.visualization.cluster_viz import (
-        STUDY_AREA_CONFIG,
-        COLORMAP_COMBINATIONS,
-        find_study_area_data,
-        load_and_prepare_embeddings,
-        apply_pca_reduction,
-        perform_minibatch_clustering,
-        create_cluster_visualization,
-        create_hierarchical_subplot,
-    )
+    # Dissolve-based rendering was archived; import from archive for backward compat
+    import importlib.util
+    _archive_path = str(Path(__file__).resolve().parents[1] / "archive" / "visualization" / "cluster_viz_dissolve.py")
+    _spec = importlib.util.spec_from_file_location("cluster_viz_dissolve", _archive_path)
+    _mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    STUDY_AREA_CONFIG = _mod.STUDY_AREA_CONFIG
+    COLORMAP_COMBINATIONS = _mod.COLORMAP_COMBINATIONS
+    find_study_area_data = _mod.find_study_area_data
+    load_and_prepare_embeddings = _mod.load_and_prepare_embeddings
+    apply_pca_reduction = _mod.apply_pca_reduction
+    perform_minibatch_clustering = _mod.perform_minibatch_clustering
+    create_cluster_visualization = _mod.create_cluster_visualization
+    create_hierarchical_subplot = _mod.create_hierarchical_subplot
 
     # Parse resolutions
     resolutions = [int(r.strip()) for r in args.resolution.split(',')]
