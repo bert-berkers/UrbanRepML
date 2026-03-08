@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_full_pipeline(processor: RoadsProcessor, study_area_name: str,
-                      resolution: int, year: int):
+                      resolution: int, year: "int | str"):
     """Run the full roads pipeline (load data, regionalize, embed, save)."""
     paths = StudyAreaPaths(study_area_name)
 
@@ -131,6 +131,11 @@ def main():
             )
     else:
         args.year = "latest"
+
+    # Auto-derive osm_date from year when using PBF and no explicit osm_date given
+    if isinstance(args.year, int) and args.osm_date == "latest":
+        args.osm_date = f"{args.year}-01-01"
+        logger.info(f"Auto-derived --osm-date={args.osm_date} from --year={args.year}")
 
     # Build config for RoadsProcessor
     config = {

@@ -81,6 +81,14 @@ class RoadsProcessor(ModalityProcessor):
             logger.info(f"Auto-resolved PBF path: {self.pbf_path}")
         else:
             self.pbf_path = None
+
+        if self.pbf_path is not None and not self.pbf_path.exists():
+            raise FileNotFoundError(
+                f"PBF file not found: {self.pbf_path}\n"
+                f"If using --year {self.year}, ensure the snapshot exists or "
+                f"provide --osm-date explicitly."
+            )
+
         self.road_types = config.get('road_types', DEFAULT_ROAD_TYPES)
 
         # Highway2Vec parameters from config section
@@ -140,8 +148,10 @@ class RoadsProcessor(ModalityProcessor):
 
     def highway2vec(self, roads_gdf: gpd.GeoDataFrame, area_gdf_or_regions: gpd.GeoDataFrame,
                    h3_resolution: int, study_area_name: str = "unnamed",
-                   year: Union[int, str] = 2022) -> pd.DataFrame:
+                   year: Union[int, str] = None) -> pd.DataFrame:
         """Train Highway2Vec model and generate road network embeddings using GPU."""
+        if year is None:
+            year = self.year
         if not HIGHWAY2VEC_AVAILABLE:
             raise RuntimeError(
                 "RoadsProcessor.highway2vec() requires Highway2VecEmbedder. "
@@ -336,7 +346,7 @@ class RoadsProcessor(ModalityProcessor):
     
     def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame,
                                joint_gdf: gpd.GeoDataFrame, h3_resolution: int,
-                               study_area_name: str, year: Union[int, str] = 2022):
+                               study_area_name: str, year: Union[int, str] = None):
         """Save intermediate SRAI data for debugging and analysis.
 
         Args:
@@ -345,8 +355,10 @@ class RoadsProcessor(ModalityProcessor):
             joint_gdf: Spatial join of regions and features.
             h3_resolution: H3 resolution level.
             study_area_name: Study area identifier.
-            year: Data year for filename tagging (default 2022).
+            year: Data year for filename tagging. Defaults to ``self.year``.
         """
+        if year is None:
+            year = self.year
         logger.info("Saving intermediate data...")
 
         # Create directories

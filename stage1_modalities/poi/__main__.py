@@ -28,7 +28,7 @@ VALID_EMBEDDERS = ("count", "hex2vec", "geovex")
 
 
 def _build_output_path(paths: StudyAreaPaths, embedder_name: str,
-                       resolution: int, year: int):
+                       resolution: int, year: "int | str"):
     """Build the output parquet path for a single-embedder run.
 
     Uses ``StudyAreaPaths.embedding_file`` with the ``sub_embedder``
@@ -46,7 +46,7 @@ def _build_output_path(paths: StudyAreaPaths, embedder_name: str,
 
 
 def run_single_embedder(processor: POIProcessor, embedder_name: str,
-                        resolution: int, year: int):
+                        resolution: int, year: "int | str"):
     """Load intermediates and run a single embedder, saving the result."""
     # Always load with neighbourhood -- it's None if no cache exists
     regions_gdf, features_gdf, joint_gdf, neighbourhood = processor.load_intermediates(
@@ -194,6 +194,11 @@ def main():
             )
     else:
         args.year = "latest"
+
+    # Auto-derive osm_date from year when using PBF and no explicit osm_date given
+    if isinstance(args.year, int) and args.osm_date == "latest":
+        args.osm_date = f"{args.year}-01-01"
+        logger.info(f"Auto-derived --osm-date={args.osm_date} from --year={args.year}")
 
     # Build config for POIProcessor
     #

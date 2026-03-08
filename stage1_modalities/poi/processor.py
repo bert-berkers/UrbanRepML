@@ -155,6 +155,14 @@ class POIProcessor(ModalityProcessor):
             logger.info(f"Auto-resolved PBF path: {self.pbf_path}")
         else:
             self.pbf_path = None
+
+        if self.pbf_path is not None and not self.pbf_path.exists():
+            raise FileNotFoundError(
+                f"PBF file not found: {self.pbf_path}\n"
+                f"If using --year {self.year}, ensure the snapshot exists or "
+                f"provide --osm-date explicitly."
+            )
+
         self.poi_categories = config.get('poi_categories') or self.DEFAULT_POI_CATEGORIES
 
         # Feature configuration

@@ -20,10 +20,15 @@ import numpy as np
 
 
 def _make_processor(config_overrides: dict = None):
-    """Create a POIProcessor with minimal required config."""
+    """Create a POIProcessor with minimal required config.
+
+    Defaults to year='latest' + data_source='osm_online' so the guard rail
+    (osm_online + integer year -> ValueError) does not trigger in unit tests.
+    Individual tests that want a specific year/data_source can pass overrides.
+    """
     from stage1_modalities.poi.processor import POIProcessor
 
-    config = {"study_area": "test"}
+    config = {"study_area": "test", "year": "latest"}
     if config_overrides:
         config.update(config_overrides)
     return POIProcessor(config)
