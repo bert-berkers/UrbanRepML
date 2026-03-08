@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/stop.py",
+            "command": "python \"C:/Users/Bert Berkers/PycharmProjects/UrbanRepML/.claude/hooks/stop.py\"",
             "timeout": 10
           }
         ]
