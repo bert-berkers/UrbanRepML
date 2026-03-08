@@ -172,6 +172,13 @@ class GTFSProcessor(ModalityProcessor):
 
         logger.info(f"Loading GTFS feed from {gtfs_path}")
         loader = GTFSLoader()
+
+        # Patch for pandas >= 2.2 compatibility: 'H' freq alias was removed
+        # in favor of lowercase 'h'. SRAI's GTFSLoader hardcodes '1H'.
+        if hasattr(loader, 'time_resolution') and loader.time_resolution == '1H':
+            loader.time_resolution = '1h'
+            logger.info("Patched GTFSLoader.time_resolution: '1H' -> '1h' (pandas 2.2+ compat)")
+
         features_gdf = loader.load(
             gtfs_file=Path(gtfs_path),
             fail_on_validation_errors=self.fail_on_validation_errors,
