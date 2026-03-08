@@ -53,7 +53,7 @@ from sklearn.decomposition import PCA
 
 from utils.paths import StudyAreaPaths
 from utils.spatial_db import SpatialDB
-from stage3_analysis.visualization.cluster_viz import (
+from stage3_analysis.visualization.clustering_utils import (
     apply_pca_reduction,
     perform_minibatch_clustering,
 )
@@ -76,6 +76,7 @@ MODALITY_REGISTRY = [
     ("poi", "hex2vec_27feat", "POI Hex2Vec (27-feat)", "2022"),
     ("poi", "geovex", "POI GeoVeX", "latest"),
     ("roads", None, "Roads Highway2Vec", "latest"),
+    ("gtfs", None, "GTFS Transit", "latest"),
     ("alphaearth", None, "AlphaEarth", "2022"),
 ]
 
@@ -425,6 +426,11 @@ def detect_embedding_columns(df: pd.DataFrame) -> list[str]:
     if cols:
         return sorted(cols, key=lambda c: int(c.split("_")[1]))
 
+    # Pattern 2b: gtfs2vec_0, gtfs2vec_1, ... (GTFS encoder style)
+    cols = [c for c in df.columns if c.startswith("gtfs2vec_")]
+    if cols:
+        return sorted(cols, key=lambda c: int(c.split("_")[1]))
+
     # Pattern 3: Single-letter prefix with digits (P00, R00, etc.)
     for prefix in ("P", "R", "S", "G", "D"):
         cols = [c for c in df.columns if c.startswith(prefix) and len(c) >= 2 and c[1:].isdigit()]
@@ -432,7 +438,7 @@ def detect_embedding_columns(df: pd.DataFrame) -> list[str]:
             return sorted(cols, key=lambda c: int(c[1:]))
 
     # Fallback: all numeric columns except known metadata
-    exclude = {"pixel_count", "tile_count", "geometry", "region_id", "cluster_id"}
+    exclude = {"pixel_count", "tile_count", "geometry", "region_id", "cluster_id", "h3_resolution"}
     cols = [c for c in df.columns if c not in exclude and pd.api.types.is_numeric_dtype(df[c])]
     return cols
 
