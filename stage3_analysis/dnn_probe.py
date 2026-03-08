@@ -291,12 +291,13 @@ class DNNProbeRegressor:
             emb_df = emb_df.set_index("region_id")
             emb_df.index.name = "region_id"
 
-        # Identify embedding feature columns by modality prefix (A, P, R, S, G)
+        # Identify embedding feature columns by modality prefix.
+        # Prefixes can be single-char (A, P, R, S) or multi-char (hex2vec_, gtfs2vec_).
         from stage1_modalities import MODALITY_PREFIXES
         _prefixes = tuple(MODALITY_PREFIXES.values())
         self.feature_names = [
             c for c in emb_df.columns
-            if (len(c) >= 2 and c[0] in _prefixes and c[1:].isdigit())
+            if any(c.startswith(p) for p in _prefixes)
             or c.startswith("emb_")
         ]
         if not self.feature_names:

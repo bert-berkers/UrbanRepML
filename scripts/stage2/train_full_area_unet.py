@@ -3,9 +3,10 @@ Train FullAreaUNet on multi-resolution H3 graph data.
 
 Self-supervised training with reconstruction + cross-scale consistency loss.
 Uses MultiResolutionLoader to build graph inputs from raw concatenated
-Stage 1 embeddings (781D = 64 AE + 687 POI + 30 roads).
+Stage 1 embeddings (e.g. 208D = 64 AE + 50 hex2vec + 30 roads + 64 GTFS).
 
-Produces 128D fused embeddings at res9 (finest), saved as parquet.
+Pyramid U-Net with dims [64, 128, 256] (fine->mid->coarse).
+Produces 64D fused embeddings at all resolutions, saved as parquet.
 
 Lifetime: durable
 Stage: stage2 (fusion)
@@ -39,8 +40,8 @@ def parse_args():
         help="Maximum training epochs (default: 500)"
     )
     parser.add_argument(
-        "--hidden-dim", type=int, default=128,
-        help="Hidden / output embedding dimension (default: 128)"
+        "--dims", type=str, default="64,128,256",
+        help="Pyramid dims fine,mid,coarse (default: 64,128,256)"
     )
     parser.add_argument(
         "--lr", type=float, default=1e-3,
@@ -73,13 +74,14 @@ def main():
     )
 
     resolutions = [int(r) for r in args.resolutions.split(",")]
+    dims = [int(d) for d in args.dims.split(",")]
     finest_res = max(resolutions)
     paths = StudyAreaPaths(args.study_area)
 
     print("=" * 60)
     print(f"FullAreaUNet Training — {args.study_area}")
     print(f"  Resolutions: {resolutions}")
-    print(f"  Hidden dim:  {args.hidden_dim}")
+    print(f"  Pyramid dims: {dims} (fine -> mid -> coarse)")
     print(f"  LR:          {args.lr}")
     print(f"  Epochs:      {args.epochs}")
     print(f"  Patience:    {args.patience}")
@@ -125,8 +127,7 @@ def main():
     # ---- 3. Configure and create trainer ----
     model_config = {
         "feature_dims": {"fused": feature_dim},
-        "hidden_dim": args.hidden_dim,
-        "output_dim": args.hidden_dim,  # output_dim == hidden_dim for 128D embeddings
+        "dims": dims,
         "num_convs": 4,
         "resolutions": resolutions,
     }
@@ -209,8 +210,7 @@ def main():
         config={
             "model": "FullAreaUNet",
             "resolutions": resolutions,
-            "hidden_dim": args.hidden_dim,
-            "output_dim": args.hidden_dim,
+            "dims": dims,
             "feature_dim": feature_dim,
             "num_convs": 4,
             "lr": args.lr,
@@ -229,14 +229,14 @@ def main():
     print("=" * 60)
     print(f"  Model:          FullAreaUNet")
     print(f"  Resolutions:    {resolutions}")
-    print(f"  Feature dim:    {feature_dim} -> {args.hidden_dim}D embeddings")
+    print(f"  Feature dim:    {feature_dim} -> {dims[0]}D embeddings (pyramid {dims})")
     print(f"  Parameters:     {n_params:,}")
     print(f"  Best epoch:     {best_state['epoch']}")
     print(f"  Best loss:      {best_state['loss']:.6f}")
     print(f"  Training time:  {train_time:.1f}s ({train_time/60:.1f} min)")
     for res, p in saved_paths.items():
         n_hex = len(hex_ids[res])
-        print(f"  Embeddings res{res}: ({n_hex:,}, {args.hidden_dim})")
+        print(f"  Embeddings res{res}: ({n_hex:,}, {dims[0]})")
         print(f"    Saved to:     {p}")
     print("=" * 60)
 

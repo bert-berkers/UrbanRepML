@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
-from typing import Dict, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
@@ -56,60 +56,80 @@ class ModalityFusion(nn.Module):
 
 class SharedSparseMapping(nn.Module):
     """Learnable transformation for cross-resolution mapping.
-    Applied after H3 sparse matrix mapping between resolutions."""
-    def __init__(self, hidden_dim: int):
+    Applied after H3 sparse matrix mapping between resolutions.
+
+    Supports dimension change: in_dim -> out_dim via the linear transform.
+    """
+    def __init__(self, in_dim: int, out_dim: int):
         super().__init__()
         self.transform = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(in_dim, out_dim),
+            nn.LayerNorm(out_dim),
             nn.GELU()
         )
 
     def forward(self, x: torch.Tensor, mapping: torch.sparse.Tensor) -> torch.Tensor:
         """
         Args:
-            x: Input features [num_nodes, hidden_dim]
+            x: Input features [num_nodes, in_dim]
             mapping: Sparse mapping matrix [target_nodes, source_nodes]
         Returns:
-            Transformed features [target_nodes, hidden_dim]
+            Transformed features [target_nodes, out_dim]
         """
-        # Apply sparse mapping first
+        # Apply sparse mapping first (aggregates spatially, keeps in_dim)
         mapped = torch.sparse.mm(mapping, x)
-        # Then learnable transform
+        # Then learnable transform (in_dim -> out_dim)
         transformed = self.transform(mapped)
-        # Final normalization
         return F.normalize(transformed, p=2, dim=-1, eps=1e-8)
 
 class EncoderBlock(nn.Module):
-    """GCN encoder block with residual connections and layer normalization."""
-    def __init__(self, hidden_dim: int, num_convs: int = 4):
+    """GCN encoder block with optional input projection for dimension changes.
+
+    If in_dim != out_dim, an input projection maps features before GCN processing.
+    All GCN layers operate at out_dim. Residual connection projects to match.
+    """
+    def __init__(self, in_dim: int, out_dim: int, num_convs: int = 4):
         super().__init__()
+        self.needs_projection = (in_dim != out_dim)
+
+        if self.needs_projection:
+            self.input_proj = nn.Sequential(
+                nn.Linear(in_dim, out_dim),
+                nn.LayerNorm(out_dim),
+                nn.GELU()
+            )
+
         self.convs = nn.ModuleList([
-            GCNConv(hidden_dim, hidden_dim, add_self_loops=False)
+            GCNConv(out_dim, out_dim, add_self_loops=False)
             for _ in range(num_convs)
         ])
 
         self.norms = nn.ModuleList([
-            nn.LayerNorm(hidden_dim) for _ in range(num_convs)
+            nn.LayerNorm(out_dim) for _ in range(num_convs)
         ])
 
         self.residual = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
+            nn.Linear(in_dim, out_dim),
+            nn.LayerNorm(out_dim),
             nn.GELU()
         )
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, edge_weight: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: Input features [num_nodes, hidden_dim]
+            x: Input features [num_nodes, in_dim]
             edge_index: Graph connectivity [2, num_edges]
             edge_weight: Edge weights [num_edges]
         Returns:
-            Processed features [num_nodes, hidden_dim]
+            Processed features [num_nodes, out_dim]
         """
         identity = self.residual(x)
 
-        out = x
+        if self.needs_projection:
+            out = self.input_proj(x)
+        else:
+            out = x
+
         for conv, norm in zip(self.convs, self.norms):
             out = conv(out, edge_index, edge_weight)
             out = norm(out)
@@ -119,33 +139,46 @@ class EncoderBlock(nn.Module):
         return F.normalize(out, p=2, dim=-1, eps=1e-8)
 
 class DecoderBlock(nn.Module):
-    """GCN decoder block with skip connections from encoder."""
-    def __init__(self, hidden_dim: int, num_convs: int = 4):
+    """GCN decoder block with skip connections and optional down-projection.
+
+    Skip connection is added before GCN (both at in_dim).
+    If in_dim != out_dim, a down-projection maps output to out_dim after GCN.
+    """
+    def __init__(self, in_dim: int, out_dim: int, num_convs: int = 4):
         super().__init__()
+        self.needs_projection = (in_dim != out_dim)
+
         self.convs = nn.ModuleList([
-            GCNConv(hidden_dim, hidden_dim, add_self_loops=False)
+            GCNConv(in_dim, in_dim, add_self_loops=False)
             for _ in range(num_convs)
         ])
 
         self.norms = nn.ModuleList([
-            nn.LayerNorm(hidden_dim) for _ in range(num_convs)
+            nn.LayerNorm(in_dim) for _ in range(num_convs)
         ])
 
+        # Residual from combined input to output
         self.residual = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
+            nn.Linear(in_dim, out_dim),
+            nn.LayerNorm(out_dim),
             nn.GELU()
         )
+
+        if self.needs_projection:
+            self.down_proj = nn.Sequential(
+                nn.Linear(in_dim, out_dim),
+                nn.LayerNorm(out_dim)
+            )
 
     def forward(self, x: torch.Tensor, skip: torch.Tensor, edge_index: torch.Tensor, edge_weight: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: Input features [num_nodes, hidden_dim]
-            skip: Skip connection from encoder [num_nodes, hidden_dim]
+            x: Input features [num_nodes, in_dim]
+            skip: Skip connection from encoder [num_nodes, in_dim]
             edge_index: Graph connectivity [2, num_edges]
             edge_weight: Edge weights [num_edges]
         Returns:
-            Processed features [num_nodes, hidden_dim]
+            Processed features [num_nodes, out_dim]
         """
         combined = x + skip
         identity = self.residual(combined)
@@ -156,11 +189,39 @@ class DecoderBlock(nn.Module):
             out = norm(out)
             out = F.gelu(out)
 
+        if self.needs_projection:
+            out = self.down_proj(out)
+
         out = out + identity
         return F.normalize(out, p=2, dim=-1, eps=1e-8)
 
 class FullAreaUNet(nn.Module):
     """Multi-resolution U-Net for urban representation learning.
+
+    Pyramid architecture with dimension funneling: features expand through the
+    encoder (fine->coarse) and contract through the decoder (coarse->fine).
+
+    Default dims=[64, 128, 256] at [res_fine, res_mid, res_coarse]:
+
+        Input: 208D concat
+        ModalityFusion: 208D -> 64D
+
+        Encoder:
+          enc1 (res_fine):    64D -> 64D     <- skip_A
+          mapping fine->mid:  64D -> 128D
+          enc2 (res_mid):    128D -> 128D    <- skip_B
+          mapping mid->coarse: 128D -> 256D
+          enc3 (res_coarse): 256D -> 256D    <- bottleneck
+
+        Decoder:
+          dec3 (res_coarse): 256D+skip(256D) -> 128D
+          mapping coarse->mid: 128D -> 128D
+          dec2 (res_mid):    128D+skip(128D) -> 64D
+          mapping mid->fine:  64D -> 64D
+          dec1 (res_fine):    64D+skip(64D)  -> 64D
+
+        Output heads: all resolutions -> 64D
+        Reconstruction: 64D -> 208D (res_fine only)
 
     Supports any 3-level resolution hierarchy (e.g. [10,9,8] or [9,8,7]).
     Resolutions are ordered finest-to-coarsest internally.
@@ -168,11 +229,13 @@ class FullAreaUNet(nn.Module):
     def __init__(
             self,
             feature_dims: Dict[str, int],
-            hidden_dim: int = 128,
-            output_dim: int = 32,
+            dims: List[int] = None,
             num_convs: int = 4,
             device: str = "cuda",
-            resolutions: Optional[list] = None
+            resolutions: Optional[list] = None,
+            # Legacy args — ignored but accepted for backward compat
+            hidden_dim: int = None,
+            output_dim: int = None,
     ):
         super().__init__()
         self.device = device
@@ -183,37 +246,60 @@ class FullAreaUNet(nn.Module):
         assert len(self.resolutions) == 3, "FullAreaUNet requires exactly 3 resolution levels"
         self.res_fine, self.res_mid, self.res_coarse = self.resolutions
 
-        # Initial fusion
-        self.fusion = ModalityFusion(feature_dims, hidden_dim)
+        # Dimension pyramid: fine -> mid -> coarse
+        dims = dims or [64, 128, 256]
+        assert len(dims) == 3, "dims must have exactly 3 values [fine, mid, coarse]"
+        self.dims = dims
+        dim_fine, dim_mid, dim_coarse = dims
 
-        # Shared mapping transformation
-        self.mapping_transform = SharedSparseMapping(hidden_dim)
+        # Compute total input dim for reconstruction head
+        self.input_dim = sum(feature_dims.values())
 
-        # Encoder path with consistent hidden_dim
-        self.enc1 = EncoderBlock(hidden_dim, num_convs)
-        self.enc2 = EncoderBlock(hidden_dim, num_convs)
-        self.enc3 = EncoderBlock(hidden_dim, num_convs)
+        # Initial fusion: input -> dim_fine
+        self.fusion = ModalityFusion(feature_dims, dim_fine)
 
-        # Decoder path with consistent hidden_dim
-        self.dec3 = DecoderBlock(hidden_dim, num_convs)
-        self.dec2 = DecoderBlock(hidden_dim, num_convs)
-        self.dec1 = DecoderBlock(hidden_dim, num_convs)
+        # Encoder path (fine to coarse, dimensions expand)
+        self.enc1 = EncoderBlock(dim_fine, dim_fine, num_convs)      # 64 -> 64
+        self.enc2 = EncoderBlock(dim_mid, dim_mid, num_convs)        # 128 -> 128
+        self.enc3 = EncoderBlock(dim_coarse, dim_coarse, num_convs)  # 256 -> 256
 
-        # Final projection to output dimension (keyed by actual resolutions)
+        # Cross-resolution mappings (encoder direction: fine -> coarse)
+        self.mapping_fine_to_mid = SharedSparseMapping(dim_fine, dim_mid)       # 64 -> 128
+        self.mapping_mid_to_coarse = SharedSparseMapping(dim_mid, dim_coarse)   # 128 -> 256
+
+        # Cross-resolution mappings (decoder direction: coarse -> fine)
+        self.mapping_coarse_to_mid = SharedSparseMapping(dim_mid, dim_mid)      # 128 -> 128
+        self.mapping_mid_to_fine = SharedSparseMapping(dim_fine, dim_fine)       # 64 -> 64
+
+        # Decoder path (coarse to fine, dimensions contract)
+        self.dec3 = DecoderBlock(dim_coarse, dim_mid, num_convs)   # 256+256 -> 128
+        self.dec2 = DecoderBlock(dim_mid, dim_fine, num_convs)     # 128+128 -> 64
+        self.dec1 = DecoderBlock(dim_fine, dim_fine, num_convs)    # 64+64   -> 64
+
+        # Output heads: project each decoder output to dim_fine for consistency loss
+        # Decoder outputs: d1=dim_fine, d2=dim_fine (dec2 down-projects), d3=dim_mid (dec3 down-projects)
         self.output = nn.ModuleDict({
-            str(res): nn.Sequential(
-                nn.Linear(hidden_dim, output_dim),
-                nn.LayerNorm(output_dim)
-            ) for res in self.resolutions
+            str(self.res_fine): nn.Sequential(
+                nn.Linear(dim_fine, dim_fine),
+                nn.LayerNorm(dim_fine)
+            ),
+            str(self.res_mid): nn.Sequential(
+                nn.Linear(dim_fine, dim_fine),
+                nn.LayerNorm(dim_fine)
+            ),
+            str(self.res_coarse): nn.Sequential(
+                nn.Linear(dim_mid, dim_fine),
+                nn.LayerNorm(dim_fine)
+            ),
         })
 
-        # Reconstruction heads
+        # Reconstruction heads (from dim_fine -> input_dim)
         self.reconstructors = nn.ModuleDict({
             name: nn.Sequential(
-                nn.Linear(output_dim, hidden_dim),
-                nn.LayerNorm(hidden_dim),
+                nn.Linear(dim_fine, dim_fine),
+                nn.LayerNorm(dim_fine),
                 nn.GELU(),
-                nn.Linear(hidden_dim, dim),
+                nn.Linear(dim_fine, dim),
                 nn.LayerNorm(dim)
             ) for name, dim in feature_dims.items()
         })
@@ -230,40 +316,36 @@ class FullAreaUNet(nn.Module):
             features_dict: Input features per modality
             edge_indices: Graph connectivity per resolution
             edge_weights: Edge weights per resolution
-            mappings: Cross-resolution mappings (fine->coarse)
+            mappings: Cross-resolution mappings (fine->coarse sparse matrices)
         Returns:
-            embeddings: Learned embeddings per resolution
+            embeddings: Learned embeddings per resolution (all dim_fine)
             reconstructed: Reconstructed features per modality
         """
-        # Resolution aliases for readability
         rf, rm, rc = self.res_fine, self.res_mid, self.res_coarse
 
-        # Initial fusion
+        # Initial fusion: input_dim -> dim_fine
         x = self.fusion(features_dict)
 
         # Encoder path (fine to coarse)
-        e1 = self.enc1(x, edge_indices[rf], edge_weights[rf])
-        e1_mapped = self.mapping_transform(e1, mappings[(rf, rm)].t())
-
-        e2 = self.enc2(e1_mapped, edge_indices[rm], edge_weights[rm])
-        e2_mapped = self.mapping_transform(e2, mappings[(rm, rc)].t())
-
-        e3 = self.enc3(e2_mapped, edge_indices[rc], edge_weights[rc])
+        e1 = self.enc1(x, edge_indices[rf], edge_weights[rf])                     # 64D at res_fine
+        e1_mapped = self.mapping_fine_to_mid(e1, mappings[(rf, rm)].t())           # 128D at res_mid
+        e2 = self.enc2(e1_mapped, edge_indices[rm], edge_weights[rm])              # 128D at res_mid
+        e2_mapped = self.mapping_mid_to_coarse(e2, mappings[(rm, rc)].t())         # 256D at res_coarse
+        e3 = self.enc3(e2_mapped, edge_indices[rc], edge_weights[rc])              # 256D at res_coarse
 
         # Decoder path with skip connections (coarse to fine)
-        d3 = self.dec3(e3, e3, edge_indices[rc], edge_weights[rc])
-        d3_mapped = self.mapping_transform(d3, mappings[(rm, rc)])  # Map coarse->mid
+        d3 = self.dec3(e3, e3, edge_indices[rc], edge_weights[rc])                 # 256+256 -> 128D
+        d3_mapped = self.mapping_coarse_to_mid(d3, mappings[(rm, rc)])             # 128D at res_mid
+        d2 = self.dec2(d3_mapped, e2, edge_indices[rm], edge_weights[rm])          # 128+128 -> 64D
+        d2_mapped = self.mapping_mid_to_fine(d2, mappings[(rf, rm)])               # 64D at res_fine
+        d1 = self.dec1(d2_mapped, e1, edge_indices[rf], edge_weights[rf])          # 64+64 -> 64D
 
-        d2 = self.dec2(d3_mapped, e2, edge_indices[rm], edge_weights[rm])
-        d2_mapped = self.mapping_transform(d2, mappings[(rf, rm)])  # Map mid->fine
-
-        d1 = self.dec1(d2_mapped, e1, edge_indices[rf], edge_weights[rf])
-
-        # Generate embeddings at each resolution
+        # Generate embeddings at each resolution (all projected to dim_fine)
+        # d1=64D, d2=64D (dec2 down-projected 128->64), d3=128D (dec3 down-projected 256->128)
         embeddings = {
-            rf: F.normalize(self.output[str(rf)](d1), p=2, dim=-1, eps=1e-8),
-            rm: F.normalize(self.output[str(rm)](d2), p=2, dim=-1, eps=1e-8),
-            rc: F.normalize(self.output[str(rc)](d3), p=2, dim=-1, eps=1e-8)
+            rf: F.normalize(self.output[str(rf)](d1), p=2, dim=-1, eps=1e-8),      # 64D -> 64D
+            rm: F.normalize(self.output[str(rm)](d2), p=2, dim=-1, eps=1e-8),      # 64D -> 64D
+            rc: F.normalize(self.output[str(rc)](d3), p=2, dim=-1, eps=1e-8)       # 128D -> 64D
         }
 
         # Generate reconstructions from finest resolution
@@ -425,15 +507,6 @@ class FullAreaModelTrainer:
 
                 # Log gradient norms for monitoring
                 grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.model.parameters() if p.grad is not None) ** 0.5
-
-                # Skip WandB logging for faster testing
-                # wandb.log({
-                #     'epoch': epoch,
-                #     'learning_rate': scheduler.get_last_lr()[0],
-                #     **{k: v.item() for k, v in losses.items()},
-                #     'grad_norm': grad_norm,
-                #     'patience_counter': patience_counter
-                # })
 
                 if total_loss.item() < best_loss:
                     best_loss = total_loss.item()
