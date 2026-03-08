@@ -1,29 +1,36 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Causal Emergence Diamond Profiles: EI-based analysis across H3 scales.
+Scale-Dependent Predictive Power: Diamond profiles across H3 resolutions.
 
-Computes Effective Information (EI) from embedding->target Transition
-Probability Matrices at each H3 resolution, then derives Causal Emergence
-(CE = EI_coarser - EI_finest) and plots 6 diamond/kite profile subplots.
+Inspired by causal emergence visualizations (Hoel 2013, Rosas et al. 2020),
+these diamond profiles encode two complementary metrics at each spatial scale:
+
+  - Diamond envelope width: R2 from DNN probes, measuring total predictive
+    power of the embedding for each liveability dimension at each H3 resolution.
+  - Dot size: Signal concentration (Gini coefficient of per-PCA-component R2),
+    measuring how few embedding dimensions carry the predictive signal.
+    High concentration = clean, low-dimensional mapping (deterministic).
+    Low concentration = signal diffused across many dimensions.
+
+When the envelope bulges at a coarser resolution (e.g., res8 for Amenities),
+the neighbourhood-scale representation captures more predictive signal than
+the fine-grained hexagon scale. When the dot is also large at that scale,
+the signal is concentrated -- a hallmark of emergent macro-scale structure.
 
 Lifetime: durable
 Stage: 3
-
-Usage:
-    python scripts/stage3/plot_causal_emergence_lollipop.py
 """
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from matplotlib.patches import Polygon
 import numpy as np
 import pandas as pd
-from scipy import stats
+from sklearn.decomposition import PCA
 
 from utils.paths import StudyAreaPaths
 
@@ -36,19 +43,17 @@ logger = logging.getLogger(__name__)
 STUDY_AREA = "netherlands"
 YEAR = 2022
 RESOLUTIONS = [7, 8, 9]
-TOP_K = 10  # Number of embedding dimensions to use for TPM
-N_BINS_DEFAULT = 8  # Quantile bins for discretization
 
 TARGET_COLS = ["lbm", "vrz", "fys", "soc", "onv", "won"]
 TARGET_ORDER = ["lbm", "vrz", "fys", "soc", "onv", "won"]
 
 COLORS = {
-    "lbm": "#808080",  # Dark Grey
-    "vrz": "#FF4500",  # Orange Red
-    "fys": "#32CD32",  # Lime Green
-    "soc": "#8A2BE2",  # Blue Violet
-    "onv": "#1E90FF",  # Dodger Blue
-    "won": "#FFA500",  # Orange
+    "lbm": "#808080",
+    "vrz": "#FF4500",
+    "fys": "#32CD32",
+    "soc": "#8A2BE2",
+    "onv": "#1E90FF",
+    "won": "#FFA500",
 }
 
 TARGET_NAMES = {
@@ -68,126 +73,95 @@ RESOLUTION_LABELS = {
 
 
 # ---------------------------------------------------------------------------
-# Effective Information computation
+# Signal concentration metric
 # ---------------------------------------------------------------------------
 
 
-def select_top_k_dims(
-    embeddings: pd.DataFrame,
+def gini(values: np.ndarray) -> float:
+    """Gini coefficient: 0 = perfectly equal, 1 = maximally concentrated."""
+    sorted_vals = np.sort(np.abs(values))
+    n = len(sorted_vals)
+    if n == 0 or np.sum(sorted_vals) == 0:
+        return 0.0
+    index = np.arange(1, n + 1)
+    return (2 * np.sum(index * sorted_vals) / (n * np.sum(sorted_vals))) - (n + 1) / n
+
+
+def compute_signal_concentration(
+    embeddings_df: pd.DataFrame,
     target_series: pd.Series,
-    k: int = TOP_K,
-) -> List[str]:
-    """Select the K embedding dimensions most correlated with the target."""
-    common_idx = embeddings.index.intersection(target_series.index)
-    emb_aligned = embeddings.loc[common_idx]
-    tgt_aligned = target_series.loc[common_idx]
-
-    correlations = {}
-    for col in emb_aligned.columns:
-        corr, _ = stats.spearmanr(emb_aligned[col].values, tgt_aligned.values)
-        correlations[col] = abs(corr) if not np.isnan(corr) else 0.0
-
-    sorted_dims = sorted(correlations, key=correlations.get, reverse=True)
-    return sorted_dims[:k]
-
-
-def build_tpm(
-    embeddings: pd.DataFrame,
-    target_series: pd.Series,
-    top_dims: List[str],
-    n_bins: int = N_BINS_DEFAULT,
-) -> Tuple[np.ndarray, int]:
+    n_components: int = 50,
+) -> float:
     """
-    Build a Transition Probability Matrix P(target_bin | embedding_state).
+    Compute signal concentration as the Gini coefficient of per-PC R2.
 
-    Returns (tpm, n_states) where tpm has shape (n_states, n_target_bins).
-    Rows with zero observations are excluded.
+    Steps:
+    1. Align embeddings and target on common index, drop NaNs.
+    2. Run PCA on the embeddings (capped at n_components).
+    3. For each PC, compute univariate R2 = correlation(PC_i, target)^2.
+    4. Return Gini coefficient of the R2 distribution.
+
+    High Gini = signal concentrated in few PCs (deterministic mapping).
+    Low Gini = signal diffused across many PCs.
     """
-    common_idx = embeddings.index.intersection(target_series.index)
-    emb_aligned = embeddings.loc[common_idx, top_dims].copy()
-    tgt_aligned = target_series.loc[common_idx].copy()
+    common_idx = embeddings_df.index.intersection(target_series.dropna().index)
+    emb_aligned = embeddings_df.loc[common_idx].values
+    tgt_aligned = target_series.loc[common_idx].values
 
-    # Adaptive bin count: reduce if too few unique values
-    actual_bins = n_bins
-    min_unique = min(emb_aligned[col].nunique() for col in top_dims)
-    min_unique = min(min_unique, tgt_aligned.nunique())
-    if min_unique < n_bins:
-        actual_bins = max(3, min_unique)
-        logger.info(f"  Reduced bins from {n_bins} to {actual_bins} (min_unique={min_unique})")
+    # Drop any rows with NaN in embeddings
+    valid_mask = ~np.any(np.isnan(emb_aligned), axis=1) & ~np.isnan(tgt_aligned)
+    emb_aligned = emb_aligned[valid_mask]
+    tgt_aligned = tgt_aligned[valid_mask]
 
-    # Discretize each embedding dimension
-    binned_dims = []
-    for col in top_dims:
-        try:
-            binned = pd.qcut(emb_aligned[col], q=actual_bins, labels=False, duplicates="drop")
-        except ValueError:
-            # Fall back to equal-width bins if quantiles fail
-            binned = pd.cut(emb_aligned[col], bins=actual_bins, labels=False)
-        binned = binned.fillna(0).astype(int)
-        binned_dims.append(binned)
-
-    # Create composite embedding state as tuple of bin indices
-    state_df = pd.DataFrame(dict(enumerate(binned_dims)), index=common_idx)
-    state_labels = state_df.apply(tuple, axis=1)
-
-    # Discretize target
-    try:
-        target_binned = pd.qcut(tgt_aligned, q=actual_bins, labels=False, duplicates="drop")
-    except ValueError:
-        target_binned = pd.cut(tgt_aligned, bins=actual_bins, labels=False)
-    target_binned = target_binned.fillna(0).astype(int)
-    n_target_bins = int(target_binned.max()) + 1
-
-    # Build contingency: count(state, target_bin)
-    combined = pd.DataFrame({"state": state_labels, "target_bin": target_binned})
-    contingency = combined.groupby(["state", "target_bin"]).size().unstack(fill_value=0)
-
-    # Ensure all target bins are represented
-    for b in range(n_target_bins):
-        if b not in contingency.columns:
-            contingency[b] = 0
-    contingency = contingency[sorted(contingency.columns)]
-
-    # Normalize rows to get P(target_bin | state)
-    row_sums = contingency.sum(axis=1)
-    # Drop states with 0 observations
-    contingency = contingency[row_sums > 0]
-    row_sums = contingency.sum(axis=1)
-    tpm = contingency.div(row_sums, axis=0).values
-
-    n_states = tpm.shape[0]
-    return tpm, n_states
-
-
-def compute_effective_information(tpm: np.ndarray) -> float:
-    """
-    Compute Effective Information from a TPM.
-
-    EI = log2(N) - (1/N) * sum_i H(row_i)
-
-    where N = number of source states, H(row_i) = Shannon entropy of row i.
-    """
-    n_states = tpm.shape[0]
-    if n_states <= 1:
+    if len(emb_aligned) < 10:
+        logger.warning("  Too few valid samples for PCA, returning 0.0")
         return 0.0
 
-    max_entropy = np.log2(n_states)
+    # PCA
+    n_comp = min(n_components, emb_aligned.shape[1], emb_aligned.shape[0])
+    pca = PCA(n_components=n_comp, random_state=42)
+    pcs = pca.fit_transform(emb_aligned)
 
-    # Average row entropy
-    row_entropies = []
-    for row in tpm:
-        # Remove zeros to avoid log(0)
-        row_nonzero = row[row > 0]
-        if len(row_nonzero) == 0:
-            row_entropies.append(0.0)
-        else:
-            h = -np.sum(row_nonzero * np.log2(row_nonzero))
-            row_entropies.append(h)
+    # Per-component R2: r2_i = corr(PC_i, target)^2
+    r2_per_pc = np.zeros(n_comp)
+    for i in range(n_comp):
+        corr = np.corrcoef(pcs[:, i], tgt_aligned)[0, 1]
+        r2_per_pc[i] = corr ** 2 if not np.isnan(corr) else 0.0
 
-    avg_entropy = np.mean(row_entropies)
-    ei = max_entropy - avg_entropy
+    return gini(r2_per_pc)
 
-    return ei
+
+# ---------------------------------------------------------------------------
+# R2 data loading
+# ---------------------------------------------------------------------------
+
+
+def load_r2_data(paths: StudyAreaPaths) -> Dict[Tuple[str, int], float]:
+    """
+    Load native resolution probe R2 results.
+
+    Returns dict mapping (target_col, resolution) -> R2 value.
+    """
+    csv_path = (
+        paths.project_root
+        / "data"
+        / "study_areas"
+        / STUDY_AREA
+        / "stage3_analysis"
+        / "native_resolution_probe_results.csv"
+    )
+    logger.info(f"Loading R2 data from {csv_path}")
+    df = pd.read_csv(csv_path)
+
+    r2_lookup: Dict[Tuple[str, int], float] = {}
+    for _, row in df.iterrows():
+        res = int(row["resolution"])
+        for target_col in TARGET_ORDER:
+            if target_col in row.index and pd.notna(row[target_col]):
+                r2_lookup[(target_col, res)] = float(row[target_col])
+
+    logger.info(f"  Loaded {len(r2_lookup)} R2 values")
+    return r2_lookup
 
 
 # ---------------------------------------------------------------------------
@@ -195,12 +169,18 @@ def compute_effective_information(tpm: np.ndarray) -> float:
 # ---------------------------------------------------------------------------
 
 
-def compute_all_metrics(paths: StudyAreaPaths) -> pd.DataFrame:
+def compute_all_metrics(
+    paths: StudyAreaPaths,
+) -> pd.DataFrame:
     """
-    Compute EI and CE for all (target, resolution) pairs.
+    Compute R2 (from CSV) and signal concentration (Gini from PCA) for all
+    (target, resolution) pairs.
 
-    Returns DataFrame with columns: target, resolution, EI, CE.
+    Returns DataFrame with columns: target, resolution, R2, gini, delta_R2.
     """
+    # Load R2 from CSV
+    r2_lookup = load_r2_data(paths)
+
     rows = []
 
     # Load all embeddings and targets
@@ -219,9 +199,11 @@ def compute_all_metrics(paths: StudyAreaPaths) -> pd.DataFrame:
 
         data[res] = {"emb": emb, "tgt": tgt}
 
-    # Compute EI for each (target, resolution)
-    ei_values = {}  # (target, res) -> EI
+    # Compute Gini for each (target, resolution)
     for target_col in TARGET_ORDER:
+        # Get res9 R2 for delta computation
+        r2_res9 = r2_lookup.get((target_col, 9), 0.0)
+
         for res in RESOLUTIONS:
             emb = data[res]["emb"]
             tgt = data[res]["tgt"]
@@ -231,33 +213,23 @@ def compute_all_metrics(paths: StudyAreaPaths) -> pd.DataFrame:
                 continue
 
             target_series = tgt[target_col].dropna()
-            logger.info(f"Computing EI for {target_col} @ res{res} ({len(target_series):,} targets)")
+            logger.info(
+                f"Computing signal concentration for {target_col} @ res{res} "
+                f"({len(target_series):,} targets)"
+            )
 
-            # Select top-K dimensions
-            top_dims = select_top_k_dims(emb, target_series, k=TOP_K)
-            logger.info(f"  Top-{TOP_K} dims: {top_dims[:3]}...")
+            gini_val = compute_signal_concentration(emb, target_series)
+            r2_val = r2_lookup.get((target_col, res), np.nan)
+            delta_r2 = r2_val - r2_res9 if not np.isnan(r2_val) else np.nan
 
-            # Build TPM
-            tpm, n_states = build_tpm(emb, target_series, top_dims)
-            logger.info(f"  TPM: {tpm.shape} ({n_states} states)")
+            logger.info(f"  R2={r2_val:.4f}, Gini={gini_val:.4f}, dR2={delta_r2:+.4f}")
 
-            # Compute EI
-            ei = compute_effective_information(tpm)
-            logger.info(f"  EI = {ei:.4f}")
-
-            ei_values[(target_col, res)] = ei
-
-    # Compute CE relative to res9 (finest resolution)
-    for target_col in TARGET_ORDER:
-        ei_res9 = ei_values.get((target_col, 9), 0.0)
-        for res in RESOLUTIONS:
-            ei = ei_values.get((target_col, res), 0.0)
-            ce = ei - ei_res9  # CE > 0 means causal emergence at coarser scale
             rows.append({
                 "target": target_col,
                 "resolution": res,
-                "EI": ei,
-                "CE": ce,
+                "R2": r2_val,
+                "gini": gini_val,
+                "delta_R2": delta_r2,
             })
 
     return pd.DataFrame(rows)
@@ -273,26 +245,36 @@ def plot_diamond_profiles(
     output_dir: Path,
 ) -> Tuple[Path, Path]:
     """
-    Create a 2x3 grid of diamond/kite profile subplots.
+    Create a 2x3 grid of diamond profile subplots.
 
-    Each subplot shows EI at 3 resolutions with a grey filled envelope
-    and colored border for the target dimension.
+    Each subplot encodes two metrics:
+    - Diamond envelope width at each resolution: proportional to R2.
+    - Dot size (centered on vertical midline): proportional to signal
+      concentration (Gini coefficient of per-PCA-component R2).
     """
     plt.style.use("default")
 
-    fig, axes = plt.subplots(2, 3, figsize=(14, 8), facecolor="white")
+    fig, axes = plt.subplots(2, 3, figsize=(14, 9), facecolor="white")
     axes_flat = axes.flatten()
 
     y_positions = {7: 2, 8: 1, 9: 0}  # res7 at top, res9 at bottom
 
-    # Compute global EI range for consistent x-axes
-    all_ei = metrics_df["EI"].values
-    ei_min = min(all_ei) * 0.9
-    ei_max = max(all_ei) * 1.1
-    # Add some padding
-    ei_range = ei_max - ei_min
-    x_lo = ei_min - 0.05 * ei_range
-    x_hi = ei_max + 0.05 * ei_range
+    # Normalize R2 to visual half-width: map R2 range to [0.3, 1.0]
+    all_r2 = metrics_df["R2"].dropna().values
+    r2_global_min = all_r2.min()
+    r2_global_max = all_r2.max()
+    r2_span = r2_global_max - r2_global_min if r2_global_max > r2_global_min else 1.0
+
+    def r2_to_half_width(r2: float) -> float:
+        """Map R2 to half-width of diamond at that level."""
+        normalized = (r2 - r2_global_min) / r2_span
+        return 0.25 + normalized * 0.75  # 0.25 to 1.0
+
+    # Gini range for dot sizing
+    all_gini = metrics_df["gini"].values
+    gini_min = all_gini.min()
+    gini_max = all_gini.max()
+    gini_span = gini_max - gini_min if gini_max > gini_min else 1.0
 
     for idx, target_col in enumerate(TARGET_ORDER):
         ax = axes_flat[idx]
@@ -301,121 +283,106 @@ def plot_diamond_profiles(
 
         subset = metrics_df[metrics_df["target"] == target_col].sort_values("resolution")
 
-        # Get EI values per resolution
-        ei_by_res = {}
+        # Get R2 and Gini per resolution
+        r2_by_res = {}
+        gini_by_res = {}
         for _, row in subset.iterrows():
-            ei_by_res[int(row["resolution"])] = row["EI"]
+            res = int(row["resolution"])
+            r2_by_res[res] = row["R2"]
+            gini_by_res[res] = row["gini"]
 
-        # Build diamond envelope polygon
-        # Go down the left side (min of EI at each level creates kite shape)
-        # Since we have one value per level, the diamond is formed by the shape
-        # of the EI values themselves
-        points_x = []
-        points_y = []
+        # Build diamond polygon: centered at x=0, width proportional to R2
+        if len(r2_by_res) >= 3 and all(not np.isnan(v) for v in r2_by_res.values()):
+            hw7 = r2_to_half_width(r2_by_res[7])
+            hw8 = r2_to_half_width(r2_by_res[8])
+            hw9 = r2_to_half_width(r2_by_res[9])
 
-        # Collect points in order: top -> middle -> bottom -> back up
-        # The diamond shape comes from plotting EI at each resolution
-        for res in [7, 8, 9]:
-            if res in ei_by_res:
-                points_x.append(ei_by_res[res])
-                points_y.append(y_positions[res])
+            y7, y8, y9 = y_positions[7], y_positions[8], y_positions[9]
 
-        if len(points_x) >= 3:
-            # Create a filled polygon by making a symmetric kite shape
-            # Left boundary: slightly left of each point
-            # Right boundary: slightly right of each point
-            # The natural shape emerges from the EI values
-            center_x = np.mean(points_x)
-
-            # Build polygon vertices going clockwise from top
-            poly_x = []
-            poly_y = []
-            for i, (px, py) in enumerate(zip(points_x, points_y)):
-                poly_x.append(px)
-                poly_y.append(py)
-
-            # Close the polygon by going back (it's already a line, make it a thin diamond)
-            # Add slight width to create visible shape
-            width_factor = 0.08 * (x_hi - x_lo)
-
-            # Left side going down
-            left_x = [px - width_factor * 0.3 for px in points_x]
-            right_x = [px + width_factor * 0.3 for px in points_x]
-            left_y = [y_positions[r] for r in [7, 8, 9]]
-            right_y = list(reversed(left_y))
-
-            # Full polygon: down the left, up the right
-            envelope_x = left_x + list(reversed(right_x))
-            envelope_y = left_y + right_y
+            # Clockwise from top tip -> right edges -> bottom tip -> left edges
+            poly_verts = [
+                (0, y7 + 0.15),
+                (hw7, y7),
+                (hw8, y8),
+                (hw9, y9),
+                (0, y9 - 0.15),
+                (-hw9, y9),
+                (-hw8, y8),
+                (-hw7, y7),
+            ]
 
             poly = Polygon(
-                list(zip(envelope_x, envelope_y)),
+                poly_verts,
                 closed=True,
                 facecolor="#E8E8E8",
                 edgecolor=color,
-                linewidth=2.0,
-                alpha=0.6,
+                linewidth=2.5,
+                alpha=0.55,
                 zorder=1,
             )
             ax.add_patch(poly)
 
-        # Plot dots at each resolution
+        # Plot centered dots sized by Gini (signal concentration)
         for res in RESOLUTIONS:
-            if res in ei_by_res:
-                ei = ei_by_res[res]
-                y = y_positions[res]
+            g = gini_by_res.get(res, 0.0)
+            y = y_positions[res]
 
-                # Dot size proportional to EI
-                dot_size = 60 + ei * 80
-                ax.scatter(
-                    ei, y,
-                    s=dot_size,
-                    c=color,
-                    edgecolors="white",
-                    linewidths=1.0,
-                    zorder=3,
-                    alpha=0.95,
-                )
+            # Dot size proportional to Gini
+            dot_size = 80 + (g - gini_min) / gini_span * 250
 
-                # Connecting line between dots
-                ax.plot(
-                    [ei, ei], [y - 0.02, y + 0.02],
-                    color=color, linewidth=0, zorder=2,
-                )
+            ax.scatter(
+                0, y,
+                s=dot_size,
+                c=color,
+                edgecolors="white",
+                linewidths=1.2,
+                zorder=3,
+                alpha=0.95,
+            )
 
-        # Connect dots with colored line
-        res_order = [7, 8, 9]
-        line_x = [ei_by_res.get(r, 0) for r in res_order]
-        line_y = [y_positions[r] for r in res_order]
-        ax.plot(line_x, line_y, color=color, linewidth=1.5, alpha=0.7, zorder=2)
-
-        # EI value labels
+        # Annotations
         for res in RESOLUTIONS:
-            if res in ei_by_res:
-                ei = ei_by_res[res]
-                y = y_positions[res]
+            g = gini_by_res.get(res, 0.0)
+            r2 = r2_by_res.get(res, np.nan)
+            y = y_positions[res]
+
+            # R2 label on right edge of envelope
+            if not np.isnan(r2):
+                hw = r2_to_half_width(r2)
                 ax.annotate(
-                    f"{ei:.2f}",
-                    xy=(ei, y),
+                    f"R\u00b2={r2:.2f}",
+                    xy=(hw, y),
                     xytext=(8, 0),
                     textcoords="offset points",
-                    fontsize=9,
+                    fontsize=8.5,
                     color=color,
                     fontweight="bold",
                     va="center",
                     ha="left",
                 )
 
-        # CE annotation (coarser vs finest)
-        ei9 = ei_by_res.get(9, 0)
-        ei7 = ei_by_res.get(7, 0)
-        ce_7 = ei7 - ei9
-        ce_sign = "+" if ce_7 >= 0 else ""
+            # Gini label next to dot
+            ax.annotate(
+                f"G={g:.2f}",
+                xy=(0, y),
+                xytext=(8, 10),
+                textcoords="offset points",
+                fontsize=7.5,
+                color="#555555",
+                va="center",
+                ha="left",
+            )
+
+        # Delta R2 annotation (res8 vs res9)
+        r2_9 = r2_by_res.get(9, 0.0)
+        r2_8 = r2_by_res.get(8, 0.0)
+        delta = r2_8 - r2_9
+        delta_sign = "+" if delta >= 0 else ""
         ax.text(
             0.97, 0.03,
-            f"CE(7-9) = {ce_sign}{ce_7:.2f}",
+            f"\u0394R\u00b2(res8\u2212res9) = {delta_sign}{delta:.3f}",
             transform=ax.transAxes,
-            fontsize=8,
+            fontsize=8.5,
             ha="right", va="bottom",
             color="#555555",
             fontstyle="italic",
@@ -436,12 +403,23 @@ def plot_diamond_profiles(
             [RESOLUTION_LABELS[r] for r in RESOLUTIONS],
             fontsize=9,
         )
-        ax.set_ylim(-0.6, 2.6)
+        ax.set_ylim(-0.5, 2.5)
 
-        # X-axis
-        ax.set_xlim(x_lo, x_hi)
-        if idx >= 3:  # Bottom row only
-            ax.set_xlabel("Effective Information (bits)", fontsize=10)
+        # X-axis: hide numeric labels
+        ax.set_xlim(-1.6, 1.6)
+        ax.set_xticks([])
+        ax.set_xlabel("")
+
+        # Bottom row label
+        if idx >= 3:
+            ax.set_xlabel(
+                "width ~ R\u00b2  |  dot ~ signal concentration",
+                fontsize=9,
+                color="#888888",
+            )
+
+        # Vertical center line
+        ax.axvline(x=0, color="#D0D0D0", linewidth=0.8, linestyle="-", alpha=0.5, zorder=0)
 
         # Grid
         ax.grid(axis="y", linestyle=":", alpha=0.3)
@@ -450,10 +428,11 @@ def plot_diamond_profiles(
         # Clean spines
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
+        ax.spines["bottom"].set_visible(False)
 
     # Suptitle
     fig.suptitle(
-        "Causal Emergence Diamond Profiles: Effective Information by Scale",
+        "Scale-Dependent Predictive Power: R\u00b2 and Signal Concentration by Resolution",
         fontsize=14,
         fontweight="bold",
         y=0.98,
@@ -490,8 +469,8 @@ def main() -> None:
     paths = StudyAreaPaths(STUDY_AREA)
     figure_dir = paths.project_root / "reports" / "figures" / "causal-emergence"
 
-    # Compute EI and CE metrics
-    logger.info("Computing Effective Information and Causal Emergence metrics...")
+    # Compute all metrics (R2 from CSV, Gini from PCA)
+    logger.info("Computing R2 and signal concentration metrics...")
     metrics_df = compute_all_metrics(paths)
 
     # Save CSV
@@ -501,15 +480,17 @@ def main() -> None:
     logger.info(f"Saved metrics to {csv_path}")
 
     # Print summary
-    logger.info("\n=== Effective Information Summary ===")
+    logger.info("\n=== Metrics Summary ===")
     for target_col in TARGET_ORDER:
         subset = metrics_df[metrics_df["target"] == target_col]
-        ei_strs = [
-            f"res{int(row['resolution'])}={row['EI']:.3f}"
-            for _, row in subset.iterrows()
-        ]
-        ce_7 = subset[subset["resolution"] == 7]["CE"].iloc[0]
-        logger.info(f"  {target_col}: {', '.join(ei_strs)} | CE(7-9)={ce_7:+.3f}")
+        parts = []
+        for _, row in subset.iterrows():
+            parts.append(
+                f"res{int(row['resolution'])}: R2={row['R2']:.3f} "
+                f"G={row['gini']:.3f}"
+            )
+        delta_8 = subset[subset["resolution"] == 8]["delta_R2"].iloc[0]
+        logger.info(f"  {target_col}: {' | '.join(parts)} | dR2(8-9)={delta_8:+.3f}")
 
     # Plot diamond profiles
     png_path, pdf_path = plot_diamond_profiles(metrics_df, figure_dir)
