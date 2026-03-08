@@ -257,6 +257,40 @@ class TestCentroidsGeoPandas:
         cx, cy = db_gpd.centroids(arr, resolution=_RES)
         assert len(cx) == len(arr)
 
+    def test_metric_projection_changes_centroid(self, db_gpd, hex_ids, synthetic_data):
+        """Projecting to a metric CRS before computing centroids must differ from
+        computing centroids directly on 4326 geometry.
+
+        H3 hexagons at res 9 span ~0.1 km; their geographic centroids computed
+        in lat/lng space are subtly wrong because degrees are not equal-area near
+        the Netherlands (~52N latitude).  This test pins that the 4326->3857->4326
+        roundtrip in the GeoPandas fallback path produces different (correct)
+        results than the naive approach, proving the projection step is load-bearing.
+        """
+        _, gdf = synthetic_data
+        ids_arr = np.asarray(hex_ids, dtype=str)
+
+        # API centroid: projects to 3857, computes centroid, reprojects to 4326
+        cx_api, cy_api = db_gpd.centroids(hex_ids, resolution=_RES, crs=4326)
+
+        # Wrong-way centroid: centroid computed directly in geographic (4326) space
+        filtered = gdf.loc[gdf.index.isin(ids_arr)].reindex(ids_arr)
+        cx_naive = filtered.geometry.centroid.x.values
+        cy_naive = filtered.geometry.centroid.y.values
+
+        # At least some centroids must differ — the projection is not a no-op.
+        # H3 hexagons are nearly symmetric polygons so the shift is small
+        # (~2e-8 degrees in latitude, ~1 mm at 52N) but consistent.
+        # We check the max absolute difference directly rather than allclose,
+        # which uses a relative tolerance that would swamp this tiny signal.
+        max_diff_x = np.max(np.abs(cx_api - cx_naive))
+        max_diff_y = np.max(np.abs(cy_api - cy_naive))
+        assert max_diff_x > 1e-9 or max_diff_y > 1e-9, (
+            f"Metric projection produced no detectable shift vs naive 4326 centroid "
+            f"(max_diff_x={max_diff_x:.2e}, max_diff_y={max_diff_y:.2e}) "
+            f"— projection may be a no-op"
+        )
+
 
 # ---------------------------------------------------------------------------
 # geometry() — GeoPandas path

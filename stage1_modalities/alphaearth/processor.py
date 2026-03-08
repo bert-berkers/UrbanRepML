@@ -370,17 +370,23 @@ class AlphaEarthProcessor(ModalityProcessor):
             # Create record
             record = {'h3_index': h3_index_str}
 
-            # Add embedding dimensions
+            # Add embedding dimensions (A00..A63 — the actual 64-dim embedding features)
             for i, value in enumerate(final_embedding):
                 record[f'A{i:02d}'] = value
 
-            record['pixel_count'] = pixel_counts.sum()
-            record['tile_count'] = len(embeddings)
+            # Metadata columns (NOT embedding features). These are saved alongside embeddings
+            # for provenance/quality tracking but are filtered out before model input by
+            # stage2_fusion/concat.py (_META_COLS) and similar downstream consumers.
+            record['pixel_count'] = pixel_counts.sum()   # total raster pixels mapped to this hex
+            record['tile_count'] = len(embeddings)        # number of TIFF tiles contributing to this hex
 
             final_data.append(record)
             h3_indices.append(h3_index_str)
 
-        # Create GeoDataFrame with SRAI-generated geometries
+        # Create GeoDataFrame with SRAI-generated geometries.
+        # The 'geometry' column (WKB-encoded H3 polygon) is also metadata, not an embedding
+        # feature. It is included for spatial operations and visualization but is dropped
+        # by downstream code (stage2_fusion/concat.py _META_COLS) before model input.
         from srai.h3 import h3_to_geoseries
         geometries = h3_to_geoseries(h3_indices)
 
