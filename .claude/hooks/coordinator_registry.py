@@ -238,16 +238,25 @@ def read_messages(
                 if recipient not in ("all", to_session):
                     continue
 
-            # Filter by time
+            # Filter by time — fall back to file mtime if 'at' missing/unparseable
+            # Also cap at 24h max age and reject future-dated messages
+            now_dt = datetime.now()
+            hard_cutoff = now_dt - timedelta(hours=24)
             if since is not None:
                 at_str = data.get("at")
+                at_dt = None
                 if at_str:
                     try:
                         at_dt = datetime.fromisoformat(str(at_str))
-                        if at_dt < since:
-                            continue
                     except (ValueError, TypeError):
                         pass
+                if at_dt is None:
+                    at_dt = datetime.fromtimestamp(msg_path.stat().st_mtime)
+                # Reject future-dated messages (clamp to now)
+                if at_dt > now_dt:
+                    at_dt = datetime.fromtimestamp(msg_path.stat().st_mtime)
+                if at_dt < since or at_dt < hard_cutoff:
+                    continue
 
             messages.append(data)
         except Exception as exc:
@@ -274,7 +283,10 @@ def write_message(coordinators_dir: Path, message_data: dict) -> None:
     messages_dir.mkdir(parents=True, exist_ok=True)
 
     from_session = message_data.get("from", "unknown")
-    at_str = message_data.get("at", datetime.now().isoformat(timespec="seconds"))
+    # Always ensure 'at' is set in the stored data
+    if "at" not in message_data:
+        message_data = dict(message_data, at=datetime.now().isoformat(timespec="seconds"))
+    at_str = message_data["at"]
     # Sanitize timestamp for filename: remove colons and dashes
     ts_clean = str(at_str).replace(":", "").replace("-", "").replace("T", "-")[:15]
     filename = f"{ts_clean}-{from_session}.yaml"
