@@ -211,7 +211,7 @@ class GTFSProcessor(ModalityProcessor):
             study_area_name: Name for intermediate file naming.
 
         Returns:
-            DataFrame with region_id index, gtfs2vec embedding columns, and h3_resolution.
+            DataFrame with region_id index, G00..Gxx embedding columns, and h3_resolution.
         """
         if not GTFS2VEC_AVAILABLE:
             raise RuntimeError(
@@ -238,7 +238,7 @@ class GTFSProcessor(ModalityProcessor):
             logger.warning("No transit stops fall within study area hexagons. Returning empty embeddings.")
             empty_df = pd.DataFrame(index=pd.Index([], name='region_id'))
             empty_df['h3_resolution'] = h3_resolution
-            return empty_df.reset_index()
+            return empty_df
 
         # Save intermediate data if requested
         if self.save_intermediate:
@@ -273,9 +273,9 @@ class GTFSProcessor(ModalityProcessor):
 
             logger.info(f"GTFS2Vec training completed. Generated embeddings for {len(embeddings_df):,} regions")
 
-            # Rename columns to gtfs2vec_N for clarity
+            # Rename columns to G00..Gxx convention
             embedding_cols = [c for c in embeddings_df.columns if c != 'geometry']
-            col_rename = {old: f'gtfs2vec_{i}' for i, old in enumerate(embedding_cols)}
+            col_rename = {old: f'G{i:02d}' for i, old in enumerate(embedding_cols)}
             embeddings_df = embeddings_df.rename(columns=col_rename)
 
             logger.info(f"Embedding dimensions: {len(embedding_cols)}")
@@ -295,7 +295,7 @@ class GTFSProcessor(ModalityProcessor):
         if embeddings_df.index.name != 'region_id':
             embeddings_df.index.name = 'region_id'
 
-        return embeddings_df.reset_index()
+        return embeddings_df
 
     def _save_intermediate_data(self, features_gdf: gpd.GeoDataFrame, regions_gdf: gpd.GeoDataFrame,
                                 joint_gdf: gpd.GeoDataFrame, h3_resolution: int, study_area_name: str):
@@ -383,9 +383,11 @@ class GTFSProcessor(ModalityProcessor):
         # Process to H3 embeddings
         embeddings_df = self.process_to_h3(features_gdf, area_gdf, h3_resolution, study_area_name)
 
-        # Save embeddings
-        output_filename = f"gtfs_embeddings_res{h3_resolution}.parquet"
-        output_path = self.save_embeddings(embeddings_df, output_dir, output_filename)
+        # Save embeddings (write directly to preserve region_id index)
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f"gtfs_embeddings_res{h3_resolution}.parquet"
+        embeddings_df.to_parquet(output_path)
 
         logger.info(f"GTFS embeddings saved to {output_path}")
         logger.info(
