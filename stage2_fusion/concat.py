@@ -1,5 +1,8 @@
 """
-Minimal stage-2 fusion: concatenate stage-1 modality embeddings via inner join.
+Minimal stage-2 fusion: concatenate stage-1 modality embeddings.
+
+Inner join by default; sparse modalities (e.g. roads) use left join with
+zero-fill so that missing coverage does not drop hexagons from denser modalities.
 
 Usage::
 
@@ -18,6 +21,10 @@ from utils import StudyAreaPaths
 from utils.paths import write_run_info
 
 logger = logging.getLogger(__name__)
+
+# Modalities that use left join + zero-fill instead of inner join.
+# "No data" for these modalities is semantically meaningful (e.g. no roads = zero vector).
+SPARSE_MODALITIES: set[str] = {"roads"}
 
 
 def _load_modality(paths: StudyAreaPaths, modality: str, resolution: int, year: int) -> pd.DataFrame:
@@ -89,7 +96,7 @@ def _validate_prefixes(df: pd.DataFrame, modalities: list[str]) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Concatenate stage-1 embeddings (inner join)")
+    parser = argparse.ArgumentParser(description="Concatenate stage-1 embeddings (inner join; sparse modalities use left join)")
     parser.add_argument("--modalities", required=True, help="Comma-separated modality names")
     parser.add_argument("--study-area", default="netherlands")
     parser.add_argument("--resolution", type=int, default=10)
@@ -103,7 +110,7 @@ def main(argv: list[str] | None = None) -> None:
     paths = StudyAreaPaths(args.study_area)
 
     # --- Load & join ---
-    logger.info("Loading %d modalities for %s res%d year=%d", len(modalities), args.study_area, args.resolution, args.year)
+    logger.info("Loading %d modalities for %s res%d year=%s", len(modalities), args.study_area, args.resolution, args.year)
     frames: list[pd.DataFrame] = []
     for mod in modalities:
         df = _load_modality(paths, mod, args.resolution, args.year)
@@ -112,15 +119,29 @@ def main(argv: list[str] | None = None) -> None:
 
     fused = frames[0]
     initial_count = len(fused)
-    logger.info("Starting inner join chain with %d hexagons (from %s)", initial_count, modalities[0])
+    logger.info("Starting join chain with %d hexagons (from %s)", initial_count, modalities[0])
     for i, df in enumerate(frames[1:], start=1):
+        mod = modalities[i]
         pre_join = len(fused)
-        fused = fused.join(df, how="inner")
-        dropped = pre_join - len(fused)
-        logger.info(
-            "  After joining %s: %d hexagons (%d dropped, %d survived from %s side)",
-            modalities[i], len(fused), dropped, len(fused), modalities[i]
-        )
+
+        if mod in SPARSE_MODALITIES:
+            # Left join: keep all hexagons from the accumulated frame,
+            # zero-fill where this modality has no data.
+            fused = fused.join(df, how="left")
+            new_cols = df.columns.tolist()
+            n_missing = fused[new_cols].isna().any(axis=1).sum()
+            fused[new_cols] = fused[new_cols].fillna(0.0)
+            logger.info(
+                "  After LEFT joining %s: %d hexagons (%d had data, %d zero-filled)",
+                mod, len(fused), len(fused) - n_missing, n_missing,
+            )
+        else:
+            fused = fused.join(df, how="inner")
+            dropped = pre_join - len(fused)
+            logger.info(
+                "  After joining %s: %d hexagons (%d dropped, %d survived from %s side)",
+                mod, len(fused), dropped, len(fused), mod,
+            )
 
     total_dropped = initial_count - len(fused)
     coverage_loss_pct = (total_dropped / initial_count * 100) if initial_count > 0 else 0.0
@@ -129,7 +150,7 @@ def main(argv: list[str] | None = None) -> None:
         len(fused), len(fused.columns), total_dropped, coverage_loss_pct
     )
     if fused.empty:
-        logger.error("Inner join produced 0 hexagons -- check that modalities share region_ids")
+        logger.error("Join produced 0 hexagons -- check that modalities share region_ids")
         sys.exit(1)
 
     # --- Validate column prefixes ---
