@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--modalities", required=True, help="Comma-separated modality names")
     parser.add_argument("--study-area", default="netherlands")
     parser.add_argument("--resolution", type=int, default=10)
-    parser.add_argument("--year", type=int, default=2022)
+    parser.add_argument("--year", type=str, default="2022")
     parser.add_argument("--pca", type=int, default=None, help="PCA components after concat")
     args = parser.parse_args(argv)
 

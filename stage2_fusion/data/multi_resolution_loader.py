@@ -12,6 +12,7 @@ Stage: 2 (fusion)
 """
 
 import logging
+import pickle
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -43,8 +44,8 @@ class MultiResolutionLoader:
         Resolutions from finest to coarsest, e.g. [9, 8, 7].
     feature_source : str or Path or None
         Path to the raw concat parquet. If None, auto-resolves from StudyAreaPaths.
-    year : int
-        Data year for path resolution.
+    year : str
+        Data year label for path resolution (e.g. "2022", "20mix").
     """
 
     def __init__(
@@ -52,7 +53,7 @@ class MultiResolutionLoader:
         study_area: str = "netherlands",
         resolutions: Optional[List[int]] = None,
         feature_source: Optional[str] = None,
-        year: int = 2022,
+        year: str = "2022",
     ):
         self.study_area = study_area
         self.resolutions = resolutions or [9, 8, 7]
@@ -198,6 +199,49 @@ class MultiResolutionLoader:
     # Adjacency graph construction
     # ------------------------------------------------------------------
 
+    def _load_neighbourhood(self, resolution: int) -> H3Neighbourhood:
+        """Load a precomputed H3Neighbourhood pickle, falling back to a fresh instance.
+
+        Precomputed pickles are written by scripts/stage2/precompute_neighbourhoods.py
+        and stored in StudyAreaPaths.neighbourhood_dir().  A precomputed neighbourhood
+        has _available_indices populated (region-filtered), so get_neighbours() returns
+        only in-study-area cells without any manual filtering by the caller.
+
+        Falls back to a bare H3Neighbourhood() if no pickle exists (backward-compatible:
+        the caller's ``if neighbor in hex_set`` guard still works correctly in that case).
+
+        Parameters
+        ----------
+        resolution:
+            H3 resolution to load the neighbourhood for.
+
+        Returns
+        -------
+        H3Neighbourhood instance (possibly region-filtered).
+        """
+        pickle_path = (
+            self.paths.neighbourhood_dir()
+            / f"{self.study_area}_res{resolution}_neighbourhood.pkl"
+        )
+        if pickle_path.exists():
+            logger.info(f"Loading precomputed neighbourhood for res{resolution}: {pickle_path}")
+            with open(pickle_path, "rb") as f:
+                neighbourhood = pickle.load(f)
+            n_available = (
+                len(neighbourhood._available_indices)
+                if neighbourhood._available_indices
+                else 0
+            )
+            logger.info(f"  Loaded neighbourhood with {n_available:,} regions")
+            return neighbourhood
+
+        logger.warning(
+            f"No precomputed neighbourhood pickle found for res{resolution} at "
+            f"{pickle_path}.  Falling back to bare H3Neighbourhood() — "
+            f"run scripts/stage2/precompute_neighbourhoods.py to cache it."
+        )
+        return H3Neighbourhood()
+
     def _build_adjacency_graphs(
         self,
     ) -> Tuple[Dict[int, torch.Tensor], Dict[int, torch.Tensor]]:
@@ -208,16 +252,23 @@ class MultiResolutionLoader:
         H3Neighbourhood.get_neighbours(index) returns the 6 immediate neighbors
         of a hex cell (does not include the center cell itself).
 
+        Loads precomputed neighbourhood pickles from StudyAreaPaths.neighbourhood_dir()
+        when available (see scripts/stage2/precompute_neighbourhoods.py).  A precomputed
+        neighbourhood has _available_indices set, so get_neighbours() already filters to
+        study-area cells; the ``if neighbor in hex_set`` guard below is kept for
+        correctness when falling back to a bare (unfiltered) H3Neighbourhood.
+
         Returns
         -------
         edge_indices : Dict[int, Tensor [2, E]]
         edge_weights : Dict[int, Tensor [E]]  — uniform 1.0 weights
         """
-        neighbourhood = H3Neighbourhood()
         edge_indices = {}
         edge_weights = {}
 
         for res in self.resolutions:
+            neighbourhood = self._load_neighbourhood(res)
+
             hex_list = self._hex_lists[res]
             hex_set = set(hex_list)
             hex_to_idx = self._hex_indices[res]
@@ -227,7 +278,10 @@ class MultiResolutionLoader:
 
             for hex_id in hex_list:
                 idx_src = hex_to_idx[hex_id]
-                # get_neighbours returns the 6 immediate neighbors (no center cell)
+                # get_neighbours returns the 6 immediate neighbors (no center cell).
+                # When neighbourhood has _available_indices, this call already filters
+                # to study-area cells.  The guard below is kept as a correctness
+                # backstop for the bare-neighbourhood fallback path.
                 neighbors = neighbourhood.get_neighbours(hex_id)
                 for neighbor in neighbors:
                     if neighbor in hex_set:

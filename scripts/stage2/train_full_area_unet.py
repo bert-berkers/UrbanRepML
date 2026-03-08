@@ -51,8 +51,8 @@ def parse_args():
         help="Early stopping patience (default: 100)"
     )
     parser.add_argument(
-        "--year", type=int, default=2022,
-        help="Data year (default: 2022)"
+        "--year", type=str, default="2022",
+        help="Data year label (default: 2022). Use '20mix' for mixed-year runs."
     )
     parser.add_argument(
         "--resolutions", type=str, default="9,8,7",
