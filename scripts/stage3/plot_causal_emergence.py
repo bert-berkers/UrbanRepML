@@ -132,6 +132,23 @@ def plot_radar(data: dict[str, dict[str, float]]) -> None:
         "UNet-concat": "#E91E63",
     }
 
+    # Collect all R2 values to auto-detect axis range
+    all_values = []
+    for variant in variants:
+        if variant in data:
+            all_values.extend(data[variant].get(t, 0.0) for t in TARGET_ORDER)
+
+    # Set radar minimum to zoom into the range where differences exist
+    if all_values:
+        data_min = min(all_values)
+        data_max = max(all_values)
+        # Floor to nearest 0.05 below minimum, with at least 0.05 padding
+        r_min = max(0.0, np.floor((data_min - 0.05) * 20) / 20)
+        # Ceiling to nearest 0.05 above maximum
+        r_max = min(1.0, np.ceil((data_max + 0.05) * 20) / 20)
+    else:
+        r_min, r_max = 0.0, 1.0
+
     for variant in variants:
         if variant not in data:
             logger.warning("Variant %s not found in data, skipping.", variant)
@@ -145,11 +162,34 @@ def plot_radar(data: dict[str, dict[str, float]]) -> None:
                 linestyle=style["linestyle"], linewidth=style["linewidth"])
         ax.fill(angles, values, color=color, alpha=style["alpha"])
 
+        # Add vertex value annotations at each axis tip
+        for i, (angle, val) in enumerate(zip(angles[:-1], values[:-1])):
+            # Offset text slightly outward from the data point
+            offset = 0.04 * (r_max - r_min)
+            ax.text(
+                angle, val + offset,
+                f"{val:.3f}",
+                ha="center", va="bottom",
+                fontsize=7.5,
+                color=color,
+                fontweight="bold",
+                alpha=0.9,
+            )
+
     ax.set_xticks(angles[:-1])
     ax.set_xticklabels(labels, fontsize=11, fontweight="medium")
-    ax.set_ylim(0, 1.0)
-    ax.set_yticks([0.2, 0.4, 0.6, 0.8])
-    ax.set_yticklabels(["0.2", "0.4", "0.6", "0.8"], fontsize=9, color="#555")
+    ax.set_ylim(r_min, r_max)
+
+    # Generate tick positions within the zoomed range
+    tick_step = 0.1
+    yticks = np.arange(
+        np.ceil(r_min / tick_step) * tick_step,
+        r_max + tick_step / 2,
+        tick_step,
+    )
+    yticks = yticks[(yticks >= r_min) & (yticks <= r_max)]
+    ax.set_yticks(yticks)
+    ax.set_yticklabels([f"{v:.1f}" for v in yticks], fontsize=9, color="#555")
     ax.set_title("Scale Fingerprint: R$^2$ by Liveability Dimension",
                  fontsize=14, fontweight="bold", pad=25)
     ax.legend(loc="upper right", bbox_to_anchor=(1.28, 1.12), fontsize=11,

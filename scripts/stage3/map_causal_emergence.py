@@ -303,11 +303,10 @@ def map_prediction_improvement(paths: StudyAreaPaths, output_dir: Path):
     mean_improvement = float(improvement.mean())
 
     title_lines = [
-        "Where Multi-Scale Matters: Prediction Improvement for Amenities (vrz)",
-        f"Blue = multi-scale better ({n_concat_better:,} hex) | "
-        f"Red = res9-only better ({n_res9_better:,} hex)",
-        f"Mean improvement: {mean_improvement:+.5f} | "
-        f"n={n_hexagons:,} hexagons | EPSG:28992",
+        "Prediction Improvement: Multi-Scale vs Res9-Only (Amenities)",
+        f"Blue = multi-scale better ({n_concat_better:,}) | "
+        f"Red = res9-only better ({n_res9_better:,}) | "
+        f"mean={mean_improvement:+.4f} | n={n_hexagons:,}",
     ]
 
     render_map(
@@ -317,7 +316,7 @@ def map_prediction_improvement(paths: StudyAreaPaths, output_dir: Path):
         render_extent=render_extent,
         cmap=cmap,
         norm=norm,
-        colorbar_label="|res9_residual| - |concat_residual|\n(+ = multi-scale better)",
+        colorbar_label="Prediction improvement\n(+ = multi-scale better)",
         title_lines=title_lines,
         output_path=output_dir / "spatial_improvement_vrz.png",
     )
@@ -420,10 +419,9 @@ def map_embedding_divergence(paths: StudyAreaPaths, output_dir: Path):
     n_low = int((cos_sim < low_thresh).sum())
 
     title_lines = [
-        "Embedding Divergence: Res9 vs Res8 Parent (rank-normalized)",
-        f"Bright = high divergence (scale disagreement) | Dark = low divergence (coherent)",
-        f"Raw cos_sim: mean={cos_sim.mean():.4f}, range=[{cos_sim.min():.4f}, {cos_sim.max():.4f}] | "
-        f"n={n_hexagons:,} hexagons | EPSG:28992",
+        "Embedding Divergence: Res9 vs Res8 Parent",
+        f"Bright = high divergence | Dark = coherent | "
+        f"cos_sim mean={cos_sim.mean():.4f} | n={n_hexagons:,}",
     ]
 
     # For the colorbar, show actual cosine distance quantiles
@@ -440,7 +438,7 @@ def map_embedding_divergence(paths: StudyAreaPaths, output_dir: Path):
         render_extent=render_extent,
         cmap=cmap,
         norm=dist_norm,
-        colorbar_label="Cosine distance (1 - cos_sim)\nrank-normalized for visibility",
+        colorbar_label="Cosine distance (rank-normalized)\n1 - cos_sim, percentile-scaled",
         title_lines=title_lines,
         output_path=output_dir / "embedding_divergence_res8_res9.png",
     )

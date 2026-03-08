@@ -382,7 +382,7 @@ def plot_diamond_profiles(
             0.97, 0.03,
             f"\u0394R\u00b2(res8\u2212res9) = {delta_sign}{delta:.3f}",
             transform=ax.transAxes,
-            fontsize=8.5,
+            fontsize=10,
             ha="right", va="bottom",
             color="#555555",
             fontstyle="italic",
