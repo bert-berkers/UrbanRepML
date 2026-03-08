@@ -203,20 +203,17 @@ class MultiResolutionLoader:
     ) -> Tuple[Dict[int, torch.Tensor], Dict[int, torch.Tensor]]:
         """Build adjacency edge_index tensors for each resolution.
 
-        Uses h3.grid_disk(hex, 1) for neighbor lookup. This is faster than SRAI's
-        H3Neighbourhood for large hex sets (247K+ at res9) because SRAI builds a
-        GeoDataFrame-backed neighbourhood which has significant overhead for bulk
-        queries. h3.grid_disk is a direct C-level call.
-
-        Decision: h3.grid_disk is technically tessellation-adjacent, but the SRAI
-        H3Neighbourhood internally uses the same h3 calls. For 247K+ nodes, the
-        GeoDataFrame overhead is prohibitive. Using h3 directly here.
+        Uses SRAI's H3Neighbourhood.get_neighbours() for neighbor lookup per
+        CLAUDE.md policy (grid_disk/grid_ring must go through SRAI).
+        H3Neighbourhood.get_neighbours(index) returns the 6 immediate neighbors
+        of a hex cell (does not include the center cell itself).
 
         Returns
         -------
         edge_indices : Dict[int, Tensor [2, E]]
         edge_weights : Dict[int, Tensor [E]]  — uniform 1.0 weights
         """
+        neighbourhood = H3Neighbourhood()
         edge_indices = {}
         edge_weights = {}
 
@@ -230,10 +227,10 @@ class MultiResolutionLoader:
 
             for hex_id in hex_list:
                 idx_src = hex_to_idx[hex_id]
-                # grid_disk(h, 1) returns h itself + its 6 neighbors
-                neighbors = h3.grid_disk(hex_id, 1)
+                # get_neighbours returns the 6 immediate neighbors (no center cell)
+                neighbors = neighbourhood.get_neighbours(hex_id)
                 for neighbor in neighbors:
-                    if neighbor != hex_id and neighbor in hex_set:
+                    if neighbor in hex_set:
                         idx_dst = hex_to_idx[neighbor]
                         src_list.append(idx_src)
                         dst_list.append(idx_dst)
