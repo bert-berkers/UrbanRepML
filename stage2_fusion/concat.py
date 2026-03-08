@@ -13,7 +13,7 @@ import sys
 
 import pandas as pd
 
-from stage1_modalities import MODALITY_PREFIXES
+from stage1_modalities import MODALITY_PREFIXES, SUB_EMBEDDER_MAP
 from utils import StudyAreaPaths
 from utils.paths import write_run_info
 
@@ -28,10 +28,13 @@ def _load_modality(paths: StudyAreaPaths, modality: str, resolution: int, year: 
     normalizes any known variant so downstream joins always work on a
     common index name.
     """
-    path = paths.embedding_file(modality, resolution, year)
+    # Resolve sub-embedder modalities (e.g. "hex2vec" -> poi/hex2vec/)
+    parent_modality, sub_embedder = SUB_EMBEDDER_MAP.get(modality, (modality, None))
+
+    path = paths.embedding_file(parent_modality, resolution, year, sub_embedder=sub_embedder)
     if not path.exists():
         # Some modalities use "latest" instead of a numeric year
-        fallback = paths.embedding_file(modality, resolution, "latest")
+        fallback = paths.embedding_file(parent_modality, resolution, "latest", sub_embedder=sub_embedder)
         if fallback.exists():
             logger.info("  %s: year=%s not found, falling back to 'latest'", modality, year)
             path = fallback
@@ -49,6 +52,9 @@ def _load_modality(paths: StudyAreaPaths, modality: str, resolution: int, year: 
     # Case 2: h3_index is the index name
     elif df.index.name == "h3_index":
         df.index.name = "region_id"
+    # Case 3: region_id is a column (index is default RangeIndex)
+    elif "region_id" in df.columns and df.index.name != "region_id":
+        df = df.set_index("region_id")
 
     if df.index.name != "region_id":
         raise ValueError(f"{modality}: expected index name 'region_id', got '{df.index.name}'")

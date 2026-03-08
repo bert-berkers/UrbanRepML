@@ -17,9 +17,17 @@ from stage1_modalities.base import ModalityProcessor
 MODALITY_PREFIXES = {
     "alphaearth": "A",   # A00-A63 (64 features)
     "poi": "P",          # P00-Pxx
+    "hex2vec": "hex2vec_",  # hex2vec_0..hex2vec_49 (sub-embedder of POI)
     "roads": "R",        # R00-Rxx
     "aerial": "S",       # S00-Sxx (satellite imagery)
     "gtfs": "G",         # G00-Gxx
+}
+
+# Mapping from virtual modality names to (parent_modality, sub_embedder) for
+# modalities stored as sub-embedders under a parent modality directory.
+# Used by stage2_fusion.concat._load_modality to resolve file paths.
+SUB_EMBEDDER_MAP = {
+    "hex2vec": ("poi", "hex2vec"),
 }
 
 
