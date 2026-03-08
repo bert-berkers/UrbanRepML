@@ -20,7 +20,7 @@ MODALITY_PREFIXES = {
     "hex2vec": "hex2vec_",  # hex2vec_0..hex2vec_49 (sub-embedder of POI)
     "roads": "R",        # R00-Rxx
     "aerial": "S",       # S00-Sxx (satellite imagery)
-    "gtfs": "G",         # G00-Gxx
+    "gtfs": "gtfs2vec_",  # gtfs2vec_0..gtfs2vec_63 (from GTFS2Vec embedder)
 }
 
 # Mapping from virtual modality names to (parent_modality, sub_embedder) for

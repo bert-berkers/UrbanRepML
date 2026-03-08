@@ -64,12 +64,18 @@ class MultiResolutionLoader:
         if feature_source is not None:
             self._feature_path = Path(feature_source)
         else:
-            # Default: raw concat at the canonical backup location
-            self._feature_path = (
+            # Default: try _raw.parquet first (legacy), then plain .parquet
+            raw_path = (
                 self.paths.stage2("concat")
                 / "embeddings"
                 / f"{study_area}_res{self.finest_res}_{year}_raw.parquet"
             )
+            plain_path = (
+                self.paths.stage2("concat")
+                / "embeddings"
+                / f"{study_area}_res{self.finest_res}_{year}.parquet"
+            )
+            self._feature_path = raw_path if raw_path.exists() else plain_path
 
         # Will be populated by load()
         self._hex_indices: Dict[int, Dict[str, int]] = {}  # res -> {hex_id: idx}

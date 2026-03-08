@@ -58,6 +58,10 @@ def parse_args():
         "--resolutions", type=str, default="9,8,7",
         help="Comma-separated resolutions finest-to-coarsest (default: 9,8,7)"
     )
+    parser.add_argument(
+        "--feature-source", type=str, default=None,
+        help="Explicit path to raw concat parquet. Overrides auto-resolution."
+    )
     return parser.parse_args()
 
 
@@ -89,6 +93,7 @@ def main():
         study_area=args.study_area,
         resolutions=resolutions,
         year=args.year,
+        feature_source=args.feature_source,
     )
     data = loader.load()
     hex_ids = data["hex_ids"]
@@ -168,25 +173,28 @@ def main():
         f"Best loss: {best_state['loss']:.6f}"
     )
 
-    # ---- 5. Extract and save res9 embeddings ----
-    emb_tensor = best_embeddings[finest_res].detach().cpu().numpy()
-    res_hex_ids = hex_ids[finest_res]
+    # ---- 5. Extract and save embeddings at ALL resolutions ----
+    saved_paths = {}
+    for res in sorted(resolutions, reverse=True):
+        emb_tensor = best_embeddings[res].detach().cpu().numpy()
+        res_hex_ids = hex_ids[res]
 
-    logger.info(
-        f"Res{finest_res} embeddings: {emb_tensor.shape} "
-        f"({len(res_hex_ids)} hexagons, {emb_tensor.shape[1]}D)"
-    )
+        logger.info(
+            f"Res{res} embeddings: {emb_tensor.shape} "
+            f"({len(res_hex_ids)} hexagons, {emb_tensor.shape[1]}D)"
+        )
 
-    emb_df = pd.DataFrame(
-        emb_tensor,
-        index=pd.Index(res_hex_ids, name="region_id"),
-        columns=[f"unet_{i}" for i in range(emb_tensor.shape[1])],
-    )
+        emb_df = pd.DataFrame(
+            emb_tensor,
+            index=pd.Index(res_hex_ids, name="region_id"),
+            columns=[f"unet_{i}" for i in range(emb_tensor.shape[1])],
+        )
 
-    out_path = paths.fused_embedding_file("unet", finest_res, args.year)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    emb_df.to_parquet(out_path)
-    logger.info(f"Saved embeddings to {out_path}")
+        out_path = paths.fused_embedding_file("unet", res, args.year)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        emb_df.to_parquet(out_path)
+        saved_paths[res] = out_path
+        logger.info(f"Saved res{res} embeddings to {out_path}")
 
     # Also save the model checkpoint
     torch.save(best_state, checkpoint_dir / "best_model.pt")
@@ -226,8 +234,10 @@ def main():
     print(f"  Best epoch:     {best_state['epoch']}")
     print(f"  Best loss:      {best_state['loss']:.6f}")
     print(f"  Training time:  {train_time:.1f}s ({train_time/60:.1f} min)")
-    print(f"  Embeddings:     {emb_df.shape}")
-    print(f"  Saved to:       {out_path}")
+    for res, p in saved_paths.items():
+        n_hex = len(hex_ids[res])
+        print(f"  Embeddings res{res}: ({n_hex:,}, {args.hidden_dim})")
+        print(f"    Saved to:     {p}")
     print("=" * 60)
 
 

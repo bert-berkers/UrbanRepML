@@ -40,14 +40,20 @@ def _load_modality(paths: StudyAreaPaths, modality: str, resolution: int, year: 
 
     path = paths.embedding_file(parent_modality, resolution, year, sub_embedder=sub_embedder)
     if not path.exists():
-        # Some modalities use "latest" instead of a numeric year
-        fallback = paths.embedding_file(parent_modality, resolution, "latest", sub_embedder=sub_embedder)
-        if fallback.exists():
-            logger.info("  %s: year=%s not found, falling back to 'latest'", modality, year)
-            path = fallback
+        # Try common fallback years: "latest" (Overpass-sourced) and "2022" (GEE-sourced)
+        tried = [path]
+        for fallback_year in ("latest", "2022"):
+            if str(fallback_year) == str(year):
+                continue
+            fallback = paths.embedding_file(parent_modality, resolution, fallback_year, sub_embedder=sub_embedder)
+            if fallback.exists():
+                logger.info("  %s: year=%s not found, falling back to '%s'", modality, year, fallback_year)
+                path = fallback
+                break
+            tried.append(fallback)
         else:
             raise FileNotFoundError(
-                f"Embedding file not found: {path} (also tried {fallback})"
+                f"Embedding file not found for {modality}: tried {[str(p) for p in tried]}"
             )
     df = pd.read_parquet(path)
 
