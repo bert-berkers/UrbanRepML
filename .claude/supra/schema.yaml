@@ -87,6 +87,19 @@ dimensions:
       coordinator: 0.8
       qaqc: 0.6
 
+  data_engineering_diligence:
+    description: "Verify data provenance, naming, column prefixes, file integrity before downstream use"
+    group: quality
+    default: 3
+    low_label: "Trust the pipeline"
+    high_label: "Audit everything"
+    agent_relevance:
+      stage1-modality-encoder: 1.0
+      stage2-fusion-architect: 0.9
+      qaqc: 0.8
+      coordinator: 0.7
+      librarian: 0.6
+
 modes:
   exploratory:
     description: "Open-ended, creative, follow interesting threads"
