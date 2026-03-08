@@ -828,6 +828,33 @@ class ClassificationVisualizer:
             transform=ax.transData,
         )
 
+    @staticmethod
+    def _compute_stamp_radius(
+        resolution: int, extent: tuple, width: int,
+    ) -> int:
+        """
+        Compute pixel radius for a disk stamp based on H3 cell size.
+
+        Args:
+            resolution: H3 resolution level.
+            extent: (minx, miny, maxx, maxy) in projected CRS (meters).
+            width: Canvas width in pixels.
+
+        Returns:
+            Stamp radius in pixels (at least 1).
+        """
+        import h3
+        hex_edge_m = h3.average_hexagon_edge_length(resolution, unit='m')
+        minx, _, maxx, _ = extent
+        meters_per_pixel = (maxx - minx) / width
+        return max(1, int(hex_edge_m / meters_per_pixel * 0.8))
+
+    @staticmethod
+    def _build_disk_mask(radius: int) -> np.ndarray:
+        """Build a boolean circular mask of the given radius."""
+        yy, xx = np.ogrid[-radius:radius + 1, -radius:radius + 1]
+        return (xx * xx + yy * yy) <= radius * radius
+
     def _rasterize_centroids(
         self,
         hex_ids: pd.Index,
@@ -839,9 +866,9 @@ class ClassificationVisualizer:
         """
         Rasterize H3 centroids to an RGB image via SpatialDB.
 
-        Looks up centroids from the pre-computed regions parquet via
-        SpatialDB, already in EPSG:28992 (RD New), and writes RGB values
-        into a numpy pixel array.
+        Each centroid is stamped with a filled disk whose radius is derived
+        from the H3 cell size at the given resolution, preventing single-pixel
+        gaps between adjacent hexagons.
 
         Args:
             hex_ids: Index of H3 hex ID strings.
@@ -878,7 +905,37 @@ class ClassificationVisualizer:
 
         # Write into RGBA image (white background)
         image = np.ones((height, width, 4), dtype=np.float32)
-        image[py, px, :3] = rgb_masked
-        image[py, px, 3] = 1.0
+
+        # Compute disk stamp from H3 cell size
+        stamp_radius = self._compute_stamp_radius(
+            self.h3_resolution, extent, width,
+        )
+        disk_mask = self._build_disk_mask(stamp_radius)
+        disk_size = 2 * stamp_radius + 1
+
+        # Stamp each centroid with a filled disk
+        for i in range(len(px)):
+            x0 = px[i] - stamp_radius
+            y0 = py[i] - stamp_radius
+            x1 = x0 + disk_size
+            y1 = y0 + disk_size
+
+            # Clamp to image bounds
+            sx0 = max(0, -x0)
+            sy0 = max(0, -y0)
+            sx1 = disk_size - max(0, x1 - width)
+            sy1 = disk_size - max(0, y1 - height)
+
+            ix0 = max(0, x0)
+            iy0 = max(0, y0)
+            ix1 = min(width, x1)
+            iy1 = min(height, y1)
+
+            if ix0 >= ix1 or iy0 >= iy1:
+                continue
+
+            stamp_slice = disk_mask[sy0:sy1, sx0:sx1]
+            image[iy0:iy1, ix0:ix1, :3][stamp_slice] = rgb_masked[i]
+            image[iy0:iy1, ix0:ix1, 3][stamp_slice] = 1.0
 
         return image
