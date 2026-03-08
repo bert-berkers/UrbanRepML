@@ -154,7 +154,9 @@ class MultiResolutionLoader:
             f"at res{self.finest_res}"
         )
 
-        # Single "fused" modality — bypasses ModalityFusion's per-modality projection
+        # Single "fused" modality — bypasses ModalityFusion's learnable modality_weights
+        # (softmax of a single weight is always 1.0, so it gets zero gradient).
+        # TODO: Return per-modality tensors to activate ModalityFusion's weighting.
         features_dict = {
             "fused": torch.tensor(df.values, dtype=torch.float32)
         }

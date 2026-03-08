@@ -11,7 +11,24 @@ from tqdm.auto import tqdm
 logger = logging.getLogger(__name__)
 
 class ModalityFusion(nn.Module):
-    """Simple modality fusion with consistent dimensionality"""
+    """Simple modality fusion with consistent dimensionality.
+
+    NOTE (2026-03-08): The modality_weights parameter is effectively dead code.
+    MultiResolutionLoader feeds a single "fused" tensor (pre-concatenated by
+    stage2_fusion.concat), so modality_weights is a 1-element tensor whose
+    softmax is always 1.0 — it receives zero gradient during training.
+    The projection layers (Linear -> LayerNorm -> GELU) DO receive gradients
+    and act as the input projection to hidden_dim.
+
+    Decision: KEEP as-is (conservative). Removing would break the trained
+    checkpoint (epoch 499, loss 1.52e-4) since the state_dict keys would change.
+    When we eventually feed per-modality tensors (rather than pre-fused), the
+    learnable weights will become active without any architecture change.
+
+    TODO: When adding true multi-modality input to FullAreaUNet, update
+    MultiResolutionLoader to return per-modality tensors instead of a single
+    "fused" key. ModalityFusion will then work as designed.
+    """
     def __init__(self, modality_dims: Dict[str, int], hidden_dim: int):
         super().__init__()
         self.projections = nn.ModuleDict({

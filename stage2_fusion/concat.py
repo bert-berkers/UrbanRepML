@@ -105,10 +105,23 @@ def main(argv: list[str] | None = None) -> None:
         frames.append(df)
 
     fused = frames[0]
-    for df in frames[1:]:
+    initial_count = len(fused)
+    logger.info("Starting inner join chain with %d hexagons (from %s)", initial_count, modalities[0])
+    for i, df in enumerate(frames[1:], start=1):
+        pre_join = len(fused)
         fused = fused.join(df, how="inner")
+        dropped = pre_join - len(fused)
+        logger.info(
+            "  After joining %s: %d hexagons (%d dropped, %d survived from %s side)",
+            modalities[i], len(fused), dropped, len(fused), modalities[i]
+        )
 
-    logger.info("After inner join: %d hexagons, %d columns", len(fused), len(fused.columns))
+    total_dropped = initial_count - len(fused)
+    coverage_loss_pct = (total_dropped / initial_count * 100) if initial_count > 0 else 0.0
+    logger.info(
+        "Final: %d hexagons, %d columns (lost %d hexagons, %.1f%% coverage loss)",
+        len(fused), len(fused.columns), total_dropped, coverage_loss_pct
+    )
     if fused.empty:
         logger.error("Inner join produced 0 hexagons -- check that modalities share region_ids")
         sys.exit(1)
