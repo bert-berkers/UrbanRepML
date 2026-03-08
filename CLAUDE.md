@@ -117,6 +117,10 @@ Three tiers in `scripts/`:
 
 **No tests in scripts/**. Tests go in `tests/`. Debug scripts go in `one_off/`.
 
+## Reports
+
+`reports/` contains human-facing summaries of significant experimental results. One report per finding, not per session. Markdown with relative links for PyCharm clickability. Gittracked.
+
 ## Key Commands
 
 ```bash

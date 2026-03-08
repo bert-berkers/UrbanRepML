@@ -440,6 +440,9 @@ srai_cache/
 *.h3_cache
 h3_*.cache
 
+# Runtime lock files
+.claude/scheduled_tasks.lock
+
 # ==========================================
 # End of .gitignore
 # ==========================================

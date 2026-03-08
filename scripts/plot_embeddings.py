@@ -168,7 +168,7 @@ def rasterize_continuous(
         stamp: pixel radius per point (1=single pixel, 2+=fills gaps at coarser res).
 
     Returns:
-        (height, width, 4) RGBA float32 array with white background.
+        (height, width, 4) RGBA float32 array with transparent background.
     """
     minx, miny, maxx, maxy = extent
     mask = (
@@ -191,7 +191,7 @@ def rasterize_continuous(
     colormap_obj = plt.get_cmap(cmap)
     rgb = colormap_obj(norm(val_m))[:, :3].astype(np.float32)
 
-    image = np.ones((height, width, 4), dtype=np.float32)  # white bg
+    image = np.zeros((height, width, 4), dtype=np.float32)
     _stamp_pixels(image, py, px, rgb, stamp, height, width)
     return image
 
@@ -217,7 +217,7 @@ def rasterize_rgb(
         stamp: pixel radius per point.
 
     Returns:
-        (height, width, 4) RGBA float32 array with white background.
+        (height, width, 4) RGBA float32 array with transparent background.
     """
     minx, miny, maxx, maxy = extent
     mask = (
@@ -233,7 +233,7 @@ def rasterize_rgb(
     np.clip(px, 0, width - 1, out=px)
     np.clip(py, 0, height - 1, out=py)
 
-    image = np.ones((height, width, 4), dtype=np.float32)
+    image = np.zeros((height, width, 4), dtype=np.float32)
     _stamp_pixels(image, py, px, rgb_masked, stamp, height, width)
     return image
 
@@ -257,7 +257,7 @@ def rasterize_binary(
         stamp: pixel radius per point.
 
     Returns:
-        (height, width, 4) RGBA float32 array with white background.
+        (height, width, 4) RGBA float32 array with transparent background.
     """
     minx, miny, maxx, maxy = extent
     mask = (cx >= minx) & (cx <= maxx) & (cy >= miny) & (cy <= maxy)
@@ -270,7 +270,7 @@ def rasterize_binary(
 
     n = len(px)
     rgb = np.broadcast_to(np.array(color, dtype=np.float32), (n, 3)).copy()
-    image = np.ones((height, width, 4), dtype=np.float32)
+    image = np.zeros((height, width, 4), dtype=np.float32)
     _stamp_pixels(image, py, px, rgb, stamp, height, width)
     return image
 
@@ -298,7 +298,7 @@ def rasterize_categorical(
         stamp: pixel radius per point (1=single pixel, 2+=fills gaps at coarser res).
 
     Returns:
-        (height, width, 4) RGBA float32 array with white background.
+        (height, width, 4) RGBA float32 array with transparent background.
     """
     minx, miny, maxx, maxy = extent
     mask = (cx >= minx) & (cx <= maxx) & (cy >= miny) & (cy <= maxy)
@@ -313,7 +313,7 @@ def rasterize_categorical(
     norm_vals = lab_m.astype(float) / max(n_clusters - 1, 1)
     rgb = colormap_obj(norm_vals)[:, :3].astype(np.float32)
 
-    image = np.ones((height, width, 4), dtype=np.float32)
+    image = np.zeros((height, width, 4), dtype=np.float32)
     _stamp_pixels(image, py, px, rgb, stamp, height, width)
     return image
 
@@ -372,6 +372,7 @@ def plot_spatial_map(ax, image, extent, boundary_gdf, title=""):
     if boundary_gdf is not None:
         boundary_gdf.plot(
             ax=ax, facecolor="#f0f0f0", edgecolor="#cccccc", linewidth=0.5,
+            zorder=1,
         )
     minx, miny, maxx, maxy = extent
     ax.imshow(
@@ -987,6 +988,71 @@ def plot_leefbaarometer_distributions(
 
 
 # ---------------------------------------------------------------------------
+# Empty/water hexagon filter
+# ---------------------------------------------------------------------------
+
+
+def _filter_empty_hexagons(
+    emb_df: pd.DataFrame,
+    display_name: str,
+    constant_threshold: float = 0.10,
+) -> pd.DataFrame:
+    """Filter out hexagons with no meaningful embedding signal.
+
+    Two-pass strategy:
+      1. Remove rows where ALL embedding dims are exactly zero.
+      2. Remove low-variance rows (water/empty hexagons that the encoder maps
+         to near-identical output vectors). Uses row-wise std with a bimodal
+         gap detection between "background" and "real" embeddings.
+    """
+    n_original = len(emb_df)
+    vals = emb_df.values
+    to_drop = np.zeros(n_original, dtype=bool)
+
+    # Pass 1: all-zero rows
+    all_zero = (vals == 0.0).all(axis=1)
+    n_zero = int(all_zero.sum())
+    if n_zero > 0:
+        to_drop |= all_zero
+        logger.info(
+            "  Pass 1: %d all-zero rows (%.1f%%)",
+            n_zero, 100.0 * n_zero / n_original,
+        )
+
+    # Pass 2: low-variance rows (near-constant embeddings)
+    if n_original > 100:
+        row_std = vals.std(axis=1)
+        p10_std = np.percentile(row_std, 10)
+        p50_std = np.percentile(row_std, 50)
+        if p50_std > 0 and p10_std / p50_std < 0.8:
+            cutoff = (p10_std + p50_std) / 2
+        else:
+            overall_std = vals.std()
+            cutoff = overall_std * 0.01 if overall_std > 0 else 0
+
+        low_var = row_std < cutoff
+        n_low = int(low_var.sum())
+        if n_low > 0 and n_low / n_original >= constant_threshold:
+            to_drop |= low_var
+            logger.info(
+                "  Pass 2: %d low-variance rows (%.1f%%, std < %.4f)",
+                n_low, 100.0 * n_low / n_original, cutoff,
+            )
+
+    n_drop = int(to_drop.sum())
+    if n_drop == 0:
+        logger.info("  No empty/constant hexagons to filter for %s", display_name)
+        return emb_df
+
+    filtered = emb_df[~to_drop]
+    logger.info(
+        "  Filtered %d -> %d hexagons (dropped %d, %.1f%%) for %s",
+        n_original, len(filtered), n_drop, 100.0 * n_drop / n_original, display_name,
+    )
+    return filtered
+
+
+# ---------------------------------------------------------------------------
 # Main pipeline for a single modality
 # ---------------------------------------------------------------------------
 
@@ -999,6 +1065,7 @@ def process_modality(
     year: str,
     resolution: int,
     boundary_gdf: gpd.GeoDataFrame | None,
+    filter_threshold: float = 0.10,
 ):
     """Run all 7 plots for a single modality."""
     logger.info("=" * 60)
@@ -1006,18 +1073,25 @@ def process_modality(
     logger.info("=" * 60)
 
     # Load embeddings
-    emb_df = load_embeddings(paths, modality, resolution, year, sub_embedder)
-    if emb_df is None:
+    emb_df_full = load_embeddings(paths, modality, resolution, year, sub_embedder)
+    if emb_df_full is None:
         return
 
     # Output directory (resolution-specific subdirectory)
     out_dir = get_plot_dir(paths, modality, sub_embedder, resolution)
     logger.info("  Output dir: %s", out_dir)
 
-    # Get centroids via SpatialDB (single call, cached)
+    # Get centroids for FULL data (used by coverage plot)
     db = SpatialDB.for_study_area(paths.study_area)
-    cx, cy = db.centroids(emb_df.index, resolution=resolution, crs=28992)
-    logger.info("  Centroids loaded: %d points", len(cx))
+    cx_full, cy_full = db.centroids(emb_df_full.index, resolution=resolution, crs=28992)
+    logger.info("  Centroids loaded: %d points", len(cx_full))
+
+    # Filter empty/water hexagons for analysis plots
+    emb_df = _filter_empty_hexagons(emb_df_full, display_name, constant_threshold=filter_threshold)
+    if len(emb_df) < len(emb_df_full):
+        cx, cy = db.centroids(emb_df.index, resolution=resolution, crs=28992)
+    else:
+        cx, cy = cx_full, cy_full
 
     # Compute extent from boundary or centroids
     if boundary_gdf is not None:
@@ -1054,9 +1128,9 @@ def process_modality(
     logger.info("[6/7] Correlation heatmap...")
     plot_correlation_heatmap(emb_df, out_dir, display_name)
 
-    # Plot 7: Coverage map
+    # Plot 7: Coverage map (uses FULL unfiltered data)
     logger.info("[7/7] Coverage map...")
-    plot_coverage(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
+    plot_coverage(emb_df_full, cx_full, cy_full, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
 
     logger.info("Completed %s: 7 plots saved to %s", display_name, out_dir)
 
@@ -1114,6 +1188,10 @@ def main():
         "--sub-embedder", default=None,
         help="Sub-embedder name (e.g. hex2vec, geovex). Default: all for the modality.",
     )
+    parser.add_argument(
+        "--filter-threshold", type=float, default=0.10,
+        help="Minimum fraction of low-variance rows to trigger filtering (default: 0.10).",
+    )
     args = parser.parse_args()
 
     # Configure logging
@@ -1158,7 +1236,8 @@ def main():
     # Process each modality
     for mod, sub, name, year in modalities:
         effective_year = args.year if args.year else year
-        process_modality(paths, mod, sub, name, effective_year, resolution, boundary_gdf)
+        process_modality(paths, mod, sub, name, effective_year, resolution, boundary_gdf,
+                         filter_threshold=args.filter_threshold)
 
     # Plot 8: Leefbaarometer distributions (when running all modalities)
     if args.modality is None:
