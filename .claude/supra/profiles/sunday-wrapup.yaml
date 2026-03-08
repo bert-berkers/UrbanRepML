@@ -1,0 +1,13 @@
+mode: sprint
+dimensions:
+  execution_speed: 5
+  exploration_vs_exploitation: 3
+  code_quality: 4
+  test_coverage: 4
+  spatial_correctness: 4
+  model_architecture: 5
+focus:
+- "End-of-weekend bow-tying — push, triage, preserve"
+suppress:
+- "supra infrastructure"
+saved_at: "2026-03-08T10:00:00Z"
