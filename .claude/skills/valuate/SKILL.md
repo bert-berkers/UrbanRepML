@@ -1,6 +1,6 @@
 ---
-name: attune
-description: "Adjust your precision weights -- tell the system what you care about right now."
+name: valuate
+description: "Set characteristic states (valuation). Static graph: indicators → percepts ↔ needs/desires (you)."
 user-invocable: true
 disable-model-invocation: false
 context: fork
@@ -57,7 +57,7 @@ Additional shorthand syntax:
   - Compound state dimensions are defined in `schema.yaml` under `compound_states:`
   - Dimensions NOT specified by the compound state are left at their current values
   - Any explicit dimension overrides in the same command take precedence over the compound state's values
-  - Example: `/attune deep-investigation, speed 2` applies deep-investigation then overrides execution_speed to 2
+  - Example: `/valuate deep-investigation, speed 2` applies deep-investigation then overrides execution_speed to 2
 - `focus "..."` sets the focus directive (replaces existing focus list with single item)
 - `suppress "..."` sets the suppress directive (replaces existing suppress list with single item)
 - Bare dimension names without a value are treated as amplify (set to 4)
@@ -68,28 +68,28 @@ Additional shorthand syntax:
 
 **Profile operations:**
 - Profiles are stored in `.claude/supra/profiles/{name}.yaml`
-- `save:` runs AFTER other shorthand changes, so `/attune sprint, save:sprint-default` first applies sprint mode, then saves the result
-- `load:` runs BEFORE other shorthand changes, so `/attune load:training, speed 5` loads the training profile then overrides speed
+- `save:` runs AFTER other shorthand changes, so `/valuate sprint, save:sprint-default` first applies sprint mode, then saves the result
+- `load:` runs BEFORE other shorthand changes, so `/valuate load:training, speed 5` loads the training profile then overrides speed
 - Use `supra_reader.save_profile()`, `supra_reader.load_profile()`, and `supra_reader.list_profiles()` from `.claude/hooks/supra_reader.py`
 
 **Examples:**
-- `/attune speed 5, tests 1` -- sets execution_speed=5, test_coverage=1
-- `/attune sprint` -- sets mode to sprint
-- `/attune focused, model 5, focus "prove hex2vec works"` -- mode=focused, model_architecture=5, focus set
-- `/attune explore` -- ambiguous: could mean mode=exploratory or exploration_vs_exploitation=4. Resolve: if no number follows, check if it matches a mode name first. `explore` is not a mode name, so it maps to the dimension at value 4. `exploratory` IS a mode name.
+- `/valuate speed 5, tests 1` -- sets execution_speed=5, test_coverage=1
+- `/valuate sprint` -- sets mode to sprint
+- `/valuate focused, model 5, focus "prove hex2vec works"` -- mode=focused, model_architecture=5, focus set
+- `/valuate explore` -- ambiguous: could mean mode=exploratory or exploration_vs_exploitation=4. Resolve: if no number follows, check if it matches a mode name first. `explore` is not a mode name, so it maps to the dimension at value 4. `exploratory` IS a mode name.
 
 **Resolution order for bare names** (no number follows):
 1. Check compound state names first (e.g., `creative-prototyping` -- hyphenated names are always compound states)
 2. Check mode names (`exploratory`, `focused`, `sprint`, `creative`)
 3. Check dimension shorthands (`speed`, `explore`, `quality`, `tests`, `spatial`, `model`)
 4. Check profile operations (`profiles`, `list`, `save:`, `load:`)
-- `/attune save:creative-evening` -- saves current state as "creative-evening"
-- `/attune load:training` -- restores the "training" profile
-- `/attune sprint, speed 5, tests 1, save:ship-it` -- applies sprint + overrides, saves as "ship-it"
-- `/attune profiles` -- lists all saved profiles
-- `/attune creative-prototyping` -- applies the creative-prototyping compound state (sets explore=5, speed=4, quality=2, tests=1, mode=creative)
-- `/attune deep-investigation, focus "understand hex2vec loss landscape"` -- applies compound state + sets focus
-- `/attune training-run, speed 4` -- applies training-run then overrides execution_speed to 4
+- `/valuate save:creative-evening` -- saves current state as "creative-evening"
+- `/valuate load:training` -- restores the "training" profile
+- `/valuate sprint, speed 5, tests 1, save:ship-it` -- applies sprint + overrides, saves as "ship-it"
+- `/valuate profiles` -- lists all saved profiles
+- `/valuate creative-prototyping` -- applies the creative-prototyping compound state (sets explore=5, speed=4, quality=2, tests=1, mode=creative)
+- `/valuate deep-investigation, focus "understand hex2vec loss landscape"` -- applies compound state + sets focus
+- `/valuate training-run, speed 4` -- applies training-run then overrides execution_speed to 4
 
 If shorthand is provided, apply changes and jump to Step 6 (print summary). Do not ask questions.
 
@@ -116,17 +116,17 @@ Good morning. Here's your inread before we attune:
   3. git log: 3 commits yesterday (supra core, profiles, compound states)
   4. No unread coordinator messages.
 
-Saved profile ready: "saturday-morning" (focused, model=5, speed=4, suppress infra)
+Saved profile ready: "friday-evening" (focused, model=5, speed=4, suppress infra)
 
 Take your time reading. When you're ready, I'll ask 4 quick questions — or just say
-"load saturday-morning" to jump straight in.
+"load friday-evening" to jump straight in.
 ```
 
 **Key principles:**
 - This is a PAUSE, not a speedbump. The human should feel invited to read, not rushed.
 - Keep the list to 3-5 items max. Compress aggressively — file paths + one-line summary.
-- If a saved profile exists with "morning", "saturday", "sunday", or "weekend" in the name, surface it prominently as a quick-start option.
-- After presenting the inread, WAIT for the human to respond before proceeding to the questionnaire. They might say "load saturday-morning" (shorthand, skip questionnaire), or "ok ready" (proceed to questionnaire), or ask a question about something they read.
+- If a saved profile exists with "friday", "evening", "sunday", or "weekend" in the name, surface it prominently as a quick-start option.
+- After presenting the inread, WAIT for the human to respond before proceeding to the questionnaire. They might say "load friday-evening" (shorthand, skip questionnaire), or "ok ready" (proceed to questionnaire), or ask a question about something they read.
 
 ### Step 4: Questionnaire (if no shorthand)
 
@@ -234,18 +234,18 @@ Ready to work. What's the task?
   c) Tell me what you want to do
 ```
 
-**If the user provides a task** (either by picking an option or typing freely), invoke `/coordinate` with that task as the argument. The attunement is already applied — the coordinator will pick it up via the session-start hook.
+**If the user provides a task** (either by picking an option or typing freely), invoke `/niche` with that task as the argument. The attunement is already applied — the coordinator will pick it up via the session-start hook.
 
 **If the user says "skip"**, "not yet", or similar — end the skill. The human may want to read more or work without coordination.
 
 **If the morning inread (Step 3.5) surfaced a forward-look with specific wave recommendations**, option (a) should reference the forward-look file path so the coordinator can follow it as a plan: e.g., "Follow forward-look (.claude/scratchpad/coordinator/2026-03-06-forward-look.md)".
 
-This makes `/attune` the single entry point for all sessions: orient → tune → work.
+This makes `/valuate` the single entry point for all sessions: orient → tune → work.
 
 ## Behavioral Rules
 
 - **Speed over thoroughness**: This skill should complete in one exchange (shorthand) or two exchanges (questionnaire + answers). Do not over-explain.
-- **Idempotent**: Running `/attune` multiple times is fine. Re-running with no arguments re-displays the landscape and re-asks questions.
+- **Idempotent**: Running `/valuate` multiple times is fine. Re-running with no arguments re-displays the landscape and re-asks questions.
 - **Preserve unknowns**: If `characteristic_states.yaml` has fields you do not recognize, preserve them when writing back.
 - **Clamping**: All dimension values must be integers in [1, 5]. Clamp if the user says something outside this range.
 - **No scratchpad**: This skill does not write a scratchpad entry. It is a pure configuration tool.

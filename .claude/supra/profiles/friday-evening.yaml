@@ -1,4 +1,4 @@
-mode: focused
+lemode: focused
 dimensions:
   execution_speed: 4
   exploration_vs_exploitation: 2
@@ -10,4 +10,4 @@ focus:
 - hex2vec results review + next pipeline step
 suppress:
 - supra infrastructure
-saved_at: "2026-03-06T21:45:00Z"
+saved_at: "2026-03-13T18:00:00Z"

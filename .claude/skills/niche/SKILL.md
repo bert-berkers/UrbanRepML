@@ -1,6 +1,6 @@
 ---
-name: coordinate
-description: "Activate coordinator mode. The main agent runs OODA, delegates to specialist agents in waves, and prints visible OODA reports to the user. No sub-coordinator is spawned."
+name: niche
+description: "Niche construction. Dynamic graph: indicators ↔ percepts (context windows), lateral percept coupling, OODA in waves."
 allowed-tools: [Task, Bash, Write, Edit, Skill]
 argument-hint: [task description]
 ---
@@ -40,7 +40,7 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
 4. **Discover active plan**: Check if `$ARGUMENTS` references a plan file (e.g. `.claude/plans/foo.md`). If so, read it — this is your blueprint. If `$ARGUMENTS` is a task description without a plan file reference, check `.claude/plans/` for recent files (by modification time). If a plan with a wave structure exists, ask the user: "I found plan `{file}`. Should I follow it?"
 5. If a plan specifies waves: **follow them exactly**. Do not redesign the wave structure. The plan was written with full context that may have been lost to compaction.
 6. **Read session name** from `.claude/coordinators/.current_session_id` (written by SessionStart hook). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
-7. **Check supra states**: Read session-scoped states from `.claude/supra/sessions/{session_id}.yaml` first, falling back to `.claude/supra/characteristic_states.yaml` (global prior). If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/attune` to set your weights, or I'll use defaults."
+7. **Check supra states**: Read session-scoped states from `.claude/supra/sessions/{session_id}.yaml` first, falling back to `.claude/supra/characteristic_states.yaml` (global prior). If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/valuate` to set your weights, or I'll use defaults."
 8. **Hello broadcast** -- write an `info` message to `"all"` via `coordinator_registry.write_message()`:
    ```
    HELLO {session_id}
