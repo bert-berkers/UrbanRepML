@@ -22,6 +22,25 @@ Current skills: `/valuate`, `/niche` (renamed from `/attune`, `/coordinate` — 
 - Graph renderer: re-rendered PNGs with correct arrows
 - Memory file: `liveability_graph_ontology.md` written
 
+## DONE (2026-03-13): Waves 1-3 implemented + committed
+
+Commit `6c84004` — 10 files, 998 insertions. QAQC: all 8 test groups PASS.
+- supra_reader.py: +13 functions (temporal segment, supra session, graph topology, EMA priors)
+- session-start.py: supra session registration
+- stop.py: temporal prior update on exit
+- subagent-context.py: supra ID injection + lateral coupling gate
+- coordinator_registry.py: write_lateral_message()
+- valuate/niche/sync SKILL.md: temporal prior + graph framing
+- temporal_priors.yaml: bootstrapped (sunday-morning: 3 obs, friday-evening: 2 obs)
+- Bootstrap script: scripts/one_off/bootstrap_temporal_priors.py
+
+### Known items for follow-up
+- `.claude/sync_run.py` not yet updated to use lateral coupling gate (SKILL.md describes desired behavior)
+- `friday-evening.yaml` profile has `lemode:` typo (cosmetic)
+- `.current_supra_session_id` only created when SessionStart hook fires (not manually bootstrapped sessions)
+
+---
+
 ## Wave 1: Temporal prior functions + graph integration (parallel)
 
 1. **devops**: Add to `supra_reader.py`:
