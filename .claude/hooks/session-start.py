@@ -176,10 +176,69 @@ def register_coordinator() -> tuple[str, list[dict]]:
         # Cleanup obviously stale sessions (2h+ old) from prior crashes
         cr.cleanup_stale(COORDINATORS_DIR, threshold_hours=2)
 
-        return session_id, active_claims
     except Exception as exc:
         print(f"session-start: coordinator registration failed: {exc}", file=sys.stderr)
         return "", []
+
+    # Compute and register supra session identity
+    try:
+        import supra_reader
+        supra_session_id = supra_reader._supra_session_id()
+        supra_sid_file = COORDINATORS_DIR / ".current_supra_session_id"
+        supra_sid_file.write_text(supra_session_id, encoding="utf-8")
+
+        # Create or join the supra session file
+        import yaml
+        import os as _os
+        sessions_dir = Path(__file__).resolve().parents[1] / "supra" / "sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+        supra_session_path = sessions_dir / f"{supra_session_id}.yaml"
+
+        if supra_session_path.exists():
+            # Join existing supra session — append this coordinator to the list
+            existing = yaml.safe_load(supra_session_path.read_text(encoding="utf-8")) or {}
+            coordinators_list = existing.get("coordinators", [])
+            if session_id not in coordinators_list:
+                coordinators_list.append(session_id)
+                existing["coordinators"] = coordinators_list
+                tmp = supra_session_path.with_suffix(".yaml.tmp")
+                tmp.write_text(
+                    yaml.dump(existing, default_flow_style=False, allow_unicode=True, sort_keys=False),
+                    encoding="utf-8",
+                )
+                _os.replace(str(tmp), str(supra_session_path))
+        else:
+            # Create new supra session file with defaults
+            # Try temporal prior first, then global states
+            temporal_prior = supra_reader.get_temporal_prior()
+            if temporal_prior:
+                default_states = supra_reader.temporal_prior_to_states(temporal_prior)
+            else:
+                default_states = supra_reader.read_states()
+
+            segment_key = supra_reader._temporal_segment_key()
+            supra_data = {
+                "supra_session_id": supra_session_id,
+                "temporal_segment": segment_key,
+                "date": date.today().isoformat(),
+                "created_at": now,
+                "last_attuned": None,
+                "coordinators": [session_id],
+                "mode": default_states.get("mode", "exploratory"),
+                "dimensions": dict(default_states.get("dimensions", {})),
+                "focus": list(default_states.get("focus", [])),
+                "suppress": list(default_states.get("suppress", [])),
+            }
+            tmp = supra_session_path.with_suffix(".yaml.tmp")
+            tmp.write_text(
+                yaml.dump(supra_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+                encoding="utf-8",
+            )
+            _os.replace(str(tmp), str(supra_session_path))
+    except Exception as exc:
+        print(f"session-start: supra session registration failed: {exc}", file=sys.stderr)
+
+    return session_id, active_claims
 
 
 def format_active_coordinators(active_claims: list[dict]) -> list[str]:
@@ -229,6 +288,10 @@ def main() -> None:
     # Active coordinators (injected first -- most urgent info)
     if session_id:
         parts.append(f"\n**Your coordinator session ID**: `{session_id}`")
+        supra_sid_path = COORDINATORS_DIR / ".current_supra_session_id"
+        if supra_sid_path.exists():
+            supra_sid = supra_sid_path.read_text(encoding="utf-8").strip()
+            parts.append(f"**Supra session**: `{supra_sid}` (shared across all processes in this temporal segment)")
         parts.append(
             "Narrow your `claimed_paths` in `.claude/coordinators/` after the user states the task."
         )

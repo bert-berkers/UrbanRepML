@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shared library for reading/writing human characteristic states (supra layer)."""
-import os, re, sys
-from datetime import datetime, timedelta, timezone
+import json, os, re, sys
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 try:
@@ -350,3 +350,337 @@ def recommend_dimensions(schema: dict, scratchpad_root: Path) -> list[dict]:
                 "description": f"Frequently mentioned in ego assessment ({ct} occurrences)",
                 "reason": f"'{topic}' appears {ct} times but has no matching dimension"})
     return suggestions
+
+
+# -- Temporal segment & supra session identity --------------------------------
+
+TEMPORAL_PRIORS_PATH = SUPRA_DIR / "temporal_priors.yaml"
+SUPRA_SESSION_ID_FILE = COORDINATORS_DIR / ".current_supra_session_id"
+GRAPH_JSON_PATH = Path(__file__).resolve().parents[2] / "deepresearch" / "liveability_approaches_graph.json"
+
+TIME_BUCKETS = [
+    ("morning", 6, 12),    # 06:00-11:59
+    ("afternoon", 12, 17), # 12:00-16:59
+    ("evening", 17, 22),   # 17:00-21:59
+    ("night", 22, 6),      # 22:00-05:59 (wraps around midnight)
+]
+
+DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+def _temporal_segment_key() -> str:
+    """Return current temporal segment key like 'friday-evening' from local time."""
+    now = datetime.now()
+    day = DAYS[now.weekday()]
+    hour = now.hour
+    bucket = "night"  # default fallback
+    for name, start, end in TIME_BUCKETS:
+        if name == "night":
+            # Night wraps around midnight: 22-23 or 0-5
+            if hour >= start or hour < end:
+                bucket = name
+                break
+        else:
+            if start <= hour < end:
+                bucket = name
+                break
+    return f"{day}-{bucket}"
+
+
+def _supra_session_id() -> str:
+    """Return deterministic supra session ID like 'friday-evening-2026-03-13'.
+
+    For the night bucket after midnight (hours 0-5), uses yesterday's date since
+    the session likely started before midnight.
+    """
+    now = datetime.now()
+    segment_key = _temporal_segment_key()
+    # Night bucket: if current hour is 0-5, session started "last night" (yesterday)
+    if segment_key.endswith("-night") and now.hour < 6:
+        session_date = (date.today() - timedelta(days=1)).isoformat()
+    else:
+        session_date = date.today().isoformat()
+    return f"{segment_key}-{session_date}"
+
+
+def _current_supra_session_id() -> str | None:
+    """Read the current supra session ID from the coordinators directory."""
+    if SUPRA_SESSION_ID_FILE.is_file():
+        try:
+            return SUPRA_SESSION_ID_FILE.read_text(encoding="utf-8").strip() or None
+        except Exception:
+            return None
+    return None
+
+
+def read_supra_session_states(supra_session_id: str | None = None) -> dict:
+    """Read supra session file, falling back to coordinator session then global.
+
+    Priority: supra_session_id param -> _current_supra_session_id() ->
+    _current_session_id() -> global characteristic_states.yaml.
+    """
+    # Try the provided or detected supra session ID first
+    sid = supra_session_id or _current_supra_session_id()
+    if sid:
+        data = _read_yaml(SESSIONS_DIR / f"{sid}.yaml")
+        if data:
+            return data
+    # Fall back to coordinator session ID
+    coordinator_id = _current_session_id()
+    if coordinator_id:
+        data = _read_yaml(_session_states_path(coordinator_id))
+        if data:
+            return data
+    # Final fallback: global states
+    return read_states()
+
+
+def write_supra_session_states(states: dict, supra_session_id: str | None = None) -> bool:
+    """Write states to the supra session file. Returns True on success.
+
+    If no supra_session_id is provided, computes it from _supra_session_id().
+    Creates the sessions directory if needed.
+    """
+    if yaml is None:
+        return False
+    sid = supra_session_id or _supra_session_id()
+    try:
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        path = SESSIONS_DIR / f"{sid}.yaml"
+        tmp = path.with_suffix(".yaml.tmp")
+        tmp.write_text(
+            yaml.dump(states, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        os.replace(str(tmp), str(path))
+        return True
+    except Exception as exc:
+        print(f"supra_reader: failed to write supra session states for {sid}: {exc}", file=sys.stderr)
+        try:
+            tmp.unlink(missing_ok=True)  # type: ignore[possibly-undefined]
+        except Exception:
+            pass
+        return False
+
+
+# -- Graph-driven orchestration -----------------------------------------------
+
+_ACTIVE_GRAPH_FILE = COORDINATORS_DIR / ".active_graph"
+
+
+def get_active_graph() -> str:
+    """Return 'static' or 'dynamic' based on the active graph marker file.
+
+    Static = during /valuate (setting weights).
+    Dynamic = during /niche (executing work).
+    Defaults to 'dynamic' if no marker file exists.
+    """
+    try:
+        if _ACTIVE_GRAPH_FILE.is_file():
+            val = _ACTIVE_GRAPH_FILE.read_text(encoding="utf-8").strip()
+            if val in ("static", "dynamic"):
+                return val
+    except Exception:
+        pass
+    return "dynamic"
+
+
+def set_active_graph(graph: str) -> None:
+    """Write 'static' or 'dynamic' to the active graph marker file."""
+    if graph not in ("static", "dynamic"):
+        raise ValueError(f"graph must be 'static' or 'dynamic', got {graph!r}")
+    try:
+        COORDINATORS_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = _ACTIVE_GRAPH_FILE.with_suffix(".tmp")
+        tmp.write_text(graph, encoding="utf-8")
+        os.replace(str(tmp), str(_ACTIVE_GRAPH_FILE))
+    except Exception as exc:
+        print(f"supra_reader: failed to write active graph: {exc}", file=sys.stderr)
+
+
+def get_edge_topology(graph: str | None = None) -> list[dict]:
+    """Load edges from the liveability_approaches_graph.json for the active (or specified) graph.
+
+    Returns the 'edges' list from the JSON's 'static' or 'dynamic' section.
+    Returns empty list on any error.
+    """
+    target = graph or get_active_graph()
+    try:
+        raw = GRAPH_JSON_PATH.read_text(encoding="utf-8")
+        data = json.loads(raw)
+        return data.get(target, {}).get("edges", [])
+    except Exception as exc:
+        print(f"supra_reader: failed to load edge topology for {target}: {exc}", file=sys.stderr)
+        return []
+
+
+def is_lateral_coupling_active() -> bool:
+    """Return True during /niche (dynamic graph), False during /valuate (static graph).
+
+    Controls whether /sync messages are sent/received.
+    """
+    return get_active_graph() == "dynamic"
+
+
+# -- Temporal prior store -----------------------------------------------------
+
+_TEMPORAL_PRIOR_DEFAULT: dict = {
+    "version": 1,
+    "learning_rate": 0.3,
+    "min_observations": 2,
+    "segments": {},
+}
+
+
+def read_temporal_priors() -> dict:
+    """Read temporal_priors.yaml, returning defaults if the file is missing or unreadable."""
+    data = _read_yaml(TEMPORAL_PRIORS_PATH)
+    if not data:
+        return dict(_TEMPORAL_PRIOR_DEFAULT)
+    # Ensure required keys exist
+    result = dict(_TEMPORAL_PRIOR_DEFAULT)
+    result.update(data)
+    if not isinstance(result.get("segments"), dict):
+        result["segments"] = {}
+    return result
+
+
+def get_temporal_prior(segment: str | None = None) -> dict | None:
+    """Get the prior dict for a temporal segment.
+
+    If segment is None, uses the current temporal segment key.
+    Returns the segment's 'prior' dict only if observations >= min_observations.
+    Returns None if the segment is unknown or has insufficient observations.
+    """
+    seg = segment or _temporal_segment_key()
+    try:
+        priors = read_temporal_priors()
+        min_obs = priors.get("min_observations", 2)
+        seg_data = priors.get("segments", {}).get(seg)
+        if not seg_data:
+            return None
+        if seg_data.get("observations", 0) >= min_obs:
+            return seg_data.get("prior")
+        return None
+    except Exception as exc:
+        print(f"supra_reader: failed to get temporal prior for {seg}: {exc}", file=sys.stderr)
+        return None
+
+
+def record_temporal_observation(states: dict, segment: str | None = None) -> bool:
+    """Record a valuation observation and update the EMA prior for the segment.
+
+    Creates the segment entry if it does not exist. EMA update:
+        prior[dim] = (1 - alpha) * prior[dim] + alpha * v_new
+
+    Mode: sliding window (last 5), majority vote; ties broken by most recent.
+    Focus/suppress are NOT stored in temporal priors.
+
+    Returns True on success.
+    """
+    if yaml is None:
+        return False
+    seg = segment or _temporal_segment_key()
+    try:
+        priors = read_temporal_priors()
+        alpha = float(priors.get("learning_rate", 0.3))
+        segments = priors.get("segments", {})
+        now_iso = datetime.now(tz=timezone.utc).isoformat()
+
+        new_dims = states.get("dimensions", {})
+        new_mode = states.get("mode", "focused")
+
+        if seg not in segments:
+            # Cold start: first observation
+            segments[seg] = {
+                "observations": 1,
+                "first_seen": now_iso,
+                "last_seen": now_iso,
+                "prior": {
+                    "mode": new_mode,
+                    "dimensions": {k: float(v) for k, v in new_dims.items()},
+                },
+                "mode_history": [new_mode],
+            }
+        else:
+            entry = segments[seg]
+            entry["observations"] = entry.get("observations", 0) + 1
+            entry["last_seen"] = now_iso
+
+            # EMA update on each dimension
+            prior_dims = entry.get("prior", {}).get("dimensions", {})
+            for dim, v_new in new_dims.items():
+                try:
+                    v_new_f = float(v_new)
+                    old = float(prior_dims.get(dim, v_new_f))
+                    prior_dims[dim] = (1 - alpha) * old + alpha * v_new_f
+                except (TypeError, ValueError):
+                    pass
+            # Ensure any dims present in prior but not in new_dims are preserved
+            if "prior" not in entry:
+                entry["prior"] = {}
+            entry["prior"]["dimensions"] = prior_dims
+
+            # Mode: sliding window majority vote, tiebreak = most recent
+            history = list(entry.get("mode_history", []))
+            history.append(new_mode)
+            history = history[-5:]  # keep last 5
+            entry["mode_history"] = history
+
+            # Majority vote: count occurrences, ties broken by last occurrence
+            counts: dict[str, int] = {}
+            for m in history:
+                counts[m] = counts.get(m, 0) + 1
+            max_count = max(counts.values())
+            # Among tied modes, pick the one that appeared most recently
+            winner = new_mode  # default to most recent
+            for m in reversed(history):
+                if counts[m] == max_count:
+                    winner = m
+                    break
+            entry["prior"]["mode"] = winner
+
+        priors["segments"] = segments
+
+        # Atomic write
+        TEMPORAL_PRIORS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = TEMPORAL_PRIORS_PATH.with_suffix(".yaml.tmp")
+        tmp.write_text(
+            yaml.dump(priors, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        os.replace(str(tmp), str(TEMPORAL_PRIORS_PATH))
+        return True
+    except Exception as exc:
+        print(f"supra_reader: failed to record temporal observation for {seg}: {exc}", file=sys.stderr)
+        try:
+            tmp.unlink(missing_ok=True)  # type: ignore[possibly-undefined]
+        except Exception:
+            pass
+        return False
+
+
+def temporal_prior_to_states(prior: dict) -> dict:
+    """Convert a temporal prior dict to a states dict for use as session defaults.
+
+    Rounds float dimensions to integers (round half up).
+    Returns a dict in the same shape as characteristic_states.yaml:
+    {mode, dimensions, focus=[], suppress=[]}.
+    """
+    import math
+
+    dims_raw = prior.get("dimensions", {})
+    dims_int = {}
+    for k, v in dims_raw.items():
+        try:
+            # Round half up: math.floor(x + 0.5)
+            dims_int[k] = int(math.floor(float(v) + 0.5))
+        except (TypeError, ValueError):
+            dims_int[k] = 3  # fallback to neutral
+
+    return {
+        "mode": prior.get("mode", "focused"),
+        "dimensions": dims_int,
+        "focus": [],
+        "suppress": [],
+    }

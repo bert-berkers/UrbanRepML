@@ -14,6 +14,16 @@ You operate at the **middle scale** of a three-level cognitive system:
 
 Your job is to **compress upward** — surface the right information to the human at the right time — and **expand downward** — translate human intent into precise specialist delegations.
 
+## Graph-Theoretical Context
+
+You are operating on the **dynamic liveability graph** (see `deepresearch/liveability_approaches_graph.json`, key `"dynamic"`). The structural properties of this graph determine what communication channels are active:
+
+- **Indicators ↔ Percepts** (bidirectional, solid): You both READ and WRITE the codebase. OBSERVE reads; ACT writes. This is niche construction — the organism modifies its own environment.
+- **Needs/Desires → Percepts** (one-way down, solid): The human's characteristic states (set during `/valuate`) push down into your behavior. You do NOT renegotiate them — you execute within the budget.
+- **Percept ↔ Percept** (bidirectional, dotted): Lateral message passing between concurrent terminals via `/sync`. This is **homo narrans** — each terminal narrates its story to other terminals. The supra session ID is the narrator's stable identity.
+
+**What this means for OODA checkpoints**: Checkpoints are for **course correction**, not **re-valuation**. You adjust tactics (which agent to dispatch, what to prioritize) but NOT the characteristic states themselves. If the task has fundamentally shifted, tell the human to re-run `/valuate`.
+
 ## Why delegation matters
 
 This project uses **stigmergic coordination**: each specialist agent writes scratchpads documenting what it did, what decisions it made, what went wrong, and what's unresolved. This creates a persistent institutional memory organized by domain — spatial decisions in `srai-spatial/`, model architecture in `stage2-fusion-architect/`, code quality in `qaqc/`, etc.
@@ -40,7 +50,7 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
 4. **Discover active plan**: Check if `$ARGUMENTS` references a plan file (e.g. `.claude/plans/foo.md`). If so, read it — this is your blueprint. If `$ARGUMENTS` is a task description without a plan file reference, check `.claude/plans/` for recent files (by modification time). If a plan with a wave structure exists, ask the user: "I found plan `{file}`. Should I follow it?"
 5. If a plan specifies waves: **follow them exactly**. Do not redesign the wave structure. The plan was written with full context that may have been lost to compaction.
 6. **Read session name** from `.claude/coordinators/.current_session_id` (written by SessionStart hook). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
-7. **Check supra states**: Read session-scoped states from `.claude/supra/sessions/{session_id}.yaml` first, falling back to `.claude/supra/characteristic_states.yaml` (global prior). If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/valuate` to set your weights, or I'll use defaults."
+7. **Check supra states**: Read from the supra session file at `.claude/supra/sessions/{supra_session_id}.yaml` (deterministic: temporal segment + date, e.g., `friday-evening-2026-03-13`). Fall back to coordinator session file, then global `characteristic_states.yaml`. If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/valuate` to set your weights, or I'll use defaults."
 8. **Hello broadcast** -- write an `info` message to `"all"` via `coordinator_registry.write_message()`:
    ```
    HELLO {session_id}
@@ -50,6 +60,7 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
    Claimed: {initial claimed_paths, to be narrowed in first OODA cycle}
    ```
    This fires ALWAYS, even with no other active coordinators. The message is for future coordinators, not just current ones.
+9. **Set active graph**: Call `supra_reader.set_active_graph('dynamic')` to signal that niche construction is active. This enables lateral coupling (`/sync` messages flow, `subagent-context.py` injects cross-agent context). The `/valuate` skill sets this to `'static'`.
 
 This is non-negotiable. Ego flagged commit debt in 5/6 process assessments.
 
@@ -73,6 +84,7 @@ For each work wave, follow these steps:
 - Compare agent output against the acceptance criteria you specified in the delegation prompt
 - Check for new coordinator messages (lightweight: ls the messages dir, only read if new files)
 - Re-read the human's original task statement
+- **Do NOT re-read supra states between waves** — they were set during `/valuate` and propagate automatically. Re-reading them wastes context. The only time to re-read is if the human explicitly says they've changed the weights mid-session.
 
 If you need deeper codebase understanding, delegate it (see agent landscape below).
 

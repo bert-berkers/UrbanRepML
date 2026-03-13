@@ -356,6 +356,56 @@ def cleanup_stale(coordinators_dir: Path, threshold_hours: int = 2) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Lateral coupling helpers (supra session identity + graph-driven gating)
+# ---------------------------------------------------------------------------
+
+def write_lateral_message(
+    coordinators_dir: Path,
+    message_data: dict,
+) -> None:
+    """Write a lateral message using the supra session ID as sender identity.
+
+    If supra session ID is available, overrides the 'from' field with it.
+    Falls back to coordinator session ID, then 'unknown'.
+    This ensures narrative coherence (homo narrans) across percept deaths.
+    """
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import supra_reader
+
+        supra_sid = supra_reader._current_supra_session_id()
+        if supra_sid:
+            message_data = dict(message_data, **{"from": supra_sid})
+        else:
+            # Fall back to coordinator session ID
+            sid_file = coordinators_dir / ".current_session_id"
+            if sid_file.exists():
+                coord_sid = sid_file.read_text(encoding="utf-8").strip()
+                if coord_sid:
+                    message_data = dict(message_data, **{"from": coord_sid})
+    except Exception:
+        pass  # Fall through with whatever 'from' was already set
+
+    write_message(coordinators_dir, message_data)
+
+
+def is_lateral_coupling_active() -> bool:
+    """Check if lateral coupling is active (dynamic graph mode).
+
+    Delegates to supra_reader.is_lateral_coupling_active().
+    Returns True as default (fail-open -- don't suppress messages on import error).
+    """
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import supra_reader
+        return supra_reader.is_lateral_coupling_active()
+    except Exception:
+        return True  # Fail open -- allow messages by default
+
+
+# ---------------------------------------------------------------------------
 # Heartbeat update
 # ---------------------------------------------------------------------------
 

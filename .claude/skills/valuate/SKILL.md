@@ -21,6 +21,9 @@ Read session ID from `.claude/coordinators/.current_session_id`. Then read state
 1. Try `.claude/supra/sessions/{session_id}.yaml` (session-scoped, takes priority)
 2. Fall back to `.claude/supra/characteristic_states.yaml` (global default/prior)
 3. Read `.claude/supra/schema.yaml` for dimension definitions, groups, mode biases, agent relevance
+4. Determine current temporal segment from local time (e.g., `friday-evening`) using `supra_reader._temporal_segment_key()`
+5. Look up that segment in `supra/temporal_priors.yaml` using `supra_reader.get_temporal_prior()`
+6. If it exists and has sufficient observations, it becomes the "suggested prior" — available for the morning inread and as a shorthand option
 
 The global file is the prior — it provides defaults for sessions that haven't attuned yet. Your attunement writes session-scoped only, so parallel sessions with different goals don't overwrite each other.
 
@@ -65,6 +68,7 @@ Additional shorthand syntax:
 - `save:name` saves current state as a named profile (after applying any other changes in the same command)
 - `load:name` loads a saved profile, replacing mode, dimensions, focus, and suppress
 - `profiles` or `list` lists all saved profiles
+- **`use prior`**: Loads the temporal prior's rounded values as the starting state. Equivalent to setting each dimension to the temporal prior's rounded value and mode to the prior's majority-vote mode. If no temporal prior exists for the current segment, prints a warning and falls through to the questionnaire.
 
 **Profile operations:**
 - Profiles are stored in `.claude/supra/profiles/{name}.yaml`
@@ -83,6 +87,7 @@ Additional shorthand syntax:
 2. Check mode names (`exploratory`, `focused`, `sprint`, `creative`)
 3. Check dimension shorthands (`speed`, `explore`, `quality`, `tests`, `spatial`, `model`)
 4. Check profile operations (`profiles`, `list`, `save:`, `load:`)
+5. Check temporal prior shortcuts (`use prior`, `prior`)
 - `/valuate save:creative-evening` -- saves current state as "creative-evening"
 - `/valuate load:training` -- restores the "training" profile
 - `/valuate sprint, speed 5, tests 1, save:ship-it` -- applies sprint + overrides, saves as "ship-it"
@@ -90,6 +95,8 @@ Additional shorthand syntax:
 - `/valuate creative-prototyping` -- applies the creative-prototyping compound state (sets explore=5, speed=4, quality=2, tests=1, mode=creative)
 - `/valuate deep-investigation, focus "understand hex2vec loss landscape"` -- applies compound state + sets focus
 - `/valuate training-run, speed 4` -- applies training-run then overrides execution_speed to 4
+- `/valuate use prior` -- loads the learned temporal prior for the current time segment
+- `/valuate use prior, speed 5` -- loads temporal prior then overrides execution_speed to 5
 
 If shorthand is provided, apply changes and jump to Step 6 (print summary). Do not ask questions.
 
@@ -108,25 +115,33 @@ If all of these are true: (a) no shorthand was provided, (b) `last_attuned` is f
 **Present the inread** as a compact recommendation:
 
 ```
-Good morning. Here's your inread before we attune:
+Good morning. Here's your inread before we valuate:
 
 📖 Reading list:
-  1. Coordinator forward-look (2026-03-06) — tomorrow's plan, hex2vec hard rule
-  2. Ego assessment (2026-03-06) — 4/5, hex2vec finally running, 3 commits
-  3. git log: 3 commits yesterday (supra core, profiles, compound states)
+  1. Coordinator forward-look (2026-03-08) — tomorrow's plan, LR schedule fix P0
+  2. Ego assessment (2026-03-08) — 4/5 process health, checkpoint versioning P0
+  3. git log: 2 commits since last session (rename + liveability graph)
   4. No unread coordinator messages.
 
-Saved profile ready: "friday-evening" (focused, model=5, speed=4, suppress infra)
+Temporal prior for friday-evening (4 observations):
+  Mode: focused | Speed: 3.7→4 | Explore: 3.2→3 | Quality: 3.1→3 |
+  Tests: 2.3→2 | Spatial: 2.8→3 | Model: 4.6→5
+  (Your Friday evenings tend toward focused mode with high model attention)
 
-Take your time reading. When you're ready, I'll ask 4 quick questions — or just say
-"load friday-evening" to jump straight in.
+Manual profile also available: "friday-evening" (saved 2026-03-13)
+
+Take your time reading. When you're ready, I'll ask 4 quick questions — or:
+  "use prior" — start from the learned temporal prior
+  "load friday-evening" — restore the manual profile snapshot
 ```
 
 **Key principles:**
 - This is a PAUSE, not a speedbump. The human should feel invited to read, not rushed.
 - Keep the list to 3-5 items max. Compress aggressively — file paths + one-line summary.
-- If a saved profile exists with "friday", "evening", "sunday", or "weekend" in the name, surface it prominently as a quick-start option.
-- After presenting the inread, WAIT for the human to respond before proceeding to the questionnaire. They might say "load friday-evening" (shorthand, skip questionnaire), or "ok ready" (proceed to questionnaire), or ask a question about something they read.
+- If a temporal prior exists for the current segment with >= min_observations, surface it prominently as the recommended quick-start. Show both the raw EMA value and the rounded integer.
+- The one-line natural language summary highlights dimensions that differ from global default by more than 1 point.
+- If a saved profile exists with "friday", "evening", "sunday", or "weekend" in the name, surface it as a secondary option alongside the temporal prior.
+- After presenting the inread, WAIT for the human to respond before proceeding to the questionnaire. They might say "use prior" (load temporal prior, skip questionnaire), "load friday-evening" (load manual profile, skip questionnaire), or "ok ready" (proceed to questionnaire), or ask a question about something they read.
 
 ### Step 4: Questionnaire (if no shorthand)
 
@@ -190,8 +205,9 @@ Based on user answers (from questionnaire or shorthand):
    - `characteristic_states.yaml`: add to `dimensions:` with value 3 (or 4 if the user selected it for amplification)
 5. **Focus/suppress**: Replace the lists with the user's selections. If user said "skip", leave unchanged.
 6. **Metadata**: Set `last_attuned` to current ISO timestamp, `last_attuned_by` to the session name (read from `.claude/coordinators/.current_session_id` if it exists, otherwise use "manual")
+7. **Record temporal observation**: Call `supra_reader.record_temporal_observation(states)` to update the EMA prior for the current temporal segment. This fires regardless of how the values were set (shorthand, questionnaire, or `use prior`). Every valuation is an observation.
 
-Write states to the **session-scoped file** at `.claude/supra/sessions/{session_id}.yaml` using `supra_reader.write_session_states()`. Do NOT write to the global `characteristic_states.yaml` — that file is the prior/default for sessions that haven't attuned. The file format is:
+Write states to the **supra session file** at `.claude/supra/sessions/{supra_session_id}.yaml` using `supra_reader.write_supra_session_states()`. The supra session ID is deterministic (temporal segment + date, e.g., `friday-evening-2026-03-13`) and shared across all coordinator processes in the same time slot. If no supra session ID is available, fall back to `supra_reader.write_session_states()`. Do NOT write to the global `characteristic_states.yaml` — that file is the prior/default for sessions that haven't attuned. The file format is:
 ```yaml
 mode: {mode}
 dimensions:

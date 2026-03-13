@@ -252,16 +252,8 @@ def main() -> None:
     coord_note = get_other_coordinator_note()
     parts.extend(coord_note)
 
-    # Inject pipeline-adjacent signals (Levin's pervasive signaling)
-    sibling_signals = get_sibling_signals(agent_type)
-    if sibling_signals:
-        parts.extend([
-            "",
-            "### Pipeline Signals (from adjacent agents):",
-            *sibling_signals,
-        ])
-
     # Inject supra precision weights filtered for this agent type
+    # Also: load supra_reader once here so we can call is_lateral_coupling_active() below
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import supra_reader
@@ -274,9 +266,40 @@ def main() -> None:
     except Exception as exc:
         print(f"subagent-context: supra state read failed: {exc}", file=sys.stderr)
 
+    # Inject supra session identity (deterministic narrator ID across percept deaths)
+    try:
+        supra_sid_file = COORDINATORS_DIR / ".current_supra_session_id"
+        if supra_sid_file.exists():
+            supra_sid = supra_sid_file.read_text(encoding="utf-8").strip()
+            if supra_sid:
+                parts.append(f"**Supra session**: `{supra_sid}` (narrator identity for /sync)")
+    except Exception:
+        pass
+
+    # Determine lateral coupling state ONCE — used to gate both sibling signals and
+    # coordinator messages. Defaults to True (fail-open) on any error.
+    lateral_active = True
+    try:
+        lateral_active = supra_reader.is_lateral_coupling_active()
+    except Exception:
+        pass
+
+    # Inject pipeline-adjacent signals (Levin's pervasive signaling)
+    # Only active during dynamic graph (niche construction)
+    if lateral_active:
+        sibling_signals = get_sibling_signals(agent_type)
+        if sibling_signals:
+            parts.extend([
+                "",
+                "### Pipeline Signals (from adjacent agents):",
+                *sibling_signals,
+            ])
+
     # Inject unread coordinator messages (lateral awareness every wave)
-    coord_messages = get_coordinator_messages()
-    parts.extend(coord_messages)
+    # Only active during dynamic graph (niche construction)
+    if lateral_active:
+        coord_messages = get_coordinator_messages()
+        parts.extend(coord_messages)
 
     # Inject mortality awareness (context window = lifespan)
     try:
