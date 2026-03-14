@@ -207,7 +207,7 @@ Based on user answers (from questionnaire or shorthand):
 6. **Metadata**: Set `last_attuned` to current ISO timestamp, `last_attuned_by` to the session name (read from `.claude/coordinators/.current_session_id` if it exists, otherwise use "manual")
 7. **Record temporal observation**: Call `supra_reader.record_temporal_observation(states)` to update the EMA prior for the current temporal segment. This fires regardless of how the values were set (shorthand, questionnaire, or `use prior`). Every valuation is an observation.
 
-Write states to the **supra session file** at `.claude/supra/sessions/{supra_session_id}.yaml` using `supra_reader.write_supra_session_states()`. The supra session ID is deterministic (temporal segment + date, e.g., `friday-evening-2026-03-13`) and shared across all coordinator processes in the same time slot. If no supra session ID is available, fall back to `supra_reader.write_session_states()`. Do NOT write to the global `characteristic_states.yaml` — that file is the prior/default for sessions that haven't attuned. The file format is:
+Write states to the **supra session file** at `.claude/supra/sessions/{supra_session_id}.yaml` using `supra_reader.write_supra_session_states()`. The supra session ID is `{poetic_name}-{date}` (e.g., `hushed-spinning-glen-2026-03-14`) — named by the first coordinator in this terminal, persisting across `/clear` cycles. If no supra session ID is available, fall back to `supra_reader.write_session_states()`. Do NOT write to the global `characteristic_states.yaml` — that file is the prior/default for sessions that haven't attuned. The file format is:
 ```yaml
 mode: {mode}
 dimensions:

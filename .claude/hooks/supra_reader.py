@@ -180,7 +180,7 @@ def detect_compound_state(effective_dims: dict, schema: dict) -> dict | None:
 
 def _staleness(last_attuned) -> str:
     if not last_attuned:
-        return "never (stale -- consider running /attune)"
+        return "never (stale -- consider running /valuate)"
     try:
         parsed = datetime.fromisoformat(str(last_attuned))
         # Normalise to UTC-aware so naive/aware subtraction never raises TypeError
@@ -388,19 +388,16 @@ def _temporal_segment_key() -> str:
 
 
 def _supra_session_id() -> str:
-    """Return deterministic supra session ID like 'friday-evening-2026-03-13'.
+    """Return supra session ID like 'hushed-spinning-glen-2026-03-14'.
 
-    For the night bucket after midnight (hours 0-5), uses yesterday's date since
-    the session likely started before midnight.
+    The supra session = this terminal. The first coordinator to start names it.
+    Subsequent /clear cycles within the same terminal join it via
+    _current_supra_session_id(). Format: {coordinator_poetic_name}-{date}.
     """
-    now = datetime.now()
-    segment_key = _temporal_segment_key()
-    # Night bucket: if current hour is 0-5, session started "last night" (yesterday)
-    if segment_key.endswith("-night") and now.hour < 6:
-        session_date = (date.today() - timedelta(days=1)).isoformat()
-    else:
-        session_date = date.today().isoformat()
-    return f"{segment_key}-{session_date}"
+    coordinator_id = _current_session_id()
+    if not coordinator_id:
+        coordinator_id = "unnamed"
+    return f"{coordinator_id}-{date.today().isoformat()}"
 
 
 def _current_supra_session_id() -> str | None:
@@ -443,7 +440,7 @@ def write_supra_session_states(states: dict, supra_session_id: str | None = None
     """
     if yaml is None:
         return False
-    sid = supra_session_id or _supra_session_id()
+    sid = supra_session_id or _current_supra_session_id() or _supra_session_id()
     try:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         path = SESSIONS_DIR / f"{sid}.yaml"

@@ -181,35 +181,44 @@ def register_coordinator() -> tuple[str, list[dict]]:
         return "", []
 
     # Compute and register supra session identity
+    # Supra = this terminal. Persists across /clear cycles.
+    # If .current_supra_session_id exists, this is a /clear cycle — join the existing supra.
+    # If not, this is a fresh terminal — create a new supra named after this coordinator.
     try:
         import supra_reader
-        supra_session_id = supra_reader._supra_session_id()
-        supra_sid_file = COORDINATORS_DIR / ".current_supra_session_id"
-        supra_sid_file.write_text(supra_session_id, encoding="utf-8")
-
-        # Create or join the supra session file
         import yaml
         import os as _os
+
+        supra_sid_file = COORDINATORS_DIR / ".current_supra_session_id"
         sessions_dir = Path(__file__).resolve().parents[1] / "supra" / "sessions"
         sessions_dir.mkdir(parents=True, exist_ok=True)
-        supra_session_path = sessions_dir / f"{supra_session_id}.yaml"
 
-        if supra_session_path.exists():
-            # Join existing supra session — append this coordinator to the list
-            existing = yaml.safe_load(supra_session_path.read_text(encoding="utf-8")) or {}
-            coordinators_list = existing.get("coordinators", [])
-            if session_id not in coordinators_list:
-                coordinators_list.append(session_id)
-                existing["coordinators"] = coordinators_list
-                tmp = supra_session_path.with_suffix(".yaml.tmp")
-                tmp.write_text(
-                    yaml.dump(existing, default_flow_style=False, allow_unicode=True, sort_keys=False),
-                    encoding="utf-8",
-                )
-                _os.replace(str(tmp), str(supra_session_path))
+        existing_supra_sid = None
+        if supra_sid_file.exists():
+            existing_supra_sid = supra_sid_file.read_text(encoding="utf-8").strip() or None
+
+        if existing_supra_sid:
+            # Join existing supra session (same terminal, after /clear)
+            supra_session_id = existing_supra_sid
+            supra_session_path = sessions_dir / f"{supra_session_id}.yaml"
+            if supra_session_path.exists():
+                existing = yaml.safe_load(supra_session_path.read_text(encoding="utf-8")) or {}
+                coordinators_list = existing.get("coordinators", [])
+                if session_id not in coordinators_list:
+                    coordinators_list.append(session_id)
+                    existing["coordinators"] = coordinators_list
+                    tmp = supra_session_path.with_suffix(".yaml.tmp")
+                    tmp.write_text(
+                        yaml.dump(existing, default_flow_style=False, allow_unicode=True, sort_keys=False),
+                        encoding="utf-8",
+                    )
+                    _os.replace(str(tmp), str(supra_session_path))
         else:
-            # Create new supra session file with defaults
-            # Try temporal prior first, then global states
+            # Fresh terminal — create new supra named {poetic_name}-{date}
+            supra_session_id = supra_reader._supra_session_id()  # now returns poetic-name-date
+            supra_sid_file.write_text(supra_session_id, encoding="utf-8")
+
+            # Bootstrap from temporal prior or global states
             temporal_prior = supra_reader.get_temporal_prior()
             if temporal_prior:
                 default_states = supra_reader.temporal_prior_to_states(temporal_prior)
@@ -229,6 +238,7 @@ def register_coordinator() -> tuple[str, list[dict]]:
                 "focus": list(default_states.get("focus", [])),
                 "suppress": list(default_states.get("suppress", [])),
             }
+            supra_session_path = sessions_dir / f"{supra_session_id}.yaml"
             tmp = supra_session_path.with_suffix(".yaml.tmp")
             tmp.write_text(
                 yaml.dump(supra_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
@@ -291,7 +301,7 @@ def main() -> None:
         supra_sid_path = COORDINATORS_DIR / ".current_supra_session_id"
         if supra_sid_path.exists():
             supra_sid = supra_sid_path.read_text(encoding="utf-8").strip()
-            parts.append(f"**Supra session**: `{supra_sid}` (shared across all processes in this temporal segment)")
+            parts.append(f"**Supra session**: `{supra_sid}` (this terminal's supra identity, persists across /clear)")
         parts.append(
             "Narrow your `claimed_paths` in `.claude/coordinators/` after the user states the task."
         )

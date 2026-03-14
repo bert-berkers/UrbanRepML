@@ -52,3 +52,22 @@ segments:
     mode_history:
     - focused
     - focused
+  saturday-morning:
+    observations: 3
+    first_seen: '2026-03-14T10:00:17.591199+00:00'
+    last_seen: '2026-03-14T10:00:46.240261+00:00'
+    prior:
+      mode: focused
+      dimensions:
+        execution_speed: 4.0
+        exploration_vs_exploitation: 4.0
+        code_quality: 4.0
+        test_coverage: 2.0
+        spatial_correctness: 2.0
+        model_architecture: 4.0
+        urgency: 2.0
+        data_engineering_diligence: 4.0
+    mode_history:
+    - focused
+    - focused
+    - focused

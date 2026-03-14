@@ -1,4 +1,4 @@
-lemode: focused
+mode: focused
 dimensions:
   execution_speed: 4
   exploration_vs_exploitation: 2
