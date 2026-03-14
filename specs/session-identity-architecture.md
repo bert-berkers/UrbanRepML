@@ -27,7 +27,7 @@ The **supra** is the user-facing identity. It answers: "which terminal is this, 
 
 ## PPID as Isolation Key
 
-`os.getppid()` returns the Claude Code process PID — stable across all hook invocations within one terminal, unique per terminal. Both identities are keyed by PPID:
+`os.getppid()` returns the Claude Code process PID — stable across all hook invocations within one terminal, unique per terminal. Both session and supra files use the **same PPID** (same terminal = same PPID). They live in separate subdirectories only for clean `ls` and simple glob patterns. The difference is purely lifecycle: session files get archived on `/clear`, supra files survive until the terminal closes.
 
 ```
 .claude/coordinators/
