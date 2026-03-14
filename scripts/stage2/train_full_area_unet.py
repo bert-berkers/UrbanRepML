@@ -1,12 +1,14 @@
 """
 Train FullAreaUNet on multi-resolution H3 graph data.
 
-Self-supervised training with reconstruction + cross-scale consistency loss.
-Uses MultiResolutionLoader to build graph inputs from raw concatenated
-Stage 1 embeddings (e.g. 208D = 64 AE + 50 hex2vec + 30 roads + 64 GTFS).
+Self-supervised training with reconstruction (weight 1.0) + cross-scale
+consistency loss (weight 0.3). Uses MultiResolutionLoader to build graph
+inputs from raw concatenated Stage 1 embeddings.
 
 Pyramid U-Net with dims [64, 128, 256] (fine->mid->coarse).
-Produces 64D fused embeddings at all resolutions, saved as parquet.
+CosineAnnealingWarmRestarts schedule (3 restarts, eta_min = lr/50).
+Produces dim_fine-D fused embeddings at all resolutions, saved as parquet.
+Checkpoints versioned as best_model_{year}_{dim}D_{date}.pt.
 
 Lifetime: durable
 Stage: stage2 (fusion)
@@ -44,8 +46,8 @@ def parse_args():
         help="Pyramid dims fine,mid,coarse (default: 64,128,256)"
     )
     parser.add_argument(
-        "--lr", type=float, default=1e-3,
-        help="Learning rate (default: 1e-3)"
+        "--lr", type=float, default=1e-2,
+        help="Learning rate / max_lr for scheduler (default: 1e-2)"
     )
     parser.add_argument(
         "--patience", type=int, default=100,
@@ -128,7 +130,7 @@ def main():
     model_config = {
         "feature_dims": {"fused": feature_dim},
         "dims": dims,
-        "num_convs": 4,
+        "num_convs": 10,
         "resolutions": resolutions,
     }
 
@@ -139,6 +141,7 @@ def main():
         model_config=model_config,
         city_name=args.study_area,
         checkpoint_dir=checkpoint_dir,
+        year=args.year,
     )
 
     # Log model parameter count
@@ -197,9 +200,8 @@ def main():
         saved_paths[res] = out_path
         logger.info(f"Saved res{res} embeddings to {out_path}")
 
-    # Also save the model checkpoint
-    torch.save(best_state, checkpoint_dir / "best_model.pt")
-    logger.info(f"Saved best model checkpoint to {checkpoint_dir / 'best_model.pt'}")
+    # Checkpoint already saved by trainer._save_checkpoint() during training
+    # (versioned + best_model.pt copy)
 
     # ---- 6. Write run info ----
     run_dir = paths.stage2("unet")
@@ -212,7 +214,7 @@ def main():
             "resolutions": resolutions,
             "dims": dims,
             "feature_dim": feature_dim,
-            "num_convs": 4,
+            "num_convs": 10,
             "lr": args.lr,
             "epochs": args.epochs,
             "patience": args.patience,

@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import SAGEConv
 from typing import Dict, List, Tuple, Optional
 from tqdm.auto import tqdm
 
@@ -80,15 +80,15 @@ class SharedSparseMapping(nn.Module):
         mapped = torch.sparse.mm(mapping, x)
         # Then learnable transform (in_dim -> out_dim)
         transformed = self.transform(mapped)
-        return F.normalize(transformed, p=2, dim=-1, eps=1e-8)
+        return transformed
 
 class EncoderBlock(nn.Module):
-    """GCN encoder block with optional input projection for dimension changes.
+    """SAGEConv encoder block with optional input projection for dimension changes.
 
-    If in_dim != out_dim, an input projection maps features before GCN processing.
-    All GCN layers operate at out_dim. Residual connection projects to match.
+    If in_dim != out_dim, an input projection maps features before SAGEConv processing.
+    All SAGEConv layers operate at out_dim. Residual connection projects to match.
     """
-    def __init__(self, in_dim: int, out_dim: int, num_convs: int = 4):
+    def __init__(self, in_dim: int, out_dim: int, num_convs: int = 10):
         super().__init__()
         self.needs_projection = (in_dim != out_dim)
 
@@ -100,7 +100,7 @@ class EncoderBlock(nn.Module):
             )
 
         self.convs = nn.ModuleList([
-            GCNConv(out_dim, out_dim, add_self_loops=False)
+            SAGEConv(out_dim, out_dim)
             for _ in range(num_convs)
         ])
 
@@ -119,7 +119,7 @@ class EncoderBlock(nn.Module):
         Args:
             x: Input features [num_nodes, in_dim]
             edge_index: Graph connectivity [2, num_edges]
-            edge_weight: Edge weights [num_edges]
+            edge_weight: Edge weights [num_edges] (kept for API compat, not passed to SAGEConv)
         Returns:
             Processed features [num_nodes, out_dim]
         """
@@ -131,25 +131,25 @@ class EncoderBlock(nn.Module):
             out = x
 
         for conv, norm in zip(self.convs, self.norms):
-            out = conv(out, edge_index, edge_weight)
+            out = conv(out, edge_index)
             out = norm(out)
             out = F.gelu(out)
 
         out = out + identity
-        return F.normalize(out, p=2, dim=-1, eps=1e-8)
+        return out
 
 class DecoderBlock(nn.Module):
-    """GCN decoder block with skip connections and optional down-projection.
+    """SAGEConv decoder block with skip connections and optional down-projection.
 
-    Skip connection is added before GCN (both at in_dim).
-    If in_dim != out_dim, a down-projection maps output to out_dim after GCN.
+    Skip connection is added before SAGEConv (both at in_dim).
+    If in_dim != out_dim, a down-projection maps output to out_dim after SAGEConv.
     """
-    def __init__(self, in_dim: int, out_dim: int, num_convs: int = 4):
+    def __init__(self, in_dim: int, out_dim: int, num_convs: int = 10):
         super().__init__()
         self.needs_projection = (in_dim != out_dim)
 
         self.convs = nn.ModuleList([
-            GCNConv(in_dim, in_dim, add_self_loops=False)
+            SAGEConv(in_dim, in_dim)
             for _ in range(num_convs)
         ])
 
@@ -176,7 +176,7 @@ class DecoderBlock(nn.Module):
             x: Input features [num_nodes, in_dim]
             skip: Skip connection from encoder [num_nodes, in_dim]
             edge_index: Graph connectivity [2, num_edges]
-            edge_weight: Edge weights [num_edges]
+            edge_weight: Edge weights [num_edges] (kept for API compat, not passed to SAGEConv)
         Returns:
             Processed features [num_nodes, out_dim]
         """
@@ -185,7 +185,7 @@ class DecoderBlock(nn.Module):
 
         out = combined
         for conv, norm in zip(self.convs, self.norms):
-            out = conv(out, edge_index, edge_weight)
+            out = conv(out, edge_index)
             out = norm(out)
             out = F.gelu(out)
 
@@ -193,7 +193,7 @@ class DecoderBlock(nn.Module):
             out = self.down_proj(out)
 
         out = out + identity
-        return F.normalize(out, p=2, dim=-1, eps=1e-8)
+        return out
 
 class FullAreaUNet(nn.Module):
     """Multi-resolution U-Net for urban representation learning.
@@ -230,7 +230,7 @@ class FullAreaUNet(nn.Module):
             self,
             feature_dims: Dict[str, int],
             dims: List[int] = None,
-            num_convs: int = 4,
+            num_convs: int = 10,
             device: str = "cuda",
             resolutions: Optional[list] = None,
             # Legacy args — ignored but accepted for backward compat
@@ -343,14 +343,14 @@ class FullAreaUNet(nn.Module):
         # Generate embeddings at each resolution (all projected to dim_fine)
         # d1=64D, d2=64D (dec2 down-projected 128->64), d3=128D (dec3 down-projected 256->128)
         embeddings = {
-            rf: F.normalize(self.output[str(rf)](d1), p=2, dim=-1, eps=1e-8),      # 64D -> 64D
-            rm: F.normalize(self.output[str(rm)](d2), p=2, dim=-1, eps=1e-8),      # 64D -> 64D
-            rc: F.normalize(self.output[str(rc)](d3), p=2, dim=-1, eps=1e-8)       # 128D -> 64D
+            rf: self.output[str(rf)](d1),      # 64D -> 64D
+            rm: self.output[str(rm)](d2),      # 64D -> 64D
+            rc: self.output[str(rc)](d3)       # 128D -> 64D
         }
 
         # Generate reconstructions from finest resolution
         reconstructed = {
-            name: F.normalize(self.reconstructors[name](embeddings[rf]), p=2, dim=-1, eps=1e-8)
+            name: self.reconstructors[name](embeddings[rf])
             for name in features_dict.keys()
         }
 
@@ -410,10 +410,12 @@ class FullAreaModelTrainer:
             loss_weights: Dict[str, float] = None,
             city_name: str = "south_holland_threshold80",
             wandb_project: str = "urban-embedding",
-            checkpoint_dir: Optional[Path] = None
+            checkpoint_dir: Optional[Path] = None,
+            year: str = "2022",
     ):
         logger.info("Initializing FullAreaModelTrainer...")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model_config = model_config
         self.model = FullAreaUNet(**model_config, device=self.device)
         self.model.to(self.device)
         logger.info(f"Model initialized on {self.device}")
@@ -421,31 +423,63 @@ class FullAreaModelTrainer:
         self.loss_computer = LossComputer()
         self.loss_weights = loss_weights or {
             'reconstruction': 1.0,
-            'consistency': 1.0
+            'consistency': 0.3
         }
         logger.info(f"Loss weights set: {self.loss_weights}")
 
         self.city_name = city_name
         self.wandb_project = wandb_project
         self.checkpoint_dir = checkpoint_dir
+        self.year = year
 
     def _get_scheduler(self, optimizer, num_epochs: int, warmup_epochs: int):
-        """Get learning rate scheduler with warmup."""
-        def lr_lambda(epoch):
-            if epoch < warmup_epochs:
-                return float(epoch) / float(max(1, warmup_epochs))
-            return 0.5 * (1 + np.cos(
-                np.pi * float(epoch - warmup_epochs) / float(max(1, num_epochs - warmup_epochs))
-            ))
-        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+        """CosineAnnealingWarmRestarts: tapers LR then restarts periodically.
+
+        T_0 = num_epochs // 3 gives ~3 warm restarts over training.
+        T_mult = 1 keeps each cycle the same length.
+        eta_min = max_lr / 50 so LR never fully dies.
+        warmup_epochs is accepted but unused (restarts serve as warmup).
+        """
+        max_lr = optimizer.defaults['lr']
+        t_0 = max(num_epochs // 3, 1)
+        return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer,
+            T_0=t_0,
+            T_mult=1,
+            eta_min=max_lr / 50,
+        )
 
     def _save_checkpoint(self, state: dict, filename: str):
-        """Save model checkpoint."""
+        """Save versioned model checkpoint with config metadata.
+
+        Saves as best_model_{year}_{dim}D_{date}.pt and creates a
+        best_model.pt copy pointing to the latest versioned checkpoint.
+        Uses shutil.copy2 instead of symlinks for Windows compatibility.
+        """
+        import shutil
+        from datetime import date
+
         if self.checkpoint_dir:
-            checkpoint_path = self.checkpoint_dir / filename
             self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-            torch.save(state, checkpoint_path)
-            logger.info(f"Saved checkpoint to {checkpoint_path}")
+
+            # Enrich state with model config for reproducibility
+            state['model_config'] = self.model_config
+            state['loss_weights'] = self.loss_weights
+            state['lr_schedule'] = 'CosineAnnealingWarmRestarts'
+
+            # Versioned filename: best_model_{year}_{dim}D_{date}.pt
+            output_dim = self.model.dims[0]  # finest resolution dim
+            today = date.today().isoformat()
+            versioned_name = f"best_model_{self.year}_{output_dim}D_{today}.pt"
+
+            versioned_path = self.checkpoint_dir / versioned_name
+            torch.save(state, versioned_path)
+            logger.info(f"Saved versioned checkpoint to {versioned_path}")
+
+            # Also save as best_model.pt (copy, not symlink — Windows compat)
+            latest_path = self.checkpoint_dir / "best_model.pt"
+            shutil.copy2(versioned_path, latest_path)
+            logger.info(f"Copied to {latest_path}")
 
     def train(self, features_dict: Dict[str, torch.Tensor],
               edge_indices: Dict[int, torch.Tensor],
@@ -515,9 +549,10 @@ class FullAreaModelTrainer:
                         'epoch': epoch,
                         'model_state': self.model.state_dict(),
                         'optimizer_state': optimizer.state_dict(),
-                        'loss': best_loss
+                        'loss': best_loss,
                     }
                     best_embeddings = {k: v.detach().clone() for k, v in embeddings.items()}
+                    self._save_checkpoint(best_state.copy(), "best_model.pt")
                 else:
                     patience_counter += 1
 

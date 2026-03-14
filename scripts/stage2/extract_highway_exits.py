@@ -1,17 +1,13 @@
 """
 Extract multi-scale embeddings from a trained FullAreaUNet checkpoint.
 
-The FullAreaUNet produces embeddings at 3 resolutions (res9, res8, res7) but
-the training script only saves res9. This script loads the checkpoint, runs a
-forward pass, and saves ALL resolution embeddings plus upsampled/blended
-variants at the finest resolution.
+Loads a trained checkpoint, runs a forward pass, and saves embeddings at ALL
+resolutions plus upsampled/blended variants at the finest resolution.
 
 Outputs (all in .../unet/embeddings/):
-  - netherlands_res9_2022.parquet           (247K x 128D, verification)
-  - netherlands_res8_2022.parquet           (NEW, ~37K x 128D)
-  - netherlands_res7_2022.parquet           (NEW, ~5.6K x 128D)
-  - netherlands_res9_multiscale_avg_2022.parquet   (247K x 128D)
-  - netherlands_res9_multiscale_concat_2022.parquet (247K x 384D)
+  - {area}_res{N}_{year}.parquet                    per-resolution (D dimensions)
+  - {area}_res{finest}_multiscale_avg_{year}.parquet averaged across resolutions (D dim)
+  - {area}_res{finest}_multiscale_concat_{year}.parquet concatenated (N_res * D dim)
 
 Lifetime: durable
 Stage: stage2 (fusion)
@@ -43,16 +39,17 @@ def parse_args():
         help="Study area name (default: netherlands)"
     )
     parser.add_argument(
-        "--year", type=int, default=2022,
-        help="Data year (default: 2022)"
+        "--year", type=str, default="2022",
+        help="Data year label (default: 2022)"
     )
     parser.add_argument(
         "--resolutions", type=str, default="9,8,7",
         help="Comma-separated resolutions finest-to-coarsest (default: 9,8,7)"
     )
     parser.add_argument(
-        "--hidden-dim", type=int, default=128,
-        help="Hidden / output embedding dimension (default: 128)"
+        "--dims", type=str, default=None,
+        help="Pyramid dims fine,mid,coarse (e.g. 64,128,256). "
+             "Auto-detected from checkpoint config if available."
     )
     parser.add_argument(
         "--verify", action="store_true", default=True,
@@ -66,7 +63,12 @@ def parse_args():
 
 
 def load_model_and_data(args, resolutions, device):
-    """Load the trained model and input data."""
+    """Load the trained model and input data.
+
+    Model config is read from checkpoint['model_config'] if available
+    (new versioned checkpoints). Falls back to --dims or default [64,128,256]
+    for legacy checkpoints.
+    """
     paths = StudyAreaPaths(args.study_area)
 
     # Load data
@@ -82,23 +84,30 @@ def load_model_and_data(args, resolutions, device):
     feature_dim = next(iter(data["features_dict"].values())).shape[1]
     logger.info(f"Input feature dim: {feature_dim}")
 
-    # Build model with same config as training
-    model_config = {
-        "feature_dims": {"fused": feature_dim},
-        "hidden_dim": args.hidden_dim,
-        "output_dim": args.hidden_dim,
-        "num_convs": 4,
-        "resolutions": resolutions,
-    }
-    model = FullAreaUNet(**model_config, device=str(device))
-    model.to(device)
-
     # Load checkpoint
     checkpoint_path = paths.checkpoints("unet") / "best_model.pt"
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+
+    # Build model config: prefer checkpoint config, fall back to args
+    if "model_config" in checkpoint:
+        model_config = checkpoint["model_config"]
+        logger.info(f"Using model config from checkpoint: dims={model_config.get('dims')}")
+    else:
+        dims = [int(d) for d in args.dims.split(",")] if args.dims else [64, 128, 256]
+        model_config = {
+            "feature_dims": {"fused": feature_dim},
+            "dims": dims,
+            "num_convs": 4,
+            "resolutions": resolutions,
+        }
+        logger.info(f"Legacy checkpoint — using dims={dims} from args/defaults")
+
+    model = FullAreaUNet(**model_config, device=str(device))
+    model.to(device)
+
     model.load_state_dict(checkpoint["model_state"])
     logger.info(
         f"Loaded checkpoint from epoch {checkpoint['epoch']}, "
@@ -285,7 +294,7 @@ def main():
     print("=" * 60)
     print(f"Extract Highway Exits — {args.study_area}")
     print(f"  Resolutions: {resolutions}")
-    print(f"  Hidden dim:  {args.hidden_dim}")
+    print(f"  Dims override: {args.dims or 'auto (from checkpoint)'}")
     print("=" * 60)
 
     # 1. Load model and data

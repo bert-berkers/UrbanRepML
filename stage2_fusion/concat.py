@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Modalities that use left join + zero-fill instead of inner join.
 # "No data" for these modalities is semantically meaningful (e.g. no roads = zero vector).
-SPARSE_MODALITIES: set[str] = {"roads"}
+SPARSE_MODALITIES: set[str] = {"roads", "gtfs"}
 
 
 def _load_modality(paths: StudyAreaPaths, modality: str, resolution: int, year: int) -> pd.DataFrame:

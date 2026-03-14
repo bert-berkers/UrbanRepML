@@ -244,8 +244,16 @@ class GTFSProcessor(ModalityProcessor):
         if self.save_intermediate:
             self._save_intermediate_data(features_gdf, regions_gdf, joint_gdf, h3_resolution, study_area_name)
 
-        # 3. GTFS2Vec embedding
-        logger.info("Step 3: Training GTFS2Vec autoencoder on transit patterns...")
+        # 3. GTFS2Vec embedding — train only on hexagons with real transit data.
+        # SRAI's _prepare_features() does fillna(0) for hexagons not in joint_gdf,
+        # which makes the autoencoder learn to reconstruct zeros. By passing only
+        # transit-covered regions, every training sample has real transit patterns.
+        regions_with_stops = joint_gdf.index.get_level_values(0).unique()
+        transit_regions = regions_gdf.loc[regions_gdf.index.isin(regions_with_stops)]
+        logger.info(
+            f"Step 3: Training GTFS2Vec on {len(transit_regions):,} transit hexagons "
+            f"(filtered from {len(regions_gdf):,} total)"
+        )
         logger.info(
             f"Model architecture: input -> {self.hidden_size} (hidden) -> "
             f"{self.embedding_size} (embedding)"
@@ -260,7 +268,7 @@ class GTFSProcessor(ModalityProcessor):
         try:
             logger.info(f"Training GTFS2Vec ({self.gtfs2vec_epochs} epochs)...")
             embeddings_df = embedder.fit_transform(
-                regions_gdf=regions_gdf,
+                regions_gdf=transit_regions,
                 features_gdf=features_gdf,
                 joint_gdf=joint_gdf,
                 trainer_kwargs={
