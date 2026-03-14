@@ -322,6 +322,7 @@ config.local.yaml
 .claude/timers/
 .claude/supra/sessions/
 .claude/supra/temporal_priors.yaml
+deepresearch/
 
 # ==========================================
 # Package Management
