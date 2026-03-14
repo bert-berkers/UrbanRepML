@@ -16,7 +16,7 @@ Primary purpose: coordinators telling each other what they're working on.
 ### Protocol
 
 1. **Gate check**: Call `supra_reader.is_lateral_coupling_active()`. If False (static graph / `/valuate` mode), print `"Sync skipped — static graph active (no lateral coupling)"` and return.
-2. **Identify**: Read supra session ID from `.claude/coordinators/.current_supra_session_id`. This is your narrator name. Fall back to coordinator session ID if unavailable.
+2. **Identify**: Read supra session ID via `coordinator_registry.read_ppid_supra()` (PPID-isolated). This is your narrator name. Fall back to `coordinator_registry.read_ppid_session()` if unavailable.
 3. **Listen**: Read lateral messages from other coordinators (last 15m), filter out own echoes (match on supra session ID, not coordinator ID).
 4. **Check**: Read active coordinator claim files for awareness.
 5. **Narrate**: Broadcast this terminal's story using `coordinator_registry.write_lateral_message()`:

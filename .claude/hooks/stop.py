@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Stop hook: verify coordinator wrote a quality scratchpad if multi-agent work occurred."""
 import json
+import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
 
 SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
 COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
-SESSION_ID_FILE = COORDINATORS_DIR / ".current_session_id"
 
 MIN_LINES = 5  # Match subagent-stop quality bar
 
@@ -24,10 +24,11 @@ def update_temporal_prior() -> None:
     try:
         import sys as _sys
         _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import coordinator_registry as cr
         import supra_reader
 
-        # Read the current supra session ID
-        supra_sid = supra_reader._current_supra_session_id()
+        # Read the current supra session ID via PPID
+        supra_sid = cr.read_ppid_supra(COORDINATORS_DIR)
         if not supra_sid:
             return
 
@@ -67,33 +68,14 @@ def note_percept_death() -> None:
     try:
         import sys as _sys
         _sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import supra_reader
+        import coordinator_registry as cr
 
-        supra_sid_file = COORDINATORS_DIR / ".current_supra_session_id"
-        if not supra_sid_file.exists():
-            return
-
-        supra_sid = supra_sid_file.read_text(encoding="utf-8").strip()
+        supra_sid = cr.read_ppid_supra(COORDINATORS_DIR)
         if not supra_sid:
             return
 
-        # Read the supra session file
-        sessions_dir = Path(__file__).resolve().parents[1] / "supra" / "sessions"
-        supra_path = sessions_dir / f"{supra_sid}.yaml"
-        if not supra_path.exists():
-            return
-
-        import yaml
-        data = yaml.safe_load(supra_path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return
-
-        # Add a death note (optional: track which coordinators are still alive)
-        # For now, just clean up the supra session id file for this process
-        # The supra session file itself persists (it's shared across processes)
-
-        # Do NOT delete .current_supra_session_id — the next process in this
-        # terminal might want it. Only delete .current_session_id (done in deregister_coordinator).
+        # The supra session file persists (shared across /clear cycles).
+        # PPID-keyed files are cleaned up in deregister_coordinator.
 
     except Exception as exc:
         print(f"stop: percept death note failed: {exc}", file=sys.stderr)
@@ -110,12 +92,10 @@ def deregister_coordinator() -> None:
         _sys.path.insert(0, str(Path(__file__).resolve().parent))
         import coordinator_registry as cr
 
-        if not SESSION_ID_FILE.exists():
-            print("stop: no session_id file found, skipping coordinator deregistration", file=sys.stderr)
-            return
-
-        session_id = SESSION_ID_FILE.read_text(encoding="utf-8").strip()
+        # Read session_id from PPID-keyed file
+        session_id = cr.read_ppid_session(COORDINATORS_DIR)
         if not session_id:
+            print("stop: no PPID session file found, skipping coordinator deregistration", file=sys.stderr)
             return
 
         # Optionally write a farewell message (only if other claim files exist)
@@ -135,8 +115,17 @@ def deregister_coordinator() -> None:
         # Delete this session's claim file
         cr.delete_claim(COORDINATORS_DIR, session_id)
 
-        # Remove the session ID file
-        SESSION_ID_FILE.unlink(missing_ok=True)
+        # Archive PPID-keyed session file — supra persists across /clear
+        # Supra files are archived by cleanup_stale_ppid_files when process is dead
+        ppid = os.getppid()
+        sessions_dir = COORDINATORS_DIR / cr.SESSIONS_SUBDIR
+        if sessions_dir.is_dir():
+            archive = sessions_dir / "archive"
+            for f in sessions_dir.glob(f"*.{ppid}"):
+                if f.is_dir():
+                    continue
+                archive.mkdir(exist_ok=True)
+                f.rename(archive / f.name)
 
         # Clean up crashed sessions (2h+ old)
         cr.cleanup_stale(COORDINATORS_DIR, threshold_hours=2)
@@ -163,31 +152,27 @@ def main() -> None:
 
         today = date.today().isoformat()
 
-        # Check if any subagent scratchpads were written today
-        subagent_scratchpads = []
-        for agent_dir in SCRATCHPAD_ROOT.iterdir():
-            if not agent_dir.is_dir() or agent_dir.name == "coordinator":
-                continue
-            scratchpad = agent_dir / f"{today}.md"
-            if scratchpad.exists():
-                subagent_scratchpads.append(agent_dir.name)
-
-        # If no subagent work happened today, allow
-        if not subagent_scratchpads:
-            print("Stop: no subagent scratchpads today, allowing", file=sys.stderr)
-            json.dump({}, sys.stdout)
-            return
-
-        # Multi-agent coordination happened — check coordinator scratchpad exists
+        # Always require coordinator scratchpad — coordinators are percepts too
         coordinator_scratchpad = SCRATCHPAD_ROOT / "coordinator" / f"{today}.md"
 
+        # Check if any subagent scratchpads were written today (for richer error message)
+        subagent_scratchpads = []
+        if SCRATCHPAD_ROOT.is_dir():
+            for agent_dir in SCRATCHPAD_ROOT.iterdir():
+                if not agent_dir.is_dir() or agent_dir.name == "coordinator":
+                    continue
+                scratchpad = agent_dir / f"{today}.md"
+                if scratchpad.exists():
+                    subagent_scratchpads.append(agent_dir.name)
+
         if not coordinator_scratchpad.exists():
+            agents_note = f" (agents active: {', '.join(subagent_scratchpads)})" if subagent_scratchpads else ""
             json.dump({
                 "decision": "block",
                 "reason": (
-                    f"Multi-agent work occurred today (agents: {', '.join(subagent_scratchpads)}), "
-                    f"but coordinator scratchpad is missing at "
-                    f".claude/scratchpad/coordinator/{today}.md"
+                    f"Coordinator scratchpad missing at "
+                    f".claude/scratchpad/coordinator/{today}.md{agents_note}. "
+                    f"Write what you did, decisions made, and unresolved items."
                 ),
             }, sys.stdout)
             return

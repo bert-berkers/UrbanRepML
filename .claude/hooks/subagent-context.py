@@ -8,7 +8,6 @@ from pathlib import Path
 
 SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
 COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
-SESSION_ID_FILE = COORDINATORS_DIR / ".current_session_id"
 
 # Lines of context to inject from each scratchpad source
 CONTEXT_LINES = 5
@@ -128,9 +127,7 @@ def get_coordinator_messages() -> list[str]:
         _sys.path.insert(0, str(Path(__file__).resolve().parent))
         import coordinator_registry as cr
 
-        my_session_id = ""
-        if SESSION_ID_FILE.exists():
-            my_session_id = SESSION_ID_FILE.read_text(encoding="utf-8").strip()
+        my_session_id = cr.read_ppid_session(COORDINATORS_DIR) or ""
         if not my_session_id:
             return []
 
@@ -166,9 +163,7 @@ def get_other_coordinator_note() -> list[str]:
         _sys.path.insert(0, str(Path(__file__).resolve().parent))
         import coordinator_registry as cr
 
-        my_session_id = ""
-        if SESSION_ID_FILE.exists():
-            my_session_id = SESSION_ID_FILE.read_text(encoding="utf-8").strip()
+        my_session_id = cr.read_ppid_session(COORDINATORS_DIR) or ""
 
         all_claims = cr.read_all_claims(COORDINATORS_DIR)
         other_active = [
@@ -268,11 +263,11 @@ def main() -> None:
 
     # Inject supra session identity (deterministic narrator ID across percept deaths)
     try:
-        supra_sid_file = COORDINATORS_DIR / ".current_supra_session_id"
-        if supra_sid_file.exists():
-            supra_sid = supra_sid_file.read_text(encoding="utf-8").strip()
-            if supra_sid:
-                parts.append(f"**Supra session**: `{supra_sid}` (narrator identity for /sync)")
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import coordinator_registry as cr
+        supra_sid = cr.read_ppid_supra(COORDINATORS_DIR)
+        if supra_sid:
+            parts.append(f"**Supra session**: `{supra_sid}` (narrator identity for /sync)")
     except Exception:
         pass
 

@@ -16,13 +16,15 @@ Your job is to **compress upward** — surface the right information to the huma
 
 ## Graph-Theoretical Context
 
-You are operating on the **dynamic liveability graph** (see `deepresearch/liveability_approaches_graph.json`, key `"dynamic"`). The structural properties of this graph determine what communication channels are active:
+You are operating on the **dynamic liveability graph** (see `deepresearch/liveability_approaches_graph.json`, key `"dynamic"`). Each supra dimension is a **shard** — a full vertical column: indicator (filesystem, searches) ↔ percept (you and your agents) ← need/desire (the dimension weight set during `/valuate`). Indicators and percepts are bidirectional (`↔`, active inference); needs/desires push down one-way into percepts (`→`). During `/niche`, coupling has shifted from between shards (rational preference negotiation) to between percepts (lateral coordination).
 
-- **Indicators ↔ Percepts** (bidirectional, solid): You both READ and WRITE the codebase. OBSERVE reads; ACT writes. This is niche construction — the organism modifies its own environment.
-- **Needs/Desires → Percepts** (one-way down, solid): The human's characteristic states (set during `/valuate`) push down into your behavior. You do NOT renegotiate them — you execute within the budget.
+The structural properties of this graph determine what communication channels are active:
+
+- **Indicators ↔ Percepts** (bidirectional, solid): You both READ and WRITE the codebase. OBSERVE reads; ACT writes. This is self-evidencing — you modify the world (codebase) to make your observations match the preferred state set during valuation. Each wave of agent delegation moves the indicators closer to the characteristic states. Every file read, search, and agent dispatch is directed by the valuated intent.
+- **Needs/Desires → Percepts** (one-way down, solid): The human's characteristic states (set during `/valuate`) push down into your behavior as locked-in shard weights. You do NOT renegotiate them — you execute within the budget.
 - **Percept ↔ Percept** (bidirectional, dotted): Lateral message passing between concurrent terminals via `/sync`. This is **homo narrans** — each terminal narrates its story to other terminals. The supra session ID is the narrator's stable identity.
 
-**What this means for OODA checkpoints**: Checkpoints are for **course correction**, not **re-valuation**. You adjust tactics (which agent to dispatch, what to prioritize) but NOT the characteristic states themselves. If the task has fundamentally shifted, tell the human to re-run `/valuate`.
+**What this means for OODA checkpoints**: Checkpoints are for **course correction**, not **re-valuation**. You adjust tactics (which agent to dispatch, what to prioritize) but NOT the shard weights themselves. If the task has fundamentally shifted, tell the human to re-run `/valuate`.
 
 ## Why delegation matters
 
@@ -49,13 +51,13 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
 3. Only then proceed to OODA
 4. **Discover active plan**: Check if `$ARGUMENTS` references a plan file (e.g. `.claude/plans/foo.md`). If so, read it — this is your blueprint. If `$ARGUMENTS` is a task description without a plan file reference, check `.claude/plans/` for recent files (by modification time). If a plan with a wave structure exists, ask the user: "I found plan `{file}`. Should I follow it?"
 5. If a plan specifies waves: **follow them exactly**. Do not redesign the wave structure. The plan was written with full context that may have been lost to compaction.
-6. **Read session name** from `.claude/coordinators/.current_session_id` (written by SessionStart hook). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
-7. **Check supra states**: Read from the supra session file at `.claude/supra/sessions/{supra_session_id}.yaml` (format: `{poetic_name}-{date}`, e.g., `hushed-spinning-glen-2026-03-14` — read from `.current_supra_session_id`). Fall back to coordinator session file, then global `characteristic_states.yaml`. If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/valuate` to set your weights, or I'll use defaults."
+6. **Read session name** via `coordinator_registry.read_ppid_session()` (PPID-isolated). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
+7. **Check supra states**: Read supra session ID via `coordinator_registry.read_ppid_supra()`, then read from `.claude/supra/sessions/{supra_session_id}.yaml`. Fall back to global `characteristic_states.yaml`. If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/valuate` to set your weights, or I'll use defaults." If the supra session has an `intent` field, this is the terminal's strategic mission set during `/valuate` — use it to frame your OODA waves. The user's `$ARGUMENTS` provide tactical steering within that intent.
 8. **Hello broadcast** -- write an `info` message to `"all"` via `coordinator_registry.write_message()`:
    ```
    HELLO {session_id}
+   Mission: {intent from supra session, or $ARGUMENTS if no intent}
    Task: {1-sentence summary of $ARGUMENTS}
-   Intent: {what you plan to do, e.g. "dispatch stage1 encoder + QAQC verification"}
    Risk: {specific files/dirs you expect to modify}
    Claimed: {initial claimed_paths, to be narrowed in first OODA cycle}
    ```
@@ -75,7 +77,7 @@ For each work wave, follow these steps:
 **Wave 0 observation** (session start — do this once):
 - `git log --oneline -10` and `git status`
 - Invoke `/summarize-scratchpads` skill for multi-agent state across all scratchpads
-- Check coordinator messages from `.claude/coordinators/messages/` addressed to this session_id or "all"
+- Check coordinator messages from `.claude/coordinators/messages/{date}/` addressed to this session_id or "all"
 - Update heartbeat via `coordinator_registry.update_heartbeat()`
 - Read the ego's most recent forward-look for deferred P0 items
 
@@ -95,7 +97,7 @@ Two formats depending on when in the session:
 **Wave 0 Report** (session start — printed once before first delegation plan):
 
 ```markdown
-## Session: [name from .claude/coordinators/.current_session_id]
+## Session: [name from coordinator_registry.read_ppid_session()]
 **Goal**: [restate user task in own words]
 **Git**: [clean/dirty, unpushed commit count]
 **Lateral**: [other active coordinators and claims, or "solo"]

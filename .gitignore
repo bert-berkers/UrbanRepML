@@ -321,6 +321,7 @@ config.local.yaml
 .claude/coordinators/
 .claude/timers/
 .claude/supra/sessions/
+.claude/supra/temporal_priors.yaml
 
 # ==========================================
 # Package Management

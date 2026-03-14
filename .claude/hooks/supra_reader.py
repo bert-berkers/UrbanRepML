@@ -62,14 +62,15 @@ def write_states(states: dict) -> bool:
 # -- Session-scoped states ---------------------------------------------------
 
 def _current_session_id() -> str | None:
-    """Read the current session ID from the coordinators directory."""
-    sid_path = COORDINATORS_DIR / ".current_session_id"
-    if sid_path.is_file():
-        try:
-            return sid_path.read_text(encoding="utf-8").strip() or None
-        except Exception:
-            return None
-    return None
+    """Read the current session ID via PPID-keyed file."""
+    try:
+        _hooks = str(Path(__file__).resolve().parent)
+        if _hooks not in sys.path:
+            sys.path.insert(0, _hooks)
+        import coordinator_registry as cr
+        return cr.read_ppid_session(COORDINATORS_DIR)
+    except Exception:
+        return None
 
 
 def _session_states_path(session_id: str) -> Path:
@@ -189,7 +190,7 @@ def _staleness(last_attuned) -> str:
         age = datetime.now(tz=timezone.utc) - parsed
         if age < timedelta(hours=24):
             return f"{last_attuned} (fresh)"
-        return f"{last_attuned} (stale -- {age.days}d ago, consider /attune)"
+        return f"{last_attuned} (stale -- {age.days}d ago, consider /valuate)"
     except (ValueError, TypeError):
         return f"{last_attuned} (unparseable)"
 
@@ -355,7 +356,7 @@ def recommend_dimensions(schema: dict, scratchpad_root: Path) -> list[dict]:
 # -- Temporal segment & supra session identity --------------------------------
 
 TEMPORAL_PRIORS_PATH = SUPRA_DIR / "temporal_priors.yaml"
-SUPRA_SESSION_ID_FILE = COORDINATORS_DIR / ".current_supra_session_id"
+# Legacy singleton removed — now PPID-keyed via coordinator_registry
 GRAPH_JSON_PATH = Path(__file__).resolve().parents[2] / "deepresearch" / "liveability_approaches_graph.json"
 
 TIME_BUCKETS = [
@@ -401,13 +402,15 @@ def _supra_session_id() -> str:
 
 
 def _current_supra_session_id() -> str | None:
-    """Read the current supra session ID from the coordinators directory."""
-    if SUPRA_SESSION_ID_FILE.is_file():
-        try:
-            return SUPRA_SESSION_ID_FILE.read_text(encoding="utf-8").strip() or None
-        except Exception:
-            return None
-    return None
+    """Read the current supra session ID via PPID-keyed file."""
+    try:
+        _hooks = str(Path(__file__).resolve().parent)
+        if _hooks not in sys.path:
+            sys.path.insert(0, _hooks)
+        import coordinator_registry as cr
+        return cr.read_ppid_supra(COORDINATORS_DIR)
+    except Exception:
+        return None
 
 
 def read_supra_session_states(supra_session_id: str | None = None) -> dict:
@@ -462,19 +465,20 @@ def write_supra_session_states(states: dict, supra_session_id: str | None = None
 
 # -- Graph-driven orchestration -----------------------------------------------
 
-_ACTIVE_GRAPH_FILE = COORDINATORS_DIR / ".active_graph"
-
 
 def get_active_graph() -> str:
-    """Return 'static' or 'dynamic' based on the active graph marker file.
+    """Return 'static' or 'dynamic' from the supra session file.
 
     Static = during /valuate (setting weights).
     Dynamic = during /niche (executing work).
-    Defaults to 'dynamic' if no marker file exists.
+    Stored per-supra (PPID-isolated) so multi-terminal doesn't clash.
+    Defaults to 'dynamic' if no supra session exists.
     """
     try:
-        if _ACTIVE_GRAPH_FILE.is_file():
-            val = _ACTIVE_GRAPH_FILE.read_text(encoding="utf-8").strip()
+        supra_sid = _current_supra_session_id()
+        if supra_sid:
+            data = _read_yaml(SESSIONS_DIR / f"{supra_sid}.yaml")
+            val = data.get("active_graph", "dynamic")
             if val in ("static", "dynamic"):
                 return val
     except Exception:
@@ -483,14 +487,25 @@ def get_active_graph() -> str:
 
 
 def set_active_graph(graph: str) -> None:
-    """Write 'static' or 'dynamic' to the active graph marker file."""
+    """Write 'static' or 'dynamic' into the supra session file (PPID-isolated)."""
     if graph not in ("static", "dynamic"):
         raise ValueError(f"graph must be 'static' or 'dynamic', got {graph!r}")
     try:
-        COORDINATORS_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = _ACTIVE_GRAPH_FILE.with_suffix(".tmp")
-        tmp.write_text(graph, encoding="utf-8")
-        os.replace(str(tmp), str(_ACTIVE_GRAPH_FILE))
+        supra_sid = _current_supra_session_id()
+        if not supra_sid:
+            print("supra_reader: no supra session, cannot set active graph", file=sys.stderr)
+            return
+        path = SESSIONS_DIR / f"{supra_sid}.yaml"
+        data = _read_yaml(path)
+        if not data:
+            data = {"supra_session_id": supra_sid}
+        data["active_graph"] = graph
+        tmp = path.with_suffix(".yaml.tmp")
+        tmp.write_text(
+            yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        os.replace(str(tmp), str(path))
     except Exception as exc:
         print(f"supra_reader: failed to write active graph: {exc}", file=sys.stderr)
 

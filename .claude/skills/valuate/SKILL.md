@@ -9,16 +9,22 @@ argument-hint: "[optional: quick adjustment like 'speed 5, tests 1']"
 
 ## Task
 
+You are operating on the **static liveability graph** (see `deepresearch/liveability_approaches_graph.json`, key `"static"`). Each supra dimension is a **shard** — a full vertical column through the three-layer graph: indicator (the filesystem, searches) → percept (agent) ↔ need/desire (this dimension weight). Indicators feed forward one-way into percepts (`→`); percepts and needs/desires mutually assess (`↔`). Coupling is **across shards at the needs/desires level**: the human negotiates between shards to form rational preferences. This is where intent gets set — everything `/niche` does downstream is directed by what you establish here.
+
 Adjust the human's characteristic states (precision weights) that propagate through the multi-agent system and change how agents behave. This is the mechanism by which the supra layer (human) tunes the attention of the entire cognitive hierarchy.
 
 $ARGUMENTS
 
 ## Protocol
 
+### Step 0: Set Graph Mode
+
+Set the active graph to "static" using `supra_reader.set_active_graph("static")`. This disables lateral percept coupling (`/sync`) — during valuation, coupling is between shards (needs/desires), not between percepts.
+
 ### Step 1: Read Current State
 
-Read session ID from `.claude/coordinators/.current_session_id`. Then read states:
-1. Try `.claude/supra/sessions/{session_id}.yaml` (session-scoped, takes priority)
+Read the supra session ID via `coordinator_registry.read_ppid_supra()` (PPID-isolated, multi-terminal safe). Then read states:
+1. Try `.claude/supra/sessions/{supra_session_id}.yaml` (supra-scoped, takes priority)
 2. Fall back to `.claude/supra/characteristic_states.yaml` (global default/prior)
 3. Read `.claude/supra/schema.yaml` for dimension definitions, groups, mode biases, agent relevance
 4. Determine current temporal segment from local time (e.g., `friday-evening`) using `supra_reader._temporal_segment_key()`
@@ -109,7 +115,7 @@ If all of these are true: (a) no shorthand was provided, (b) `last_attuned` is f
 1. **Coordinator forward-look** (highest priority): `.claude/scratchpad/coordinator/YYYY-MM-DD-forward-look.md` from the most recent date. This is written specifically to seed the next session.
 2. **Ego assessment** (high priority): `.claude/scratchpad/ego/YYYY-MM-DD.md` from the most recent date. Process health, attention needed, metrics table.
 3. **Recent git log**: `git log --oneline -10` — what actually shipped.
-4. **Active coordinator messages**: any unread messages in `.claude/coordinators/messages/` from after last attunement.
+4. **Active coordinator messages**: any unread messages in `.claude/coordinators/messages/{date}/` from after last attunement.
 5. **Any specialist scratchpads newer than last attunement** — only mention these by name and one-line summary, don't dump content.
 
 **Present the inread** as a compact recommendation:
@@ -182,9 +188,19 @@ Only show Q3 if there are recommendations. Otherwise skip it entirely.
    c) None
 ```
 
-**Q4 -- Focus/suppress:**
+**Q4 -- Strategic intent:**
 ```
-4. Anything to focus on or suppress this session? (or skip)
+4. What's this terminal's mission? (one sentence)
+   Suggestion: "{contextual suggestion from forward-look or deferred P0s}"
+```
+
+This is the overarching goal that persists across `/niche` → `/clear` → `/niche` cycles. It's stored in the supra session file as `intent`. Tactical steering (which wave to run, what agent to dispatch) happens during `/niche` via chat — that's course correction, not re-valuation.
+
+Generate suggestions from the coordinator's latest scratchpad, forward-look, and deferred P0 items. If the user says "skip", leave the intent from prior valuation (if any) or set to empty.
+
+**Q5 -- Focus/suppress:**
+```
+5. Anything to focus on or suppress this session? (or skip)
    a) Focus: "{contextual suggestion based on recent scratchpads}"
    b) Focus: "{another suggestion}"
    c) Suppress: "{contextual suggestion}"
@@ -203,13 +219,15 @@ Based on user answers (from questionnaire or shorthand):
 4. **New dimensions from recommendations**: Add to both files:
    - `schema.yaml`: add under `dimensions:` with a reasonable `group`, `default: 3`, labels, and agent_relevance
    - `characteristic_states.yaml`: add to `dimensions:` with value 3 (or 4 if the user selected it for amplification)
-5. **Focus/suppress**: Replace the lists with the user's selections. If user said "skip", leave unchanged.
-6. **Metadata**: Set `last_attuned` to current ISO timestamp, `last_attuned_by` to the session name (read from `.claude/coordinators/.current_session_id` if it exists, otherwise use "manual")
-7. **Record temporal observation**: Call `supra_reader.record_temporal_observation(states)` to update the EMA prior for the current temporal segment. This fires regardless of how the values were set (shorthand, questionnaire, or `use prior`). Every valuation is an observation.
+5. **Intent**: Store the user's strategic intent as `intent` in the supra session file. This is what `/niche` reads to understand the terminal's mission.
+6. **Focus/suppress**: Replace the lists with the user's selections. If user said "skip", leave unchanged.
+7. **Metadata**: Set `last_attuned` to current ISO timestamp, `last_attuned_by` to the session name (read via `coordinator_registry.read_ppid_session()`, otherwise use "manual")
+8. **Record temporal observation**: Call `supra_reader.record_temporal_observation(states)` to update the EMA prior for the current temporal segment. This fires regardless of how the values were set (shorthand, questionnaire, or `use prior`). Every valuation is an observation.
 
 Write states to the **supra session file** at `.claude/supra/sessions/{supra_session_id}.yaml` using `supra_reader.write_supra_session_states()`. The supra session ID is `{poetic_name}-{date}` (e.g., `hushed-spinning-glen-2026-03-14`) — named by the first coordinator in this terminal, persisting across `/clear` cycles. If no supra session ID is available, fall back to `supra_reader.write_session_states()`. Do NOT write to the global `characteristic_states.yaml` — that file is the prior/default for sessions that haven't attuned. The file format is:
 ```yaml
 mode: {mode}
+intent: "{strategic intent — what this terminal is for}"
 dimensions:
   execution_speed: {n}
   exploration_vs_exploitation: {n}

@@ -9,7 +9,6 @@ from pathlib import Path
 
 SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
 COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
-SESSION_ID_FILE = Path(__file__).resolve().parents[1] / "coordinators" / ".current_session_id"
 
 # Signal vocabulary: keywords that indicate specialist left critical notes.
 # Extended set supports Levin's "pervasive signaling" -- richer gradients between agents.
@@ -146,6 +145,20 @@ def register_coordinator() -> tuple[str, list[dict]]:
 
         COORDINATORS_DIR.mkdir(parents=True, exist_ok=True)
 
+        # Cleanup stale PPID files from dead processes
+        cr.cleanup_stale_ppid_files(COORDINATORS_DIR)
+
+        # Archive old messages into per-day subdirs
+        cr.archive_old_messages(COORDINATORS_DIR)
+
+        # Archive old singleton files (migration — clean break)
+        archive_dir = COORDINATORS_DIR / "archive"
+        for old_singleton in (".current_session_id", ".current_supra_session_id", ".active_graph"):
+            old_path = COORDINATORS_DIR / old_singleton
+            if old_path.exists():
+                archive_dir.mkdir(exist_ok=True)
+                old_path.rename(archive_dir / old_singleton)
+
         # Read existing claims BEFORE writing our own
         existing_claims = cr.read_all_claims(COORDINATORS_DIR)
         active_claims = [c for c in existing_claims if not cr.is_stale(c)]
@@ -170,8 +183,8 @@ def register_coordinator() -> tuple[str, list[dict]]:
         }
         cr.write_claim(COORDINATORS_DIR, claim_data)
 
-        # Persist session_id for stop hook
-        SESSION_ID_FILE.write_text(session_id, encoding="utf-8")
+        # Persist session_id as PPID-keyed file
+        cr.write_ppid_session(COORDINATORS_DIR, session_id)
 
         # Cleanup obviously stale sessions (2h+ old) from prior crashes
         cr.cleanup_stale(COORDINATORS_DIR, threshold_hours=2)
@@ -182,20 +195,17 @@ def register_coordinator() -> tuple[str, list[dict]]:
 
     # Compute and register supra session identity
     # Supra = this terminal. Persists across /clear cycles.
-    # If .current_supra_session_id exists, this is a /clear cycle — join the existing supra.
+    # If a PPID-keyed supra file exists, this is a /clear cycle — join the existing supra.
     # If not, this is a fresh terminal — create a new supra named after this coordinator.
     try:
         import supra_reader
         import yaml
         import os as _os
 
-        supra_sid_file = COORDINATORS_DIR / ".current_supra_session_id"
         sessions_dir = Path(__file__).resolve().parents[1] / "supra" / "sessions"
         sessions_dir.mkdir(parents=True, exist_ok=True)
 
-        existing_supra_sid = None
-        if supra_sid_file.exists():
-            existing_supra_sid = supra_sid_file.read_text(encoding="utf-8").strip() or None
+        existing_supra_sid = cr.read_ppid_supra(COORDINATORS_DIR)
 
         if existing_supra_sid:
             # Join existing supra session (same terminal, after /clear)
@@ -215,8 +225,7 @@ def register_coordinator() -> tuple[str, list[dict]]:
                     _os.replace(str(tmp), str(supra_session_path))
         else:
             # Fresh terminal — create new supra named {poetic_name}-{date}
-            supra_session_id = supra_reader._supra_session_id()  # now returns poetic-name-date
-            supra_sid_file.write_text(supra_session_id, encoding="utf-8")
+            supra_session_id = f"{session_id}-{date.today().isoformat()}"
 
             # Bootstrap from temporal prior or global states
             temporal_prior = supra_reader.get_temporal_prior()
@@ -245,6 +254,10 @@ def register_coordinator() -> tuple[str, list[dict]]:
                 encoding="utf-8",
             )
             _os.replace(str(tmp), str(supra_session_path))
+
+        # Write PPID-keyed supra file
+        cr.write_ppid_supra(COORDINATORS_DIR, supra_session_id)
+
     except Exception as exc:
         print(f"session-start: supra session registration failed: {exc}", file=sys.stderr)
 
@@ -298,10 +311,15 @@ def main() -> None:
     # Active coordinators (injected first -- most urgent info)
     if session_id:
         parts.append(f"\n**Your coordinator session ID**: `{session_id}`")
-        supra_sid_path = COORDINATORS_DIR / ".current_supra_session_id"
-        if supra_sid_path.exists():
-            supra_sid = supra_sid_path.read_text(encoding="utf-8").strip()
-            parts.append(f"**Supra session**: `{supra_sid}` (this terminal's supra identity, persists across /clear)")
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import coordinator_registry as cr
+            supra_sid = cr.read_ppid_supra(COORDINATORS_DIR)
+            if supra_sid:
+                parts.append(f"**Supra session**: `{supra_sid}` (this terminal's supra identity, persists across /clear)")
+        except Exception:
+            pass
         parts.append(
             "Narrow your `claimed_paths` in `.claude/coordinators/` after the user states the task."
         )

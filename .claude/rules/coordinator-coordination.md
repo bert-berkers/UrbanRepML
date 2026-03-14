@@ -60,9 +60,9 @@ Leave messages for events that matter to other coordinators:
 Keep messages sparse. Routine status belongs in your scratchpad, not the message log.
 
 ### On Session End
-1. Delete your claim file via `coordinator_registry.delete_claim()`.
+1. Mark your claim as ended via `coordinator_registry.delete_claim()` (sets `status: ended`, does not delete the file).
 2. Optionally write a `done` message summarizing what was accomplished and what changed.
-3. Run `coordinator_registry.cleanup_stale()` to remove crashed sessions' artifacts.
+3. Run `coordinator_registry.cleanup_stale()` to archive stale sessions' artifacts.
 
 ## Anti-Patterns (Do Not Do These)
 
@@ -77,15 +77,17 @@ Keep messages sparse. Routine status belongs in your scratchpad, not the message
 | Threshold | Meaning |
 |-----------|---------|
 | 30 minutes | Claim treated as stale -- proceed with info log, do not block |
-| 2 hours | Claim deleted by next session's cleanup |
-| 7 days | Messages purged by cleanup |
+| 2 hours | Claim marked as ended by next session's cleanup |
+| 7 days | Ended claims archived to `coordinators/archive/` |
 
 ## Files
 
 | Path | Purpose |
 |------|---------|
-| `.claude/coordinators/session-{id}.yaml` | Active claim per session |
-| `.claude/coordinators/messages/{ts}-{id}.yaml` | Individual message files |
-| `.claude/hooks/coordinator_registry.py` | Shared library (I/O functions) |
+| `.claude/coordinators/session-{id}.yaml` | Claim per session (active or `status: ended`) |
+| `.claude/coordinators/sessions/{id}.{ppid}` | PPID-keyed session identity |
+| `.claude/coordinators/supra/{id}.{ppid}` | PPID-keyed supra identity |
+| `.claude/coordinators/messages/{date}/{ts}-{id}.yaml` | Per-day message files |
+| `.claude/hooks/coordinator_registry.py` | Shared library (I/O, PPID helpers) |
 
 The `.claude/coordinators/` directory is gitignored -- ephemeral runtime state only.

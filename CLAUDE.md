@@ -182,7 +182,9 @@ Eliminates tile boundary discontinuities by consistently averaging embeddings fo
 The coordinator, SRAI, data-code, and index conventions are now enforced via:
 - **Rules**: `.claude/rules/` (auto-loaded based on file context)
 - **Hooks**: `.claude/settings.json` (SessionStart, SubagentStart/Stop, Stop)
-- **Skills**: `/coordinate`, `/summarize-scratchpads`, `/ego-check`, `/librarian-update`
+- **Skills**: `/valuate` (session entry point), `/niche` (OODA execution), `/sync` (lateral broadcast), `/vitals` (agent health)
+
+**Session Identity**: PPID-keyed files in `.claude/coordinators/sessions/` and `.claude/coordinators/supra/` isolate multi-terminal sessions. Each terminal gets its own session ID and supra identity, keyed by the Claude Code process PID. Messages are organized in `.claude/coordinators/messages/{date}/` subdirs.
 
 See `specs/claude_code_multi_agent_setup.md` for the full architecture description.
 
