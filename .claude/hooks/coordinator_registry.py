@@ -13,11 +13,12 @@ Functions:
   cleanup_stale         -- Remove stale claim files and old messages
   update_heartbeat      -- Update heartbeat_at in claim file
 
-PPID-keyed session identity:
-  write_ppid_session    -- Write PPID-keyed session file
-  write_ppid_supra      -- Write PPID-keyed supra file
-  read_ppid_session     -- Read session_id for this process's PPID
-  read_ppid_supra       -- Read supra_session_id for this process's PPID
+Terminal-shell-keyed session identity (stable across /clear):
+  get_terminal_pid      -- Get the terminal shell PID (stable per tab, survives /clear)
+  write_ppid_session    -- Write terminal-PID-keyed session file
+  write_ppid_supra      -- Write terminal-PID-keyed supra file
+  read_ppid_session     -- Read session_id for this terminal's PID
+  read_ppid_supra       -- Read supra_session_id for this terminal's PID
   cleanup_stale_ppid_files -- Remove session/supra files for dead processes
   archive_old_messages  -- Move messages into per-day subdirs
 """
@@ -474,6 +475,47 @@ SESSIONS_SUBDIR = "sessions"   # coordinators/sessions/
 SUPRA_SUBDIR = "supra"         # coordinators/supra/
 
 
+def get_terminal_pid() -> int:
+    """Get the terminal shell PID — stable across /clear, unique per terminal tab.
+
+    Walks up the process tree via psutil to find node.exe (Claude Code),
+    then returns its parent's PID (the terminal shell, e.g. powershell.exe).
+    The terminal shell PID is stable for the lifetime of the terminal tab and
+    survives /clear (which only restarts node.exe).
+
+    Process tree on this machine:
+        pycharm64.exe -> powershell.exe (STABLE) -> node.exe (CHANGES) -> bash.exe -> python.exe (hook)
+
+    Falls back to os.getppid() if psutil is unavailable or the tree walk fails
+    (e.g., the hook runs in a context without a node.exe ancestor).
+    """
+    try:
+        import psutil
+        p = psutil.Process(os.getpid())
+        while True:
+            p = p.parent()
+            if p is None:
+                break
+            # Find the first node / node.exe process walking upward
+            try:
+                name = p.name().lower()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                break
+            if name in ("node", "node.exe"):
+                # The terminal shell is node's parent
+                terminal = p.parent()
+                if terminal is not None:
+                    try:
+                        return terminal.pid
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                break
+    except Exception:
+        pass
+    # Fallback: direct parent (original os.getppid() behaviour)
+    return os.getppid()
+
+
 def _is_process_alive(pid: int) -> bool:
     """Cross-platform process liveness check."""
     if sys.platform == "win32":
@@ -492,8 +534,13 @@ def _is_process_alive(pid: int) -> bool:
 
 
 def write_ppid_session(coordinators_dir: Path, session_id: str) -> None:
-    """Write PPID-keyed session file: sessions/{session_id}.{ppid}"""
-    ppid = os.getppid()
+    """Write terminal-PID-keyed session file: sessions/{session_id}.{terminal_pid}
+
+    The key is the terminal shell PID (stable across /clear), not the direct
+    parent process PID. This ensures the session file survives Claude Code
+    restarts (/clear) within the same terminal tab.
+    """
+    ppid = get_terminal_pid()
     sessions_dir = coordinators_dir / SESSIONS_SUBDIR
     sessions_dir.mkdir(exist_ok=True)
     # Archive any previous session file for this PPID (from prior /clear)
@@ -508,8 +555,13 @@ def write_ppid_session(coordinators_dir: Path, session_id: str) -> None:
 
 
 def write_ppid_supra(coordinators_dir: Path, supra_session_id: str) -> None:
-    """Write PPID-keyed supra file: supra/{supra_session_id}.{ppid}"""
-    ppid = os.getppid()
+    """Write terminal-PID-keyed supra file: supra/{supra_session_id}.{terminal_pid}
+
+    The key is the terminal shell PID (stable across /clear), not the direct
+    parent process PID. Supra files persist across /clear cycles within the
+    same terminal tab.
+    """
+    ppid = get_terminal_pid()
     supra_dir = coordinators_dir / SUPRA_SUBDIR
     supra_dir.mkdir(exist_ok=True)
     # Archive any previous supra file for this PPID
@@ -524,8 +576,8 @@ def write_ppid_supra(coordinators_dir: Path, supra_session_id: str) -> None:
 
 
 def read_ppid_session(coordinators_dir: Path) -> str | None:
-    """Read session_id for this process's PPID."""
-    ppid = os.getppid()
+    """Read session_id for this terminal's stable PID."""
+    ppid = get_terminal_pid()
     sessions_dir = coordinators_dir / SESSIONS_SUBDIR
     if not sessions_dir.is_dir():
         return None
@@ -536,8 +588,8 @@ def read_ppid_session(coordinators_dir: Path) -> str | None:
 
 
 def read_ppid_supra(coordinators_dir: Path) -> str | None:
-    """Read supra_session_id for this process's PPID."""
-    ppid = os.getppid()
+    """Read supra_session_id for this terminal's stable PID."""
+    ppid = get_terminal_pid()
     supra_dir = coordinators_dir / SUPRA_SUBDIR
     if not supra_dir.is_dir():
         return None

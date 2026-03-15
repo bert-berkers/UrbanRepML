@@ -414,12 +414,20 @@ def _current_supra_session_id() -> str | None:
 
 
 def _supra_session_path(sid: str) -> Path:
-    """Return PPID-keyed path for a supra session file.
+    """Return terminal-PID-keyed path for a supra session file.
 
-    Format: .claude/supra/sessions/{sid}.{ppid}.yaml
-    Falls back to non-PPID path if the PPID-keyed file doesn't exist (migration).
+    Format: .claude/supra/sessions/{sid}.{terminal_pid}.yaml
+    The key is the terminal shell PID (stable across /clear), not the direct
+    parent PID. Falls back to non-PPID path if the keyed file doesn't exist (migration).
     """
-    ppid = os.getppid()
+    _hooks = str(Path(__file__).resolve().parent)
+    if _hooks not in sys.path:
+        sys.path.insert(0, _hooks)
+    try:
+        import coordinator_registry as cr
+        ppid = cr.get_terminal_pid()
+    except Exception:
+        ppid = os.getppid()
     ppid_path = SESSIONS_DIR / f"{sid}.{ppid}.yaml"
     if ppid_path.is_file():
         return ppid_path

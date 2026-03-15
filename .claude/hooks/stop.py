@@ -115,9 +115,9 @@ def deregister_coordinator() -> None:
         # Delete this session's claim file
         cr.delete_claim(COORDINATORS_DIR, session_id)
 
-        # Archive PPID-keyed session file — supra persists across /clear
+        # Archive terminal-PID-keyed session file — supra persists across /clear
         # Supra files are archived by cleanup_stale_ppid_files when process is dead
-        ppid = os.getppid()
+        ppid = cr.get_terminal_pid()
         sessions_dir = COORDINATORS_DIR / cr.SESSIONS_SUBDIR
         if sessions_dir.is_dir():
             archive = sessions_dir / "archive"
