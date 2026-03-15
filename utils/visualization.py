@@ -11,6 +11,7 @@ otherwise.
 Typical usage::
 
     from utils.visualization import (
+        filter_empty_hexagons,
         load_boundary,
         rasterize_continuous,
         rasterize_categorical,
@@ -18,6 +19,7 @@ Typical usage::
     )
 
     boundary = load_boundary(paths)
+    emb_df = filter_empty_hexagons(emb_df, display_name="AlphaEarth")
     img = rasterize_continuous(cx, cy, values, extent)
     fig, ax = plt.subplots()
     plot_spatial_map(ax, img, extent, boundary, title="My Map")
@@ -31,6 +33,7 @@ from typing import TYPE_CHECKING
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 if TYPE_CHECKING:
     from utils.paths import StudyAreaPaths
@@ -383,7 +386,7 @@ def plot_spatial_map(
     """
     if boundary_gdf is not None:
         boundary_gdf.plot(
-            ax=ax, facecolor="#f0f0f0", edgecolor="#cccccc", linewidth=0.5,
+            ax=ax, facecolor="none", edgecolor="#cccccc", linewidth=0.5,
             zorder=1,
         )
     minx, miny, maxx, maxy = extent
@@ -438,6 +441,127 @@ def _add_colorbar(
         cbar.set_label(label, fontsize=label_fontsize)
     cbar.ax.tick_params(labelsize=tick_fontsize)
     return cbar
+
+
+# ---------------------------------------------------------------------------
+# Empty/background hexagon filter
+# ---------------------------------------------------------------------------
+
+
+def filter_empty_hexagons(
+    emb_df: pd.DataFrame,
+    display_name: str,
+    constant_threshold: float = 0.10,
+) -> pd.DataFrame:
+    """Filter out hexagons with no meaningful embedding signal.
+
+    Three-pass strategy:
+
+    Pass 0: Remove rows matching a dominant repeated vector (>50% of rows share
+        the same embedding). Catches encoders like GTFS2Vec that assign a
+        learned default embedding to hexagons without data.
+    Pass 1: Remove rows where ALL embedding dims are exactly zero.
+    Pass 2: Remove low-variance rows (water/empty hexagons that the encoder
+        maps to near-identical output vectors). Uses row-wise std with a
+        bimodal gap detection between "background" and "real" embeddings.
+        Skipped when Pass 0 already found a dominant vector.
+
+    Args:
+        emb_df: DataFrame of embedding values indexed by H3 cell ID.
+        display_name: Human-readable modality name for log messages.
+        constant_threshold: Minimum fraction of rows that must be flagged
+            as low-variance before Pass 2 applies (default 0.10 = 10%).
+
+    Returns:
+        Filtered DataFrame with background/empty rows removed.
+    """
+    n_original = len(emb_df)
+    vals = emb_df.values
+    to_drop = np.zeros(n_original, dtype=bool)
+
+    # Pass 0: dominant repeated vector (non-zero default embeddings)
+    # Some encoders (e.g. GTFS2Vec) produce a shared learned embedding for
+    # hexagons without data. These are not all-zero but are all identical.
+    # Detect by measuring distance from the most common row.
+    found_dominant = False
+    if n_original > 100:
+        # Sample to find candidate default vector efficiently
+        sample_idx = np.linspace(0, n_original - 1, min(10000, n_original), dtype=int)
+        sample = vals[sample_idx].astype(np.float64)
+
+        # Find the most common vector: round to 6 decimals, count unique rows
+        rounded = np.round(sample, 6)
+        unique_vecs, inverse, counts = np.unique(
+            rounded, axis=0, return_inverse=True, return_counts=True,
+        )
+        dominant_idx = np.argmax(counts)
+        dominant_frac = counts[dominant_idx] / len(sample)
+
+        if dominant_frac > 0.5:
+            # More than 50% of the sample matches one vector -- likely a default
+            default_vec = unique_vecs[dominant_idx]
+            # Check all rows against this vector (L-inf distance)
+            diffs = np.abs(vals.astype(np.float64) - default_vec)
+            is_default = diffs.max(axis=1) < 1e-5
+            n_default = int(is_default.sum())
+            if n_default > n_original * 0.5:
+                to_drop |= is_default
+                found_dominant = True
+                logger.info(
+                    "  Pass 0: %d dominant-vector rows (%.1f%%) -- "
+                    "shared default embedding detected",
+                    n_default, 100.0 * n_default / n_original,
+                )
+
+    # Pass 1: all-zero rows
+    all_zero = (vals == 0.0).all(axis=1)
+    n_zero = int(all_zero.sum())
+    if n_zero > 0:
+        new_zeros = all_zero & ~to_drop
+        n_new = int(new_zeros.sum())
+        if n_new > 0:
+            to_drop |= all_zero
+            logger.info(
+                "  Pass 1: %d all-zero rows (%.1f%%)",
+                n_zero, 100.0 * n_zero / n_original,
+            )
+
+    # Pass 2: low-variance rows (near-constant embeddings)
+    # Skip if Pass 0 already found a dominant vector -- the remaining rows
+    # are real data with naturally varied variance. Pass 2 is designed for
+    # modalities without a clear default embedding (e.g. AlphaEarth water
+    # hexagons that produce near-constant encoder output).
+    if n_original > 100 and not found_dominant:
+        row_std = vals.std(axis=1)
+        p10_std = np.percentile(row_std, 10)
+        p50_std = np.percentile(row_std, 50)
+        if p50_std > 0 and p10_std / p50_std < 0.8:
+            cutoff = (p10_std + p50_std) / 2
+        else:
+            overall_std = vals.std()
+            cutoff = overall_std * 0.01 if overall_std > 0 else 0
+
+        low_var = row_std < cutoff
+        n_low = int(low_var.sum())
+        n_new_low = int((low_var & ~to_drop).sum())
+        if n_new_low > 0 and n_low / n_original >= constant_threshold:
+            to_drop |= low_var
+            logger.info(
+                "  Pass 2: %d low-variance rows (%.1f%%, std < %.4f)",
+                n_low, 100.0 * n_low / n_original, cutoff,
+            )
+
+    n_drop = int(to_drop.sum())
+    if n_drop == 0:
+        logger.info("  No empty/constant hexagons to filter for %s", display_name)
+        return emb_df
+
+    filtered = emb_df[~to_drop]
+    logger.info(
+        "  Filtered %d -> %d hexagons (dropped %d, %.1f%%) for %s",
+        n_original, len(filtered), n_drop, 100.0 * n_drop / n_original, display_name,
+    )
+    return filtered
 
 
 def detect_embedding_columns(df) -> list[str]:

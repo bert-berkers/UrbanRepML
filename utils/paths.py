@@ -234,25 +234,61 @@ class StudyAreaPaths:
         return self.stage2(model_name) / run_id
 
     def stage3_run(self, analysis_type: str, run_id: str) -> Path:
-        """Run directory for a stage3 analysis run."""
-        return self.stage3(analysis_type) / run_id
+        """Run directory for a stage3 analysis run.
+
+        The run directory is nested under a date layer derived from the first
+        10 characters of *run_id* (format ``YYYY-MM-DD``)::
+
+            stage3_analysis/{analysis_type}/YYYY-MM-DD/{run_id}/
+
+        *run_id* must start with a ``YYYY-MM-DD`` prefix (e.g.
+        ``"2026-03-14_ring_agg_k10_comparison"``).
+        """
+        date_prefix = run_id[:10]
+        return self.stage3(analysis_type) / date_prefix / run_id
 
     def latest_run(self, stage_dir: Path) -> "Path | None":
         """Find the most recent run directory by YYYY-MM-DD prefix sort.
 
+        Supports both flat layout (``stage_dir/{run_id}/``) and the
+        date-layered layout introduced for dnn_probe
+        (``stage_dir/YYYY-MM-DD/{run_id}/``).  Date subdirs are searched
+        newest-first; within each date dir the last run (alphabetically) is
+        returned.
+
         Args:
             stage_dir: Parent directory to search
-                (e.g. ``paths.stage3("linear_probe")``).
+                (e.g. ``paths.stage3("dnn_probe")``).
 
         Returns:
             Path to most recent run directory, or None if no runs found.
         """
         if not stage_dir.is_dir():
             return None
-        pattern = re.compile(r"^\d{4}-\d{2}-\d{2}")
+        date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+        run_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}")
+
+        # Collect date-layer subdirs (YYYY-MM-DD only, no extra suffix)
+        date_dirs = sorted(
+            d for d in stage_dir.iterdir()
+            if d.is_dir() and date_pattern.match(d.name)
+        )
+
+        if date_dirs:
+            # Date-layered layout: search newest date dir first
+            for date_dir in reversed(date_dirs):
+                run_dirs = sorted(
+                    d for d in date_dir.iterdir()
+                    if d.is_dir() and run_pattern.match(d.name)
+                )
+                if run_dirs:
+                    return run_dirs[-1]
+
+        # Flat layout fallback: run dirs sit directly in stage_dir
         run_dirs = sorted(
             d for d in stage_dir.iterdir()
-            if d.is_dir() and pattern.match(d.name)
+            if d.is_dir() and run_pattern.match(d.name)
+            and not date_pattern.match(d.name)
         )
         return run_dirs[-1] if run_dirs else None
 

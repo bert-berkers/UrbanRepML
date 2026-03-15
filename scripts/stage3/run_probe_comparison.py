@@ -38,7 +38,6 @@ import json
 import logging
 import pickle
 import time
-from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -947,10 +946,8 @@ def main() -> None:
         output_dir = Path(args.output_dir)
     else:
         config_label = args.config or "custom"
-        output_dir = (
-            paths.stage3("dnn_probe")
-            / f"{date.today()}_{config_label}_comparison"
-        )
+        run_id = paths.create_run_id(f"{config_label}_comparison")
+        output_dir = paths.stage3_run("dnn_probe", run_id)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Build embedding sources

@@ -53,6 +53,7 @@ from utils.spatial_db import SpatialDB
 from utils.visualization import (
     RASTER_H,
     RASTER_W,
+    filter_empty_hexagons,
     load_boundary,
     plot_spatial_map,
     rasterize_categorical,
@@ -215,28 +216,10 @@ def main():
 
     # 4b. Filter empty/background hexagons if requested
     if args.filter_empty:
-        vals = emb_df.values.astype(np.float64)
         n_before = len(emb_df)
-
-        # Strategy 1: detect dominant repeated vector (>50% identical rows).
-        # Catches encoders that assign a learned default embedding to
-        # hexagons without data (e.g. GTFS2Vec non-transit hexagons).
-        sample_idx = np.linspace(0, n_before - 1, min(10000, n_before), dtype=int)
-        sample = np.round(vals[sample_idx], 6)
-        unique_vecs, _, counts = np.unique(sample, axis=0, return_inverse=True, return_counts=True)
-        dominant_idx = np.argmax(counts)
-        dominant_frac = counts[dominant_idx] / len(sample)
-
-        if dominant_frac > 0.5:
-            default_vec = unique_vecs[dominant_idx]
-            diffs = np.abs(vals - default_vec)
-            keep = diffs.max(axis=1) >= 1e-5
-        else:
-            # Strategy 2: remove all-zero rows only
-            keep = ~(vals == 0.0).all(axis=1)
-
-        emb_df = emb_df[keep]
-        cx, cy = cx[keep], cy[keep]
+        emb_df = filter_empty_hexagons(emb_df, title_prefix)
+        # Re-fetch centroids for the filtered index
+        cx, cy = db.centroids(emb_df.index, resolution=resolution, crs=28992)
         print(f"Filtered {n_before:,} -> {len(emb_df):,} hexagons (removed {n_before - len(emb_df):,} background)")
 
     # 5. PCA reduction

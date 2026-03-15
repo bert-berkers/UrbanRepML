@@ -403,20 +403,13 @@ def run_probes(args: argparse.Namespace) -> None:
     results_df = pd.DataFrame(all_rows)
 
     # Save results CSV
-    output_dir = paths.stage3("dnn_probe")
+    run_id = paths.create_run_id("multiscale_comparison")
+    output_dir = paths.stage3_run("dnn_probe", run_id)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_path = Path(
-        "data/study_areas/netherlands/stage3_analysis"
-    ) / "multiscale_probe_results.csv"
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_path = output_dir / "multiscale_probe_results.csv"
     results_df.to_csv(csv_path, index=False)
     logger.info(f"Saved results to {csv_path}")
-
-    # Also save alongside embeddings for convenience
-    csv_path2 = EMBEDDINGS_DIR.parent / "multiscale_probe_results.csv"
-    results_df.to_csv(csv_path2, index=False)
-    logger.info(f"Saved results to {csv_path2}")
 
     # ------------------------------------------------------------------
     # Print comparison table

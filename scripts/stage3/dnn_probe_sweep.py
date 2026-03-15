@@ -359,7 +359,8 @@ def run_sweep(args: argparse.Namespace) -> None:
     # ------------------------------------------------------------------
     summary_df = pd.DataFrame(all_rows)
 
-    output_dir = paths.stage3("dnn_probe")
+    run_id = paths.create_run_id("hyperparameter_sweep")
+    output_dir = paths.stage3_run("dnn_probe", run_id)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     csv_path = output_dir / "sweep_summary.csv"

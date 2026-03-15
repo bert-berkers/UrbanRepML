@@ -482,7 +482,7 @@ def plot_a8_spatial_extremes(lbm, cx_lbm, cy_lbm, extent, boundary, out_dir):
     top = val_m >= p95
     image[py[top], px[top]] = [0.15, 0.65, 0.15, 1.0]
 
-    boundary.plot(ax=ax, facecolor="#f0f0f0", edgecolor="#cccccc", linewidth=0.5)
+    boundary.plot(ax=ax, facecolor="none", edgecolor="#cccccc", linewidth=0.5)
     ax.imshow(
         image, extent=[minx, maxx, miny, maxy],
         origin="lower", aspect="equal", interpolation="nearest", zorder=2,

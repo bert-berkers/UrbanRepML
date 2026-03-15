@@ -53,13 +53,24 @@ DPI = 300
 RASTER_W = 2000
 RASTER_H = 2400
 
-# Modality block definitions: prefix -> (display_name, color)
+# Modality block definitions: key -> (display_name, color)
+# Used by plot functions for labels and colors.
 MODALITY_BLOCKS = {
     "A": ("AlphaEarth", "#2196F3"),
     "P": ("POI", "#4CAF50"),
     "R": ("Roads", "#FF9800"),
     "G": ("GTFS", "#9C27B0"),
 }
+
+# Known modality column prefix patterns: (prefix_match, key, display_name, color)
+# prefix_match is the string that column names start with.
+# key is the MODALITY_BLOCKS key used for display name / color lookup.
+MODALITY_PREFIXES = [
+    ("A", "A", "AlphaEarth", "#2196F3"),
+    ("hex2vec_", "P", "POI", "#4CAF50"),
+    ("R", "R", "Roads", "#FF9800"),
+    ("gtfs2vec_", "G", "GTFS", "#9C27B0"),
+]
 
 logger = logging.getLogger(__name__)
 
@@ -70,18 +81,20 @@ logger = logging.getLogger(__name__)
 
 
 def group_columns_by_modality(columns: list[str]) -> dict[str, list[str]]:
-    """Group embedding columns by their single-letter prefix.
+    """Group embedding columns by modality using prefix matching.
 
-    Columns must match the pattern: single uppercase letter followed by digits
-    (e.g. A00, P123, R05). Columns not matching are ignored.
+    Handles both short single-letter prefixes (e.g. A00, P03, R12) and
+    long prefixes (e.g. gtfs2vec_0, gtfs2vec_63). Columns not matching any
+    known prefix are ignored. Returns a dict keyed by MODALITY_BLOCKS key.
     """
     groups: dict[str, list[str]] = {}
     for col in columns:
-        if len(col) >= 2 and col[0].isalpha() and col[0].isupper():
-            suffix = col[1:]
-            if suffix.isdigit() or suffix.replace("_", "").isdigit():
-                prefix = col[0]
-                groups.setdefault(prefix, []).append(col)
+        for prefix_match, key, _, _ in MODALITY_PREFIXES:
+            if col.startswith(prefix_match):
+                suffix = col[len(prefix_match):]
+                if suffix.isdigit():
+                    groups.setdefault(key, []).append(col)
+                    break
     return groups
 
 
@@ -398,7 +411,7 @@ def main():
     # Load concat embeddings
     emb_path = (
         paths.model_embeddings("concat")
-        / f"{args.study_area}_res{args.resolution}_{args.year}_raw.parquet"
+        / f"{args.study_area}_res{args.resolution}_{args.year}.parquet"
     )
     if not emb_path.exists():
         logger.error("Concat embeddings not found: %s", emb_path)

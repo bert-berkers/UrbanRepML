@@ -242,7 +242,7 @@ def render_map(
 
     if boundary_gdf is not None:
         boundary_gdf.plot(
-            ax=ax, facecolor="#f0f0f0", edgecolor="#cccccc", linewidth=0.5,
+            ax=ax, facecolor="none", edgecolor="#cccccc", linewidth=0.5,
         )
 
     ax.imshow(
@@ -299,8 +299,8 @@ def map_prediction_improvement(paths: StudyAreaPaths, output_dir: Path):
     target_col = "vrz"
 
     # Load OOF predictions
-    res9_only_dir = paths.stage3("dnn_probe") / "2026-03-07_multiscale_res9_only"
-    concat_dir = paths.stage3("dnn_probe") / "2026-03-07_multiscale_multiscale_concat"
+    res9_only_dir = paths.stage3_run("dnn_probe", "2026-03-07_multiscale_res9_only")
+    concat_dir = paths.stage3_run("dnn_probe", "2026-03-07_multiscale_multiscale_concat")
 
     res9_preds = pd.read_parquet(res9_only_dir / f"predictions_{target_col}.parquet")
     concat_preds = pd.read_parquet(concat_dir / f"predictions_{target_col}.parquet")

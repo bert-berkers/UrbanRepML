@@ -304,7 +304,7 @@ class ClassificationVisualizer:
             if boundary_gdf is not None:
                 boundary_gdf.plot(
                     ax=ax,
-                    facecolor="#f0f0f0",
+                    facecolor="none",
                     edgecolor="#cccccc",
                     linewidth=0.5,
                 )

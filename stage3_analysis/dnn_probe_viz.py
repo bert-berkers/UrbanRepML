@@ -686,7 +686,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         # Background boundary
         if boundary_gdf is not None:
             boundary_gdf.plot(
-                ax=ax, facecolor="#f0f0f0", edgecolor="#cccccc",
+                ax=ax, facecolor="none", edgecolor="#cccccc",
                 linewidth=0.5,
             )
 
