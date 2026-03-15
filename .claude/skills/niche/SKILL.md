@@ -16,15 +16,15 @@ Your job is to **compress upward** — surface the right information to the huma
 
 ## Graph-Theoretical Context
 
-You are operating on the **dynamic liveability graph** (see `deepresearch/liveability_approaches_graph.json`, key `"dynamic"`). Each supra dimension is a **shard** — a full vertical column: indicator (filesystem, searches) ↔ percept (you and your agents) ← need/desire (the dimension weight set during `/valuate`). Indicators and percepts are bidirectional (`↔`, active inference); needs/desires push down one-way into percepts (`→`). During `/niche`, coupling has shifted from between shards (rational preference negotiation) to between percepts (lateral coordination).
+You are operating on the **dynamic liveability graph** (see `deepresearch/liveability_approaches_graph.json`, key `"dynamic"`). A **shard** is a terminal — one PPID, one `/valuate` → `/niche` pipeline, one full vertical column: indicators (files/data this terminal works with) ↔ percepts (you and your agents) ← needs/desires (intent and characteristic states set during `/valuate`). Indicators and percepts are bidirectional (`↔`, active inference); needs/desires push down one-way into percepts (`→`). During `/niche`, cross-shard coupling is at the percept level (lateral coordination via `/sync`). Needs/desires coupling happened earlier during `/valuate` (via the valuate scratchpad).
 
 The structural properties of this graph determine what communication channels are active:
 
 - **Indicators ↔ Percepts** (bidirectional, solid): You both READ and WRITE the codebase. OBSERVE reads; ACT writes. This is self-evidencing — you modify the world (codebase) to make your observations match the preferred state set during valuation. Each wave of agent delegation moves the indicators closer to the characteristic states. Every file read, search, and agent dispatch is directed by the valuated intent.
-- **Needs/Desires → Percepts** (one-way down, solid): The human's characteristic states (set during `/valuate`) push down into your behavior as locked-in shard weights. You do NOT renegotiate them — you execute within the budget.
+- **Needs/Desires → Percepts** (one-way down, solid): The human's characteristic states (set during `/valuate`) push down into this shard's behavior as locked-in weights. You do NOT renegotiate them — you execute within the budget.
 - **Percept ↔ Percept** (bidirectional, dotted): Lateral message passing between concurrent terminals via `/sync`. This is **homo narrans** — each terminal narrates its story to other terminals. The supra session ID is the narrator's stable identity.
 
-**What this means for OODA checkpoints**: Checkpoints are for **course correction**, not **re-valuation**. You adjust tactics (which agent to dispatch, what to prioritize) but NOT the shard weights themselves. If the task has fundamentally shifted, tell the human to re-run `/valuate`.
+**What this means for OODA checkpoints**: Checkpoints are for **course correction**, not **re-valuation**. You adjust tactics (which agent to dispatch, what to prioritize) but NOT this shard's weights. If the task has fundamentally shifted, tell the human to re-run `/valuate`.
 
 ## Why delegation matters
 
@@ -52,7 +52,7 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
 4. **Discover active plan**: Check if `$ARGUMENTS` references a plan file (e.g. `.claude/plans/foo.md`). If so, read it — this is your blueprint. If `$ARGUMENTS` is a task description without a plan file reference, check `.claude/plans/` for recent files (by modification time). If a plan with a wave structure exists, ask the user: "I found plan `{file}`. Should I follow it?"
 5. If a plan specifies waves: **follow them exactly**. Do not redesign the wave structure. The plan was written with full context that may have been lost to compaction.
 6. **Read session name** via `coordinator_registry.read_ppid_session()` (PPID-isolated). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
-7. **Check supra states**: Read supra session ID via `coordinator_registry.read_ppid_supra()`, then read from `.claude/supra/sessions/{supra_session_id}.yaml`. Fall back to global `characteristic_states.yaml`. If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/valuate` to set your weights, or I'll use defaults." If the supra session has an `intent` field, this is the terminal's strategic mission set during `/valuate` — use it to frame your OODA waves. The user's `$ARGUMENTS` provide tactical steering within that intent.
+7. **Check supra states**: Read supra session ID via `coordinator_registry.read_ppid_supra()`, then read from `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml`. Fall back to global `characteristic_states.yaml`. If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/valuate` to set your weights, or I'll use defaults." If the supra session has an `intent` field, this is the terminal's strategic mission set during `/valuate` — use it to frame your OODA waves. The user's `$ARGUMENTS` provide tactical steering within that intent.
 8. **Hello broadcast** -- write an `info` message to `"all"` via `coordinator_registry.write_message()`:
    ```
    HELLO {session_id}

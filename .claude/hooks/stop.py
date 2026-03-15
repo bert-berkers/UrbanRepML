@@ -152,48 +152,58 @@ def main() -> None:
 
         today = date.today().isoformat()
 
-        # Always require coordinator scratchpad — coordinators are percepts too
-        coordinator_scratchpad = SCRATCHPAD_ROOT / "coordinator" / f"{today}.md"
+        # Accept scratchpad from whichever mode the session was in:
+        # valuate (static graph) or coordinator/niche (dynamic graph)
+        accepted_scratchpads = ["valuate", "coordinator"]
+        found_scratchpad = None
+        for sp_name in accepted_scratchpads:
+            sp_path = SCRATCHPAD_ROOT / sp_name / f"{today}.md"
+            if sp_path.exists():
+                found_scratchpad = (sp_name, sp_path)
+                break
 
         # Check if any subagent scratchpads were written today (for richer error message)
         subagent_scratchpads = []
         if SCRATCHPAD_ROOT.is_dir():
             for agent_dir in SCRATCHPAD_ROOT.iterdir():
-                if not agent_dir.is_dir() or agent_dir.name == "coordinator":
+                if not agent_dir.is_dir() or agent_dir.name in accepted_scratchpads:
                     continue
                 scratchpad = agent_dir / f"{today}.md"
                 if scratchpad.exists():
                     subagent_scratchpads.append(agent_dir.name)
 
-        if not coordinator_scratchpad.exists():
+        if not found_scratchpad:
             agents_note = f" (agents active: {', '.join(subagent_scratchpads)})" if subagent_scratchpads else ""
             json.dump({
                 "decision": "block",
                 "reason": (
-                    f"Coordinator scratchpad missing at "
-                    f".claude/scratchpad/coordinator/{today}.md{agents_note}. "
-                    f"Write what you did, decisions made, and unresolved items."
+                    f"Session scratchpad missing{agents_note}. "
+                    f"Write to .claude/scratchpad/valuate/{today}.md (if valuating) "
+                    f"or .claude/scratchpad/coordinator/{today}.md (if in niche). "
+                    f"Include what you did, decisions made, and unresolved items."
                 ),
             }, sys.stdout)
             return
 
-        # Check coordinator scratchpad has meaningful content (same bar as subagent-stop)
-        lines = coordinator_scratchpad.read_text(encoding="utf-8").splitlines()
+        sp_name, sp_path = found_scratchpad
+
+        # Check scratchpad has meaningful content (same bar as subagent-stop)
+        lines = sp_path.read_text(encoding="utf-8").splitlines()
         non_empty = [l for l in lines if l.strip()]
 
         if len(non_empty) < MIN_LINES:
             json.dump({
                 "decision": "block",
                 "reason": (
-                    f"Coordinator scratchpad exists but is too short "
+                    f"{sp_name} scratchpad exists but is too short "
                     f"({len(non_empty)} non-empty lines, need {MIN_LINES}+). "
-                    f"Please add a meaningful summary of today's coordination."
+                    f"Please add a meaningful summary."
                 ),
             }, sys.stdout)
             return
 
         print(
-            f"Stop: coordinator scratchpad OK ({len(non_empty)} lines), allowing",
+            f"Stop: {sp_name} scratchpad OK ({len(non_empty)} lines), allowing",
             file=sys.stderr,
         )
         json.dump({}, sys.stdout)

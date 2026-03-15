@@ -9,9 +9,18 @@ argument-hint: "[optional: quick adjustment like 'speed 5, tests 1']"
 
 ## Task
 
-You are operating on the **static liveability graph** (see `deepresearch/liveability_approaches_graph.json`, key `"static"`). Each supra dimension is a **shard** — a full vertical column through the three-layer graph: indicator (the filesystem, searches) → percept (agent) ↔ need/desire (this dimension weight). Indicators feed forward one-way into percepts (`→`); percepts and needs/desires mutually assess (`↔`). Coupling is **across shards at the needs/desires level**: the human negotiates between shards to form rational preferences. This is where intent gets set — everything `/niche` does downstream is directed by what you establish here.
+You are operating on the **static liveability graph** (see `deepresearch/liveability_approaches_graph.json`, key `"static"`).
 
-Adjust the human's characteristic states (precision weights) that propagate through the multi-agent system and change how agents behave. This is the mechanism by which the supra layer (human) tunes the attention of the entire cognitive hierarchy.
+A **shard** is a terminal — one PPID, one `/valuate` → `/niche` pipeline, one full vertical column through the three-layer graph:
+- **Indicators**: the files, code paths, and data this terminal works with
+- **Percepts**: the agents (context windows) this terminal spawns
+- **Needs/desires**: the intent and characteristic states set here in `/valuate`
+
+Indicators feed forward one-way into percepts (`→`); percepts and needs/desires mutually assess (`↔`). When multiple terminals run concurrently, each is its own shard. Cross-shard coupling happens at two levels:
+- **Needs/desires** (static, `/valuate`): the valuate scratchpad + coordinator path claims (constraints on indicators, set at this level)
+- **Percepts** (dynamic, `/niche`): `/sync` lateral coupling between agent context windows
+
+The human negotiates between shards to form rational preferences — this is where intent gets set, and everything `/niche` does downstream is directed by it.
 
 $ARGUMENTS
 
@@ -24,7 +33,7 @@ Set the active graph to "static" using `supra_reader.set_active_graph("static")`
 ### Step 1: Read Current State
 
 Read the supra session ID via `coordinator_registry.read_ppid_supra()` (PPID-isolated, multi-terminal safe). Then read states:
-1. Try `.claude/supra/sessions/{supra_session_id}.yaml` (supra-scoped, takes priority)
+1. Try `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml` (supra-scoped, takes priority)
 2. Fall back to `.claude/supra/characteristic_states.yaml` (global default/prior)
 3. Read `.claude/supra/schema.yaml` for dimension definitions, groups, mode biases, agent relevance
 4. Determine current temporal segment from local time (e.g., `friday-evening`) using `supra_reader._temporal_segment_key()`
@@ -112,11 +121,12 @@ If all of these are true: (a) no shorthand was provided, (b) `last_attuned` is f
 
 **Build the reading list** by scanning for the most informative files from the previous session(s):
 
-1. **Coordinator forward-look** (highest priority): `.claude/scratchpad/coordinator/YYYY-MM-DD-forward-look.md` from the most recent date. This is written specifically to seed the next session.
-2. **Ego assessment** (high priority): `.claude/scratchpad/ego/YYYY-MM-DD.md` from the most recent date. Process health, attention needed, metrics table.
-3. **Recent git log**: `git log --oneline -10` — what actually shipped.
-4. **Active coordinator messages**: any unread messages in `.claude/coordinators/messages/{date}/` from after last attunement.
-5. **Any specialist scratchpads newer than last attunement** — only mention these by name and one-line summary, don't dump content.
+1. **Valuate scratchpads from other shards** (highest priority for multi-terminal): `.claude/scratchpad/valuate/YYYY-MM-DD.md` — each entry is keyed by supra session ID (PPID-isolated), showing what other shards valued today and what intent they set. This is how you avoid duplicating work or setting conflicting intents.
+2. **Coordinator forward-look**: `.claude/scratchpad/coordinator/YYYY-MM-DD-forward-look.md` from the most recent date. This is written specifically to seed the next session.
+3. **Ego assessment**: `.claude/scratchpad/ego/YYYY-MM-DD.md` from the most recent date. Process health, attention needed, metrics table.
+4. **Recent git log**: `git log --oneline -10` — what actually shipped.
+5. **Active coordinator messages**: any unread messages in `.claude/coordinators/messages/{date}/` from after last attunement.
+6. **Any specialist scratchpads newer than last attunement** — only mention these by name and one-line summary, don't dump content.
 
 **Present the inread** as a compact recommendation:
 
@@ -224,7 +234,7 @@ Based on user answers (from questionnaire or shorthand):
 7. **Metadata**: Set `last_attuned` to current ISO timestamp, `last_attuned_by` to the session name (read via `coordinator_registry.read_ppid_session()`, otherwise use "manual")
 8. **Record temporal observation**: Call `supra_reader.record_temporal_observation(states)` to update the EMA prior for the current temporal segment. This fires regardless of how the values were set (shorthand, questionnaire, or `use prior`). Every valuation is an observation.
 
-Write states to the **supra session file** at `.claude/supra/sessions/{supra_session_id}.yaml` using `supra_reader.write_supra_session_states()`. The supra session ID is `{poetic_name}-{date}` (e.g., `hushed-spinning-glen-2026-03-14`) — named by the first coordinator in this terminal, persisting across `/clear` cycles. If no supra session ID is available, fall back to `supra_reader.write_session_states()`. Do NOT write to the global `characteristic_states.yaml` — that file is the prior/default for sessions that haven't attuned. The file format is:
+Write states to the **supra session file** at `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml` using `supra_reader.write_supra_session_states()`. The supra session ID is `{poetic_name}-{date}` (e.g., `hushed-spinning-glen-2026-03-14`) — named by the first coordinator in this terminal, persisting across `/clear` cycles. If no supra session ID is available, fall back to `supra_reader.write_session_states()`. Do NOT write to the global `characteristic_states.yaml` — that file is the prior/default for sessions that haven't attuned. The file format is:
 ```yaml
 mode: {mode}
 intent: "{strategic intent — what this terminal is for}"
@@ -241,6 +251,25 @@ last_attuned_by: "{session id}"
 If no session ID is available (e.g. running outside coordinator mode), fall back to writing the global file.
 
 If adding new dimensions to `schema.yaml`, preserve the existing structure and append the new dimension under the appropriate group.
+
+### Step 5.5: Write Valuate Scratchpad
+
+Write (or update) `.claude/scratchpad/valuate/YYYY-MM-DD.md`. This is the cross-terminal coupling mechanism at the needs/desires level — other terminals read this during their own `/valuate` to set intent with awareness of what's already running.
+
+Format — append an entry per terminal valuation:
+
+```markdown
+## {supra_session_id} — {HH:MM}
+
+- **Intent**: "{strategic intent for this terminal}"
+- **Mode**: {mode} | Key dims: {only dims that differ from default, e.g. "speed=5, tests=1"}
+- **Focus**: {focus items}
+- **Suppress**: {suppress items}
+```
+
+If the file already exists (another terminal valuated today), **append** your entry — don't overwrite theirs. If THIS terminal already has an entry (re-valuation), update it in place.
+
+Keep entries compact. The reader only needs: what is this terminal doing, and what should I avoid stepping on?
 
 ### Step 6: Print Summary
 
@@ -282,5 +311,5 @@ This makes `/valuate` the single entry point for all sessions: orient → tune �
 - **Idempotent**: Running `/valuate` multiple times is fine. Re-running with no arguments re-displays the landscape and re-asks questions.
 - **Preserve unknowns**: If `characteristic_states.yaml` has fields you do not recognize, preserve them when writing back.
 - **Clamping**: All dimension values must be integers in [1, 5]. Clamp if the user says something outside this range.
-- **No scratchpad**: This skill does not write a scratchpad entry. It is a pure configuration tool.
+- **Scratchpad**: After applying changes (Step 5), write a scratchpad entry to `.claude/scratchpad/valuate/YYYY-MM-DD.md`. This is how terminals communicate valuation decisions to each other — stigmergy at the needs/desires level.
 - **Mode biases are NOT baked in**: Mode biases are applied at read-time by `supra_reader.py`. The states file stores raw values only. Do not pre-apply biases when writing.

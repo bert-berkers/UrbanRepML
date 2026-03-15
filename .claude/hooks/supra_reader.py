@@ -413,6 +413,24 @@ def _current_supra_session_id() -> str | None:
         return None
 
 
+def _supra_session_path(sid: str) -> Path:
+    """Return PPID-keyed path for a supra session file.
+
+    Format: .claude/supra/sessions/{sid}.{ppid}.yaml
+    Falls back to non-PPID path if the PPID-keyed file doesn't exist (migration).
+    """
+    ppid = os.getppid()
+    ppid_path = SESSIONS_DIR / f"{sid}.{ppid}.yaml"
+    if ppid_path.is_file():
+        return ppid_path
+    # Fallback: try legacy non-PPID path
+    legacy_path = SESSIONS_DIR / f"{sid}.yaml"
+    if legacy_path.is_file():
+        return legacy_path
+    # New file: use PPID-keyed path
+    return ppid_path
+
+
 def read_supra_session_states(supra_session_id: str | None = None) -> dict:
     """Read supra session file, falling back to coordinator session then global.
 
@@ -422,7 +440,7 @@ def read_supra_session_states(supra_session_id: str | None = None) -> dict:
     # Try the provided or detected supra session ID first
     sid = supra_session_id or _current_supra_session_id()
     if sid:
-        data = _read_yaml(SESSIONS_DIR / f"{sid}.yaml")
+        data = _read_yaml(_supra_session_path(sid))
         if data:
             return data
     # Fall back to coordinator session ID
@@ -446,7 +464,7 @@ def write_supra_session_states(states: dict, supra_session_id: str | None = None
     sid = supra_session_id or _current_supra_session_id() or _supra_session_id()
     try:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-        path = SESSIONS_DIR / f"{sid}.yaml"
+        path = _supra_session_path(sid)
         tmp = path.with_suffix(".yaml.tmp")
         tmp.write_text(
             yaml.dump(states, default_flow_style=False, allow_unicode=True, sort_keys=False),

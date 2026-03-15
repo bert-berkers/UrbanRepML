@@ -114,21 +114,21 @@ The `cognitive_light_cone_summary()` in session-start.py quantifies reach:
 
 ## Graph Modes & Shard Coupling
 
-A **shard** is a full vertical column through the three-layer graph: indicator (bottom) — percept (middle) — need/desire (top). Indicators are the observable world — the filesystem, git history, search results. Percepts are the agents processing them. Needs/desires are the supra dimension weights. Each shard is one such column. The edge directions within a shard change by mode (see below). (cf. [shard theory](https://www.lesswrong.com/w/shard-theory))
+A **shard** is a terminal — one PPID, one `/valuate` → `/niche` pipeline, one full vertical column through the three-layer graph: indicators (bottom) — percepts (middle) — needs/desires (top). Indicators are the files, code paths, and data this terminal works with. Percepts are the agents (context windows) it spawns. Needs/desires are the intent and characteristic states set during `/valuate`. Each terminal is one shard. The edge directions within a shard change by mode (see below). (cf. [shard theory](https://www.lesswrong.com/w/shard-theory))
 
-The two graph modes differ in *where coupling happens* and *which direction the edges flow*:
+The two graph modes differ in *where cross-shard coupling happens* and *which direction the edges flow*:
 
 **Static graph (`/valuate`)** — rational preference formation.
 - Indicators → percepts: **one-way**. Indicators are passive inputs (you read the state of the world).
 - Percepts ↔ needs/desires: **bidirectional**. Mutual assessment — "given what I see, what do I want? Given what I want, what matters?"
-- Coupling is **across shards at the needs/desires level** (dotted). The human negotiates between shards: "more rigor or more speed?" This is where rational preferences form.
+- Cross-shard coupling is **at the needs/desires level** (dotted). The human negotiates between shards via the valuate scratchpad: what is each terminal's intent, and what path constraints apply? Coordinator claims are constraints on indicators but set at this level.
 - `/sync` is off. No lateral percept communication — you're deciding intent, not executing.
 
 **Dynamic graph (`/niche`)** — active inference.
 - Needs/desires → percepts: **one-way down**. Intent is locked in from valuation. The valuated weights drive what percepts look for.
 - Indicators ↔ percepts: **bidirectional**. Active inference — percepts don't just read the filesystem, they write code, run tests, modify the world to match the preferred state. Every intermediate step (file read, search, agent dispatch) is directed by the objective set during valuation.
-- Coupling is **across shards at the percept level** (dotted). Lateral coordination between coordinators via `/sync` narrative messaging.
-- No cross-shard coupling at needs/desires. Preferences don't renegotiate during execution.
+- Cross-shard coupling is **at the percept level** (dotted). Lateral coordination between context windows via `/sync` narrative messaging.
+- No cross-shard coupling at needs/desires during niche. Preferences were set during valuation and don't renegotiate during execution.
 
 **The full loop**: `/valuate` sets characteristic states (the preferred observations). `/niche` then self-evidences for those states — the coordinator dispatches agents in waves, each wave modifying the codebase (indicators) to better match the preferred state. This is active inference: the system acts to make its observations confirm its priors. Every file read, search, and agent dispatch during `/niche` is directed by the intent set during `/valuate`. The more precisely you valuate, the more directed niche execution becomes.
 
