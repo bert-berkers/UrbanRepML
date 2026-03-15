@@ -175,7 +175,7 @@ class StudyAreaPaths:
 
         Layout::
 
-            data/study_areas/{area}/osm/
+            data/study_areas/{area}/stage1_unimodal/osm/
             ├── {area}-internal.osh.pbf      # Full OSM history extract
             ├── {area}-latest.osm.pbf        # Most recent snapshot
             └── {area}-2022-01-01.osm.pbf    # Date-specific snapshot
@@ -183,7 +183,7 @@ class StudyAreaPaths:
         Both POI and roads processors use files from this directory
         via SRAI's ``OSMPbfLoader``.
         """
-        return self.root / "osm"
+        return self.root / "stage1_unimodal" / "osm"
 
     def osm_history_pbf(self) -> Path:
         """Full OSM history PBF file (``*.osh.pbf``).

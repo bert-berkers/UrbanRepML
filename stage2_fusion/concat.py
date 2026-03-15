@@ -101,6 +101,69 @@ def _validate_prefixes(df: pd.DataFrame, modalities: list[str]) -> None:
         logger.warning("Columns with unknown prefixes (kept anyway): %s", unexpected[:10])
 
 
+def _normalize_per_modality(df: pd.DataFrame, modalities: list[str]) -> pd.DataFrame:
+    """Z-score normalize each modality block independently.
+
+    For each modality, computes mean and std from non-zero rows only (so that
+    background/zero-filled hexagons from sparse modalities don't skew statistics),
+    then applies standardization to ALL rows.
+    """
+    logger.info("Per-modality z-score normalization:")
+    df = df.copy()
+
+    for mod in modalities:
+        prefix = MODALITY_PREFIXES.get(mod)
+        if prefix is None:
+            logger.warning("  %s: no known prefix, skipping normalization", mod)
+            continue
+
+        cols = [c for c in df.columns if c.startswith(prefix)]
+        if not cols:
+            logger.warning("  %s: no columns with prefix '%s' found", mod, prefix)
+            continue
+
+        block = df[cols]
+
+        # Identify non-zero rows: rows where at least one column is non-zero
+        nonzero_mask = (block != 0).any(axis=1)
+        n_nonzero = nonzero_mask.sum()
+        n_total = len(block)
+
+        if n_nonzero == 0:
+            logger.warning("  %s: all rows are zero, skipping normalization", mod)
+            continue
+
+        # Compute stats from non-zero rows only
+        block_nonzero = block.loc[nonzero_mask]
+        means = block_nonzero.mean()
+        stds = block_nonzero.std()
+
+        # Log before-normalization stats
+        logger.info(
+            "  %-12s  cols=%d  nonzero=%d/%d  mean_of_means=%.4f  mean_of_stds=%.4f",
+            mod, len(cols), n_nonzero, n_total,
+            means.mean(), stds.mean(),
+        )
+
+        # Apply z-score: handle zero-std columns by leaving them as-is
+        for col in cols:
+            if stds[col] == 0:
+                logger.warning("    column %s has std=0, leaving unchanged", col)
+                continue
+            df[col] = (df[col] - means[col]) / stds[col]
+
+        # Log after-normalization verification (non-zero rows only)
+        after_block = df.loc[nonzero_mask, cols]
+        after_means = after_block.mean()
+        after_stds = after_block.std()
+        logger.info(
+            "  %-12s  AFTER: mean_of_means=%.6f  mean_of_stds=%.6f",
+            mod, after_means.mean(), after_stds.mean(),
+        )
+
+    return df
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Concatenate stage-1 embeddings (inner join; sparse modalities use left join)")
     parser.add_argument("--modalities", required=True, help="Comma-separated modality names")
@@ -162,6 +225,16 @@ def main(argv: list[str] | None = None) -> None:
     # --- Validate column prefixes ---
     _validate_prefixes(fused, modalities)
 
+    # --- Save raw (unnormalized) concat ---
+    raw_path = paths.fused_embedding_file("concat", args.resolution, args.year)
+    raw_path = raw_path.with_name(raw_path.stem + "_raw" + raw_path.suffix)
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    fused.to_parquet(raw_path)
+    logger.info("Wrote raw (unnormalized) concat -> %s", raw_path)
+
+    # --- Per-modality z-score normalization ---
+    fused = _normalize_per_modality(fused, modalities)
+
     # --- Optional PCA ---
     if args.pca is not None:
         from sklearn.decomposition import PCA
@@ -191,6 +264,7 @@ def main(argv: list[str] | None = None) -> None:
             "modalities": modalities,
             "resolution": args.resolution,
             "year": args.year,
+            "normalization": "per_modality_zscore",
             "pca_components": args.pca,
             "n_hexagons": len(fused),
             "n_columns": len(fused.columns),

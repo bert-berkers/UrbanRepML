@@ -2,15 +2,16 @@
 Run simple ring aggregation on concatenated Stage 2 embeddings.
 
 Applies geometric spatial smoothing via weighted k-ring neighbourhood means.
-Takes the concat baseline parquet as input and produces a spatially smoothed
-version as output.
+Takes the normalized concat baseline parquet as input and produces a spatially
+smoothed version as output.  Ring agg k=10 exponential is the current best
+performer (0.532 R-squared on leefbaarometer probes).
 
 Lifetime: durable
 Stage: Stage 2 (fusion)
 
 Usage:
-    python scripts/stage2/run_simple_ring_aggregation.py \
-        --study-area netherlands --resolution 9 --K 3 --weighting exponential
+    python scripts/stage2/run_simple_ring_aggregation.py --year 20mix
+    python scripts/stage2/run_simple_ring_aggregation.py --study-area netherlands --resolution 9 --K 10 --weighting exponential --year 20mix
 """
 
 import argparse
@@ -34,16 +35,16 @@ def main():
         description="Simple ring aggregation on concat embeddings."
     )
     parser.add_argument(
-        "--study-area", required=True, help="Study area name (e.g. netherlands)"
+        "--study-area", default="netherlands", help="Study area name (default: netherlands)"
     )
     parser.add_argument(
         "--resolution", type=int, default=9, help="H3 resolution (default: 9)"
     )
     parser.add_argument(
-        "--year", type=int, default=2022, help="Data year (default: 2022)"
+        "--year", default="20mix", help="Data year label (default: 20mix)"
     )
     parser.add_argument(
-        "--K", type=int, default=3, help="Max ring distance (default: 3)"
+        "--K", type=int, default=10, help="Max ring distance (default: 10)"
     )
     parser.add_argument(
         "--weighting",
