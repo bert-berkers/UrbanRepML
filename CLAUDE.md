@@ -39,11 +39,15 @@ embeddings = processor.process_to_h3(data, regions_gdf)
 
 ### Stage 2: Urban Embedding Fusion
 
-Two model architectures (all in `stage2_fusion/models/`):
+Four model architectures (all in `stage2_fusion/models/`):
 
-1. **FullAreaUNet** (`full_area_unet.py`): The OG that worked. Full study area processing with lateral accessibility graph. Multi-resolution U-Net (res 8-10) with ModalityFusion, SharedSparseMapping, symmetric 3-level encoder-decoder with skip connections, and per-resolution output heads.
+1. **FullAreaUNet** (`full_area_unet.py`): The OG that worked. Full study area processing with lateral accessibility graph. Multi-resolution U-Net (res 8-10) with ModalityFusion, SharedSparseMapping, symmetric 3-level encoder-decoder with skip connections, and per-resolution output heads projecting to `dim_fine=64D`.
 
 2. **ConeBatchingUNet** (`cone_batching_unet.py`): Most promising future direction. Cone-based hierarchical U-Net processing independent computational "cones" spanning res5->res10. Memory efficient (each cone ~1,500 hexagons vs ~6M for full graph), parallelizable, multi-scale.
+
+3. **RingAggregation** (`ring_aggregation.py`): Current best performer. Zero-parameter spatial smoothing via weighted k-ring neighbourhood averaging. Ring agg k=10 outperforms all learned UNet variants on leefbaarometer probes. Weighting schemes: exponential, logarithmic, linear, flat.
+
+4. **LatticeGCN** (`lattice_gcn.py`): GCN on H3 hexagonal lattice with reconstruction loss. Baseline for validating learned message-passing.
 
 ### Stage 3: Analysis & Visualization
 
@@ -58,6 +62,8 @@ Post-training analysis and clustering (all in `stage3_analysis/`):
 - **ClassificationProber** (`classification_probe.py`): Logistic regression for urban taxonomy classification
 - **DNNClassificationProber** (`dnn_classification_probe.py`): DNN classification with MLP
 - **Target builders**: `leefbaarometer_target.py`, `urban_taxonomy_target.py`
+
+Each probe has a companion `*_viz.py` module for result visualization.
 
 ## Accessibility Graph Pipeline
 
@@ -124,14 +130,8 @@ Three tiers in `scripts/`:
 ## Key Commands
 
 ```bash
-# Stage 1: Process modalities for study area
-python -m stage1_modalities.alphaearth --study-area netherlands --use-srai
-
-# Stage 2: Run fusion pipeline
-python -m stage2_fusion.pipeline --study-area netherlands --modalities alphaearth,poi,roads
-
-# Generate accessibility graphs
-python scripts/accessibility/generate_graphs.py --study-area netherlands --use-srai
+# Stage 2: Build late-fusion concat embeddings
+python -m stage2_fusion.concat --study-area netherlands --modalities alphaearth,poi,roads --year 20mix
 
 # Train cone-based model
 python scripts/netherlands/train_lattice_unet_res10_cones.py
@@ -205,4 +205,4 @@ See `specs/claude_code_multi_agent_setup.md` for the full architecture descripti
 
 ---
 
-*Last updated: February 2026*
+*Last updated: March 2026*

@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/session-start.py",
+            "command": "python \"C:/Users/Bert Berkers/PycharmProjects/UrbanRepML/.claude/hooks/session-start.py\"",
             "timeout": 10
           }
         ]
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/subagent-context.py",
+            "command": "python \"C:/Users/Bert Berkers/PycharmProjects/UrbanRepML/.claude/hooks/subagent-context.py\"",
             "timeout": 10
           }
         ]
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/subagent-stop.py",
+            "command": "python \"C:/Users/Bert Berkers/PycharmProjects/UrbanRepML/.claude/hooks/subagent-stop.py\"",
             "timeout": 10
           }
         ]
