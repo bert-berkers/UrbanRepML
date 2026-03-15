@@ -29,11 +29,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.colors import TwoSlopeNorm, Normalize
-from shapely import get_geometry, get_num_geometries
 from sklearn.metrics.pairwise import cosine_similarity
 
 from utils.paths import StudyAreaPaths
 from utils.spatial_db import SpatialDB
+from utils.visualization import load_boundary
 
 logger = logging.getLogger(__name__)
 
@@ -161,32 +161,6 @@ def rasterize_centroids(
         image[iy0:iy1, ix0:ix1, 3][stamp_slice] = 1.0
 
     return image
-
-
-def load_boundary(paths: StudyAreaPaths) -> gpd.GeoDataFrame | None:
-    """Load study area boundary in EPSG:28992, filtered to European NL."""
-    boundary_path = paths.area_gdf_file()
-    if not boundary_path.exists():
-        return None
-
-    boundary_gdf = gpd.read_file(boundary_path)
-    if boundary_gdf.crs is None:
-        boundary_gdf = boundary_gdf.set_crs("EPSG:4326")
-    boundary_gdf = boundary_gdf.to_crs(epsg=28992)
-
-    # Filter to European Netherlands (exclude Caribbean)
-    geom = boundary_gdf.geometry.iloc[0]
-    n_parts = get_num_geometries(geom)
-    if n_parts > 1:
-        euro_geom = max(
-            (get_geometry(geom, i) for i in range(n_parts)),
-            key=lambda g: g.area,
-        )
-        boundary_gdf = gpd.GeoDataFrame(
-            geometry=[euro_geom], crs=boundary_gdf.crs
-        )
-
-    return boundary_gdf
 
 
 def compute_extent(boundary_gdf: gpd.GeoDataFrame | None, hex_ids: pd.Index) -> tuple:

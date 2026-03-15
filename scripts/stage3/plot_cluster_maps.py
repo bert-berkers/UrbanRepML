@@ -50,6 +50,13 @@ if str(project_root) not in sys.path:
 
 from utils.paths import StudyAreaPaths
 from utils.spatial_db import SpatialDB
+from utils.visualization import (
+    RASTER_H,
+    RASTER_W,
+    load_boundary,
+    plot_spatial_map,
+    rasterize_categorical,
+)
 from stage3_analysis.visualization.clustering_utils import (
     apply_pca_reduction,
     perform_minibatch_clustering,
@@ -64,171 +71,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DPI = 300
-RASTER_W = 2000
-RASTER_H = 2400
-
-
-# ---------------------------------------------------------------------------
-# Rasterization helpers (from plot_embeddings.py)
-# ---------------------------------------------------------------------------
-
-
-def _stamp_pixels(image, py, px, rgb, stamp, height, width):
-    """Write RGB values to image with a square stamp of given radius."""
-    if stamp <= 1:
-        image[py, px, :3] = rgb
-        image[py, px, 3] = 1.0
-    else:
-        for dy in range(-stamp + 1, stamp):
-            for dx in range(-stamp + 1, stamp):
-                sy = np.clip(py + dy, 0, height - 1)
-                sx = np.clip(px + dx, 0, width - 1)
-                image[sy, sx, :3] = rgb
-                image[sy, sx, 3] = 1.0
-
-
-def rasterize_categorical(
-    cx: np.ndarray,
-    cy: np.ndarray,
-    labels: np.ndarray,
-    extent: tuple,
-    n_clusters: int,
-    width: int = RASTER_W,
-    height: int = RASTER_H,
-    cmap: str = "tab20",
-    stamp: int = 1,
-) -> np.ndarray:
-    """Rasterize integer cluster labels to an RGBA image.
-
-    Args:
-        cx, cy: centroid coordinates in EPSG:28992.
-        labels: integer cluster assignment array.
-        extent: (minx, miny, maxx, maxy) in EPSG:28992.
-        n_clusters: total number of clusters (for colormap scaling).
-        width, height: output image dimensions.
-        cmap: matplotlib colormap name.
-        stamp: pixel radius per point (1=single pixel, 2+=fills gaps at coarser res).
-
-    Returns:
-        (height, width, 4) RGBA float32 array with transparent background.
-    """
-    minx, miny, maxx, maxy = extent
-    mask = (cx >= minx) & (cx <= maxx) & (cy >= miny) & (cy <= maxy)
-    cx_m, cy_m, lab_m = cx[mask], cy[mask], labels[mask]
-
-    px = ((cx_m - minx) / (maxx - minx) * (width - 1)).astype(int)
-    py = ((cy_m - miny) / (maxy - miny) * (height - 1)).astype(int)
-    np.clip(px, 0, width - 1, out=px)
-    np.clip(py, 0, height - 1, out=py)
-
-    colormap_obj = plt.get_cmap(cmap)
-    norm_vals = lab_m.astype(float) / max(n_clusters - 1, 1)
-    rgb = colormap_obj(norm_vals)[:, :3].astype(np.float32)
-
-    image = np.zeros((height, width, 4), dtype=np.float32)
-    _stamp_pixels(image, py, px, rgb, stamp, height, width)
-    return image
-
-
-# ---------------------------------------------------------------------------
-# Map rendering helpers (from plot_embeddings.py)
-# ---------------------------------------------------------------------------
-
-
-def _clean_map_axes(ax):
-    """Remove ticks and labels for a clean map look."""
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlabel("")
-    ax.set_ylabel("")
-
-
-def _add_rd_grid(ax, extent):
-    """Add RD New (EPSG:28992) coordinate grid lines and labels."""
-    minx, miny, maxx, maxy = extent
-    step = 50_000  # 50 km grid
-    x_grid = np.arange(
-        np.floor(minx / step) * step,
-        np.ceil(maxx / step) * step + step,
-        step,
-    )
-    y_grid = np.arange(
-        np.floor(miny / step) * step,
-        np.ceil(maxy / step) * step + step,
-        step,
-    )
-    for x in x_grid:
-        if minx <= x <= maxx:
-            ax.axvline(x, color='grey', alpha=0.3, linewidth=0.5, zorder=10)
-    for y in y_grid:
-        if miny <= y <= maxy:
-            ax.axhline(y, color='grey', alpha=0.3, linewidth=0.5, zorder=10)
-    for x in x_grid:
-        if minx <= x <= maxx:
-            ax.text(
-                x, miny - (maxy - miny) * 0.015, f'{x:.0f}',
-                ha='center', va='top', fontsize=7, color='#555555',
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7),
-            )
-    for y in y_grid:
-        if miny <= y <= maxy:
-            ax.text(
-                minx - (maxx - minx) * 0.01, y, f'{y:.0f}',
-                ha='right', va='center', fontsize=7, color='#555555',
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7),
-            )
-
-
-def load_boundary(paths: StudyAreaPaths) -> gpd.GeoDataFrame | None:
-    """Load study area boundary, filter to European NL, reproject to 28992."""
-    from shapely import get_geometry, get_num_geometries
-
-    boundary_path = paths.area_gdf_file()
-    if not boundary_path.exists():
-        logger.warning("Boundary file not found: %s", boundary_path)
-        return None
-
-    boundary_gdf = gpd.read_file(boundary_path)
-    if boundary_gdf.crs is None:
-        boundary_gdf = boundary_gdf.set_crs("EPSG:4326")
-    boundary_gdf = boundary_gdf.to_crs(epsg=28992)
-
-    geom = boundary_gdf.geometry.iloc[0]
-    n_parts = get_num_geometries(geom)
-    if n_parts > 1:
-        euro_geom = max(
-            (get_geometry(geom, i) for i in range(n_parts)),
-            key=lambda g: g.area,
-        )
-        boundary_gdf = gpd.GeoDataFrame(
-            geometry=[euro_geom], crs=boundary_gdf.crs
-        )
-
-    return boundary_gdf
-
-
-def plot_spatial_map(ax, image, extent, boundary_gdf, title=""):
-    """Render a rasterized image on an axes with boundary underlay and RD grid."""
-    if boundary_gdf is not None:
-        boundary_gdf.plot(
-            ax=ax, facecolor="#f0f0f0", edgecolor="#cccccc", linewidth=0.5,
-            zorder=1,
-        )
-    minx, miny, maxx, maxy = extent
-    ax.imshow(
-        image,
-        extent=[minx, maxx, miny, maxy],
-        origin="lower",
-        aspect="equal",
-        interpolation="nearest",
-        zorder=2,
-    )
-    _add_rd_grid(ax, extent)
-    ax.set_xlim(minx, maxx)
-    ax.set_ylim(miny, maxy)
-    _clean_map_axes(ax)
-    if title:
-        ax.set_title(title, fontsize=11)
 
 
 # ---------------------------------------------------------------------------
@@ -373,23 +215,24 @@ def main():
 
     # 4b. Filter empty/background hexagons if requested
     if args.filter_empty:
-        vals = emb_df.values
+        vals = emb_df.values.astype(np.float64)
         n_before = len(emb_df)
 
-        # Strategy: detect dominant background mode via row-wise std clustering
-        # Many embedders produce identical vectors for "no data" hexagons
-        row_std = vals.std(axis=1)
-        median_std = np.median(row_std)
+        # Strategy 1: detect dominant repeated vector (>50% identical rows).
+        # Catches encoders that assign a learned default embedding to
+        # hexagons without data (e.g. GTFS2Vec non-transit hexagons).
+        sample_idx = np.linspace(0, n_before - 1, min(10000, n_before), dtype=int)
+        sample = np.round(vals[sample_idx], 6)
+        unique_vecs, _, counts = np.unique(sample, axis=0, return_inverse=True, return_counts=True)
+        dominant_idx = np.argmax(counts)
+        dominant_frac = counts[dominant_idx] / len(sample)
 
-        # Hexagons whose row_std matches the median exactly (within tolerance)
-        # are likely background/default vectors
-        background = np.abs(row_std - median_std) < 0.001
-
-        # Only filter if the "background" is >50% of data (clear bimodal split)
-        if background.sum() > 0.5 * n_before:
-            keep = ~background
+        if dominant_frac > 0.5:
+            default_vec = unique_vecs[dominant_idx]
+            diffs = np.abs(vals - default_vec)
+            keep = diffs.max(axis=1) >= 1e-5
         else:
-            # Fallback: remove all-zero rows only
+            # Strategy 2: remove all-zero rows only
             keep = ~(vals == 0.0).all(axis=1)
 
         emb_df = emb_df[keep]

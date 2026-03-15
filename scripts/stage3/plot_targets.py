@@ -26,6 +26,12 @@ from scipy import stats as sp_stats
 
 from utils.paths import StudyAreaPaths
 from utils.spatial_db import SpatialDB
+from utils.visualization import (
+    _clean_map_axes,
+    load_boundary,
+    plot_spatial_map as _plot_spatial_map_base,
+    _add_colorbar as _add_colorbar_base,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -50,36 +56,6 @@ RASTER_H = 2400
 def _shorten_l3(name: str) -> str:
     """Strip trailing ' Fabric' from L3 taxonomy names for compact display."""
     return name.removesuffix(" Fabric")
-
-# ---------------------------------------------------------------------------
-# Boundary loading
-# ---------------------------------------------------------------------------
-
-
-def load_boundary(paths: StudyAreaPaths) -> gpd.GeoDataFrame:
-    """Load Netherlands boundary, filter to European NL, reproject to 28992."""
-    from shapely import get_geometry, get_num_geometries
-
-    boundary_path = paths.area_gdf_file()
-    boundary_gdf = gpd.read_file(boundary_path)
-
-    if boundary_gdf.crs is None:
-        boundary_gdf = boundary_gdf.set_crs("EPSG:4326")
-    boundary_gdf = boundary_gdf.to_crs(epsg=28992)
-
-    # Filter to largest part (European Netherlands) as safety check
-    geom = boundary_gdf.geometry.iloc[0]
-    n_parts = get_num_geometries(geom)
-    if n_parts > 1:
-        euro_geom = max(
-            (get_geometry(geom, i) for i in range(n_parts)),
-            key=lambda g: g.area,
-        )
-        boundary_gdf = gpd.GeoDataFrame(
-            geometry=[euro_geom], crs=boundary_gdf.crs
-        )
-
-    return boundary_gdf
 
 
 # ---------------------------------------------------------------------------
@@ -208,56 +184,24 @@ def rasterize_labels_to_grid(
 
 
 # ---------------------------------------------------------------------------
-# Shared plot helpers
+# Shared plot helpers (wrappers around utils.visualization with local defaults)
 # ---------------------------------------------------------------------------
 
 
-def _clean_map_axes(ax):
-    """Remove ticks and labels for a clean map look."""
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlabel("")
-    ax.set_ylabel("")
-
-
-def plot_spatial_map(
-    ax,
-    image: np.ndarray,
-    extent: tuple,
-    boundary_gdf: gpd.GeoDataFrame,
-    title: str = "",
-):
-    """Render a rasterized image on an axes with boundary underlay."""
-    boundary_gdf.plot(
-        ax=ax, facecolor="#f0f0f0", edgecolor="#cccccc", linewidth=0.5,
+def plot_spatial_map(ax, image, extent, boundary_gdf, title=""):
+    """Render a rasterized image on an axes with boundary underlay (no RD grid)."""
+    _plot_spatial_map_base(
+        ax, image, extent, boundary_gdf, title,
+        show_rd_grid=False, title_fontsize=14,
     )
-    minx, miny, maxx, maxy = extent
-    ax.imshow(
-        image,
-        extent=[minx, maxx, miny, maxy],
-        origin="lower",
-        aspect="equal",
-        interpolation="nearest",
-        zorder=2,
-    )
-    ax.set_xlim(minx, maxx)
-    ax.set_ylim(miny, maxy)
-    _clean_map_axes(ax)
-    if title:
-        ax.set_title(title, fontsize=14)
 
 
 def _add_colorbar(fig, ax, cmap, vmin, vmax, label=""):
-    """Add a vertical colorbar to the right of an axes."""
-    sm = plt.cm.ScalarMappable(
-        cmap=plt.get_cmap(cmap), norm=plt.Normalize(vmin=vmin, vmax=vmax)
+    """Add a vertical colorbar with plot_targets font sizes."""
+    return _add_colorbar_base(
+        fig, ax, cmap, vmin, vmax, label,
+        label_fontsize=12, tick_fontsize=10,
     )
-    sm.set_array([])
-    cbar = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
-    if label:
-        cbar.set_label(label, fontsize=12)
-    cbar.ax.tick_params(labelsize=10)
-    return cbar
 
 
 # ---------------------------------------------------------------------------

@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from utils import StudyAreaPaths
 from utils.spatial_db import SpatialDB
-from scripts.plot_embeddings import (
+from utils.visualization import (
     load_boundary,
     rasterize_continuous,
     plot_spatial_map,
