@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# ARCHIVED 2026-03-15: Replaced by scripts/stage3/run_probe_comparison.py
+# Original purpose: Concat 208D vs UNet Multiscale-Concat 192D comparison
+# Archived because: 8 hardcoded paths, duplicated training loop, duplicated viz helpers
 """
 DNN Probe Comparison: Concat 208D vs UNet Multiscale-Concat 192D
 
