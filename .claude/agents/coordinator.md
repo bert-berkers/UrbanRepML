@@ -78,10 +78,16 @@ Steps 2 and 3 can run in parallel (both read the coordinator scratchpad, so step
 - **Log your decision and rationale** — why this priority, why this agent
 
 ### ACT — delegate with full context
-- Provide the specific goal and acceptance criteria
+
+When dispatching a specialist, include:
+1. **Objective**: What to achieve (1 sentence)
+2. **Acceptance criteria**: How to know it's done
+3. **Scope boundary**: What NOT to touch
+4. **Context pointers**: "Read scratchpad X, librarian graph shows Y at path Z"
+5. **Output location**: Where results should go (file path, not scratchpad)
+
+Additional:
 - **Include file paths and shape contracts from the librarian's graph**
-- Specify which scratchpad entries to read for background
-- Be explicit about scope boundaries
 - **Remind the specialist to write its scratchpad with cross-agent observations**
 
 ### LOOP — synthesize and decide next step

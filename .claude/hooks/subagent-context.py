@@ -205,11 +205,15 @@ def main() -> None:
         f"**Your scratchpad path**: `.claude/scratchpad/{agent_type}/{today}.md`",
         "",
         "Before returning, you MUST write a scratchpad entry containing:",
+        "- `<!-- SUMMARY: one-line summary of what you did -->` (first line, machine-extractable)",
         "- **What I did**: actions taken, files modified, decisions made",
         "- **Cross-agent observations**: what you read from other agents, what was useful/confusing",
-        "- **Unresolved**: open questions, things needing follow-up",
+        "- **Unresolved**: each item tagged `[open]`, `[stale]`, or `[blocked:reason]`",
         "",
-        "If a scratchpad entry for today already exists, UPDATE it in place (consolidate, don't append).",
+        "**Consolidation**: If today's entry exists, READ it first, then REWRITE as a single coherent",
+        "log — not append. Reconcile existing Unresolved items against reality before adding new ones.",
+        "Use summary tables over narrative when listing multiple items.",
+        "For large outputs (code, data, reports), write to files and reference by path — don't paste inline.",
         "Keep entries under 80 lines. If you need more, you're writing too much detail.",
     ]
 
@@ -247,7 +251,7 @@ def main() -> None:
     coord_note = get_other_coordinator_note()
     parts.extend(coord_note)
 
-    # Inject supra precision weights filtered for this agent type
+    # Inject supra precision weights + graph mode filtered for this agent type
     # Also: load supra_reader once here so we can call is_lateral_coupling_active() below
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -257,7 +261,19 @@ def main() -> None:
         if supra_states and schema:
             agent_weights = supra_reader.format_for_agent(supra_states, schema, agent_type)
             if agent_weights:
-                parts.extend(["", "### Human's Precision Weights:", agent_weights])
+                parts.extend(["", "<!-- SUPRA_WEIGHTS -->", "### Human's Precision Weights:", agent_weights])
+        # Wave 0: Inject graph mode into every agent's context
+        graph_mode = supra_reader.get_active_graph()
+        if graph_mode == "static":
+            parts.extend([
+                "", f"**Graph mode**: static (valuating)",
+                "You are crystallizing governance — the characteristic state that will direct all future work in this strand.",
+            ])
+        else:
+            parts.extend([
+                "", f"**Graph mode**: dynamic (niche)",
+                "You are leaving traces of a process that vanishes when this context window dies. Make the invisible visible.",
+            ])
     except Exception as exc:
         print(f"subagent-context: supra state read failed: {exc}", file=sys.stderr)
 
@@ -286,6 +302,7 @@ def main() -> None:
         if sibling_signals:
             parts.extend([
                 "",
+                "<!-- SIGNALS -->",
                 "### Pipeline Signals (from adjacent agents):",
                 *sibling_signals,
             ])
@@ -307,6 +324,31 @@ def main() -> None:
         parts.append(agent_timer.format_mortality_context(timer))
     except Exception as exc:
         print(f"subagent-context: timer registration failed: {exc}", file=sys.stderr)
+
+    # Wave 4: Inject strand history — position in niche + prior agent summaries
+    try:
+        import agent_timer as _at
+        alive_agents = _at.alive()
+        dead_agents = _at.recent_dead(n=10)
+        # Count today's agents (alive + dead) for strand position
+        today_dead = [d for d in dead_agents if d.get("born_at", "").startswith(today)]
+        strand_position = len(alive_agents) + len(today_dead)
+        parts.append(f"\n**Strand position**: You are agent {strand_position} of this niche.")
+        if strand_position > 5:
+            parts.append("Late in the strand — converge, don't explore.")
+        # One-line summaries of prior sub-sessions today
+        if today_dead:
+            parts.append("\n<!-- STRAND_HISTORY -->")
+            parts.append("### Strand history (this niche):")
+            for i, d in enumerate(today_dead, 1):
+                atype = d.get("agent_type", "?")
+                born = d.get("born_at", "??:??")
+                born_time = born[11:16] if len(born) > 16 else born
+                # Extract summary from scratchpad if available
+                summary = d.get("summary", atype)
+                parts.append(f"{i}. [{atype}] {born_time} — {summary}")
+    except Exception as exc:
+        print(f"subagent-context: strand history failed: {exc}", file=sys.stderr)
 
     context = "\n".join(parts)
 

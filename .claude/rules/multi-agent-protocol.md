@@ -9,16 +9,19 @@ paths:
 
 Every agent that does work MUST write a dated entry to `.claude/scratchpad/{agent_type}/YYYY-MM-DD.md` containing:
 
+- `<!-- SUMMARY: one-line summary of what you did -->` (first line, machine-extractable)
 - **What I did**: actions taken, files modified, decisions made
 - **Cross-agent observations**: what I read from other agents' scratchpads, what was useful, what confused me, what I disagree with or would do differently
-- **Unresolved**: open questions, things that need follow-up
+- **Unresolved**: open questions, things that need follow-up — each tagged `[open]`, `[stale]`, or `[blocked:reason]`
 
 ## Scratchpad Discipline
 
 - If an entry for today already exists, **update it in place** -- consolidate into a single coherent daily log
-- Before adding new Unresolved items, **reconcile existing ones against reality** (check recent commits, verify file state). Remove or mark resolved items. Stale unresolved items are false signals that propagate downstream.
+- **Reconciliation-first**: Before writing ANY new Unresolved items, explicitly mark each existing item as resolved (remove) or still-open (keep with tag). Not optional.
+- Items tagged `[stale]` for 2+ sessions should be removed or escalated to the coordinator.
 - Do NOT append-only. Scratchpad bloat degrades signal quality (ego flagged this 2026-02-08)
 - Final entry should be a single coherent daily log, not an append-only stream
+- **Output references**: Reference large outputs by path, don't paste inline. Scratchpads are index + reasoning, not data.
 - Keep entries under 80 lines. If you need more, you're writing too much detail
 
 ## Coordination Architecture
@@ -85,3 +88,12 @@ When creating multiple new files in a single wave:
 2. **Use filesystem grep for scope audits** — `rg PATTERN dir/` not `git grep` (untracked files are invisible to git grep)
 3. **Include Plan agent's recommendation** in each delegation prompt when applicable
 4. **QAQC produces commit-readiness verdict** — after verification, explicitly state whether working tree is committable
+
+## Memory Strands
+
+Scratchpads serve two fundamentally different purposes depending on graph mode:
+
+- **Static mode** (`/valuate`): Scratchpads crystallize governance — the attractor basin that channels future flow. These are natura naturata: not the infrastructure itself but the *pattern* development took around it, like deltas or lung branching. Write for permanence.
+- **Dynamic mode** (`/niche`): Scratchpads are the fossil record of natura naturans — traces of a generative process that vanishes when the context window dies. Each context window is a hula hoop keeping a section of flexible netting alive. Write to make the invisible visible.
+
+The `subagent-context.py` hook injects the current graph mode into every agent's context. The mode shapes what you write: governance crystallization vs process traces.
