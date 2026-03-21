@@ -1,4 +1,5 @@
 import logging
+import shutil
 from pathlib import Path
 import numpy as np
 import torch
@@ -7,6 +8,13 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from typing import Dict, List, Tuple, Optional
 from tqdm.auto import tqdm
+
+try:
+    import wandb
+    _WANDB_AVAILABLE = True
+except ImportError:
+    wandb = None
+    _WANDB_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -409,7 +417,7 @@ class FullAreaModelTrainer:
             model_config: dict,
             loss_weights: Dict[str, float] = None,
             city_name: str = "south_holland_threshold80",
-            wandb_project: str = "urban-embedding",
+            wandb_project: str = "urbanrepml",
             checkpoint_dir: Optional[Path] = None,
             year: str = "2022",
     ):
@@ -433,20 +441,39 @@ class FullAreaModelTrainer:
         self.year = year
 
     def _get_scheduler(self, optimizer, num_epochs: int, warmup_epochs: int):
-        """CosineAnnealingWarmRestarts: tapers LR then restarts periodically.
+        """Linear warmup then single cosine decay.
 
-        T_0 = num_epochs // 3 gives ~3 warm restarts over training.
-        T_mult = 1 keeps each cycle the same length.
-        eta_min = max_lr / 50 so LR never fully dies.
-        warmup_epochs is accepted but unused (restarts serve as warmup).
+        Phase 1 (warmup_epochs): Linear ramp from near-zero to max_lr.
+        Phase 2 (remaining epochs): CosineAnnealingLR — single cosine
+            decay from max_lr down to eta_min = max_lr / 50.
+            Guaranteed to end at low LR regardless of early stopping.
+
+        Uses SequentialLR to chain the two phases at the warmup_epochs
+        milestone. If warmup_epochs <= 0, skips warmup entirely.
         """
         max_lr = optimizer.defaults['lr']
-        t_0 = max(num_epochs // 3, 1)
-        return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        eta_min = max_lr / 50
+
+        if warmup_epochs <= 0:
+            return torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=num_epochs, eta_min=eta_min,
+            )
+
+        remaining = num_epochs - warmup_epochs
+
+        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
             optimizer,
-            T_0=t_0,
-            T_mult=1,
-            eta_min=max_lr / 50,
+            start_factor=1.0 / max(warmup_epochs, 1),
+            end_factor=1.0,
+            total_iters=warmup_epochs,
+        )
+        cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=remaining, eta_min=eta_min,
+        )
+        return torch.optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_epochs],
         )
 
     def _save_checkpoint(self, state: dict, filename: str):
@@ -465,7 +492,7 @@ class FullAreaModelTrainer:
             # Enrich state with model config for reproducibility
             state['model_config'] = self.model_config
             state['loss_weights'] = self.loss_weights
-            state['lr_schedule'] = 'CosineAnnealingWarmRestarts'
+            state['lr_schedule'] = 'LinearWarmup+CosineAnnealingWarmRestarts'
 
             # Versioned filename: best_model_{year}_{dim}D_{date}.pt
             output_dim = self.model.dims[0]  # finest resolution dim
@@ -489,8 +516,17 @@ class FullAreaModelTrainer:
               learning_rate: float = 1e-4,
               warmup_epochs: int = 10,
               patience: int = 100,
-              gradient_clip: float = 1.0) -> dict:
+              gradient_clip: float = 1.0,
+              wandb_config: Optional[dict] = None) -> dict:
         """Train the model and return a result dict.
+
+        Parameters
+        ----------
+        wandb_config : dict, optional
+            If provided and wandb is installed, initializes a wandb run.
+            Expected keys: run_name (str), plus any metadata to log as config
+            (study_area, year, accessibility_graph, etc.).
+            wandb is opt-in: pass None to disable.
 
         Returns
         -------
@@ -501,6 +537,31 @@ class FullAreaModelTrainer:
             best_epoch      : int — epoch index of best model (early stopping point)
         """
         logger.info(f"Starting training with lr={learning_rate}, epochs={num_epochs}")
+
+        # ---- wandb initialization (opt-in) ----
+        wb_run = None
+        if wandb_config and _WANDB_AVAILABLE:
+            run_name = wandb_config.pop("run_name", None)
+            wb_run = wandb.init(
+                project=self.wandb_project,
+                name=run_name,
+                config={
+                    "dims": self.model_config.get("dims"),
+                    "num_convs": self.model_config.get("num_convs"),
+                    "resolutions": self.model_config.get("resolutions"),
+                    "feature_dims": self.model_config.get("feature_dims"),
+                    "learning_rate": learning_rate,
+                    "num_epochs": num_epochs,
+                    "patience": patience,
+                    "gradient_clip": gradient_clip,
+                    "loss_weights": self.loss_weights,
+                    "device": str(self.device),
+                    **wandb_config,
+                },
+            )
+            logger.info(f"wandb run initialized: {wb_run.name} ({wb_run.url})")
+        elif wandb_config and not _WANDB_AVAILABLE:
+            logger.warning("wandb_config provided but wandb is not installed — skipping")
 
         optimizer = torch.optim.AdamW(
             self.model.parameters(),
@@ -517,84 +578,111 @@ class FullAreaModelTrainer:
         best_epoch = -1
         loss_history: List[dict] = []
 
-        for epoch in tqdm(range(num_epochs), desc="Training"):
-            self.model.train()
-            optimizer.zero_grad()
+        try:
+            for epoch in tqdm(range(num_epochs), desc="Training"):
+                self.model.train()
+                optimizer.zero_grad()
 
-            try:
-                embeddings, reconstructed = self.model(
-                    features_dict, edge_indices, edge_weights, mappings
-                )
+                try:
+                    embeddings, reconstructed = self.model(
+                        features_dict, edge_indices, edge_weights, mappings
+                    )
 
-                losses = self.loss_computer.compute_losses(
-                    embeddings=embeddings,
-                    reconstructed=reconstructed,
-                    features_dict=features_dict,
-                    mappings=mappings,
-                    loss_weights=self.loss_weights
-                )
+                    losses = self.loss_computer.compute_losses(
+                        embeddings=embeddings,
+                        reconstructed=reconstructed,
+                        features_dict=features_dict,
+                        mappings=mappings,
+                        loss_weights=self.loss_weights
+                    )
 
-                total_loss = losses['total_loss']
+                    total_loss = losses['total_loss']
 
-                if torch.isnan(total_loss):
-                    logger.warning(f"NaN loss detected at epoch {epoch}")
-                    continue
+                    if torch.isnan(total_loss):
+                        logger.warning(f"NaN loss detected at epoch {epoch}")
+                        continue
 
-                total_loss.backward()
+                    total_loss.backward()
 
-                # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(), max_norm=gradient_clip
-                )
+                    # Gradient clipping
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), max_norm=gradient_clip
+                    )
 
-                optimizer.step()
-                scheduler.step()
+                    optimizer.step()
+                    scheduler.step()
 
-                # Log gradient norms for monitoring
-                grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.model.parameters() if p.grad is not None) ** 0.5
+                    # Log gradient norms for monitoring
+                    grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.model.parameters() if p.grad is not None) ** 0.5
 
-                # Record per-epoch metrics
-                loss_history.append({
-                    "epoch": epoch,
-                    "total_loss": total_loss.item(),
-                    "reconstruction_loss": losses['reconstruction_loss'].item(),
-                    "consistency_loss": losses['consistency_loss'].item(),
-                    "lr": scheduler.get_last_lr()[0],
-                    "grad_norm": grad_norm,
-                })
+                    current_lr = scheduler.get_last_lr()[0]
 
-                if total_loss.item() < best_loss:
-                    best_loss = total_loss.item()
-                    best_epoch = epoch
-                    patience_counter = 0
-                    best_state = {
-                        'epoch': epoch,
-                        'model_state': self.model.state_dict(),
-                        'optimizer_state': optimizer.state_dict(),
-                        'loss': best_loss,
-                        'loss_history': loss_history,
-                        'best_epoch': epoch,
-                    }
-                    best_embeddings = {k: v.detach().clone() for k, v in embeddings.items()}
-                    self._save_checkpoint(best_state.copy(), "best_model.pt")
-                else:
-                    patience_counter += 1
+                    # Record per-epoch metrics
+                    loss_history.append({
+                        "epoch": epoch,
+                        "total_loss": total_loss.item(),
+                        "reconstruction_loss": losses['reconstruction_loss'].item(),
+                        "consistency_loss": losses['consistency_loss'].item(),
+                        "lr": current_lr,
+                        "grad_norm": grad_norm,
+                    })
 
-                if patience_counter >= patience:
-                    logger.info(f"Early stopping after {epoch} epochs")
+                    # wandb per-epoch logging
+                    if wb_run is not None:
+                        wandb.log({
+                            "epoch": epoch,
+                            "total_loss": total_loss.item(),
+                            "reconstruction_loss": losses['reconstruction_loss'].item(),
+                            "consistency_loss": losses['consistency_loss'].item(),
+                            "lr": current_lr,
+                            "grad_norm": grad_norm,
+                            "patience_counter": patience_counter,
+                        }, step=epoch)
+
+                    if total_loss.item() < best_loss:
+                        best_loss = total_loss.item()
+                        best_epoch = epoch
+                        patience_counter = 0
+                        best_state = {
+                            'epoch': epoch,
+                            'model_state': self.model.state_dict(),
+                            'optimizer_state': optimizer.state_dict(),
+                            'loss': best_loss,
+                            'loss_history': loss_history,
+                            'best_epoch': epoch,
+                        }
+                        best_embeddings = {k: v.detach().clone() for k, v in embeddings.items()}
+                        self._save_checkpoint(best_state.copy(), "best_model.pt")
+                    else:
+                        patience_counter += 1
+
+                    if patience_counter >= patience:
+                        logger.info(f"Early stopping after {epoch} epochs")
+                        break
+
+                except Exception as e:
+                    logger.error(f"Error during training: {str(e)}")
+                    logger.error("Traceback:", exc_info=True)
                     break
 
-            except Exception as e:
-                logger.error(f"Error during training: {str(e)}")
-                logger.error("Traceback:", exc_info=True)
-                break
+            if best_state:
+                # Update loss_history in best_state to the full history (not just up to best)
+                best_state['loss_history'] = loss_history
+                best_state['best_epoch'] = best_epoch
+                self.model.load_state_dict(best_state['model_state'])
+                logger.info(f"Restored best model from epoch {best_state['epoch']}")
 
-        if best_state:
-            # Update loss_history in best_state to the full history (not just up to best)
-            best_state['loss_history'] = loss_history
-            best_state['best_epoch'] = best_epoch
-            self.model.load_state_dict(best_state['model_state'])
-            logger.info(f"Restored best model from epoch {best_state['epoch']}")
+            # wandb summary metrics
+            if wb_run is not None:
+                wandb.summary["best_epoch"] = best_epoch
+                wandb.summary["best_loss"] = best_loss
+                wandb.summary["epochs_completed"] = len(loss_history)
+
+        finally:
+            # Always finish wandb run, even on error
+            if wb_run is not None:
+                wandb.finish()
+                logger.info("wandb run finished")
 
         return {
             'best_embeddings': best_embeddings,

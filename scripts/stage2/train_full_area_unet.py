@@ -55,6 +55,10 @@ def parse_args():
         help="Early stopping patience (default: 100)"
     )
     parser.add_argument(
+        "--warmup-epochs", type=int, default=50,
+        help="Linear LR warmup epochs (default: 50)"
+    )
+    parser.add_argument(
         "--year", type=str, default="2022",
         help="Data year label (default: 2022). Use '20mix' for mixed-year runs."
     )
@@ -70,6 +74,14 @@ def parse_args():
         "--accessibility-graph", type=str, default=None,
         help="Path to accessibility Parquet for finest resolution edges "
              "(e.g. data/study_areas/netherlands/accessibility/walk_res9.parquet)"
+    )
+    parser.add_argument(
+        "--wandb", action="store_true", default=False,
+        help="Enable Weights & Biases logging (default: off)"
+    )
+    parser.add_argument(
+        "--wandb-name", type=str, default=None,
+        help="Custom wandb run name. Auto-generated if not set."
     )
     return parser.parse_args()
 
@@ -161,6 +173,26 @@ def main():
     logger.info("Starting training...")
     t0 = time.time()
 
+    # Build wandb config if --wandb is set
+    wandb_config = None
+    if args.wandb:
+        # Auto-generate run name: unet-{dims}-{year}[-accessibility]
+        if args.wandb_name:
+            run_name = args.wandb_name
+        else:
+            dims_str = "-".join(str(d) for d in dims)
+            run_name = f"unet-{dims_str}-{args.year}"
+            if args.accessibility_graph:
+                run_name += "-accessibility"
+        wandb_config = {
+            "run_name": run_name,
+            "study_area": args.study_area,
+            "year": args.year,
+            "accessibility_graph": args.accessibility_graph,
+            "feature_dim": feature_dim,
+            "n_params": n_params,
+        }
+
     train_result = trainer.train(
         features_dict=features_dict,
         edge_indices=edge_indices,
@@ -169,6 +201,8 @@ def main():
         num_epochs=args.epochs,
         learning_rate=args.lr,
         patience=args.patience,
+        warmup_epochs=args.warmup_epochs,
+        wandb_config=wandb_config,
     )
 
     train_time = time.time() - t0

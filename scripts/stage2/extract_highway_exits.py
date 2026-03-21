@@ -59,6 +59,10 @@ def parse_args():
         "--no-verify", dest="verify", action="store_false",
         help="Skip verification against existing res9 file"
     )
+    parser.add_argument(
+        "--accessibility-graph", type=str, default=None,
+        help="Path to accessibility Parquet for finest resolution edges"
+    )
     return parser.parse_args()
 
 
@@ -77,6 +81,7 @@ def load_model_and_data(args, resolutions, device):
         study_area=args.study_area,
         resolutions=resolutions,
         year=args.year,
+        accessibility_graph=args.accessibility_graph,
     )
     data = loader.load()
 
