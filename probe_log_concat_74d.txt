@@ -1,0 +1,131 @@
+2026-03-21 12:53:39,635 [__main__] INFO: Custom comparison with 1 sources
+2026-03-21 12:53:39,635 [__main__] INFO: ======================================================================
+2026-03-21 12:53:39,635 [__main__] INFO: DNN PROBE COMPARISON: 1 sources
+2026-03-21 12:53:39,636 [__main__] INFO: ======================================================================
+2026-03-21 12:53:39,636 [__main__] INFO: Hidden dim:  256
+2026-03-21 12:53:39,636 [__main__] INFO: Max epochs:  200
+2026-03-21 12:53:39,636 [__main__] INFO: Patience:    20
+2026-03-21 12:53:39,636 [__main__] INFO: Targets:     ['lbm', 'fys', 'onv', 'soc', 'vrz', 'won']
+2026-03-21 12:53:39,636 [__main__] INFO: 
+======================================================================
+2026-03-21 12:53:39,636 [__main__] INFO: [1/1] concat_74d_2022
+2026-03-21 12:53:39,636 [__main__] INFO:   Embeddings: data/study_areas/netherlands/stage2_multimodal/concat/embeddings/netherlands_res9_2022.parquet
+2026-03-21 12:53:39,636 [__main__] INFO: ======================================================================
+2026-03-21 12:53:39,647 [stage3_analysis.dnn_probe] INFO: === DNN Probe Regression (MLP) ===
+2026-03-21 12:53:39,648 [stage3_analysis.dnn_probe] INFO: Study area: netherlands
+2026-03-21 12:53:39,648 [stage3_analysis.dnn_probe] INFO: Year: 2022
+2026-03-21 12:53:39,648 [stage3_analysis.dnn_probe] INFO: Device: cuda
+2026-03-21 12:53:39,648 [stage3_analysis.dnn_probe] INFO: Architecture: MLP, hidden=256, layers=3
+2026-03-21 12:53:39,648 [stage3_analysis.dnn_probe] INFO: Loading embeddings from C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\stage2_multimodal\concat\embeddings\netherlands_res9_2022.parquet
+2026-03-21 12:53:39,947 [stage3_analysis.dnn_probe] INFO:   Embedding features: 74 (A00..R09)
+2026-03-21 12:53:39,947 [stage3_analysis.dnn_probe] INFO:   Embedding rows: 398,931
+2026-03-21 12:53:39,949 [stage3_analysis.dnn_probe] INFO: Loading target from C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\target\leefbaarometer\leefbaarometer_h3res9_2022.parquet
+2026-03-21 12:53:39,990 [stage3_analysis.dnn_probe] INFO:   Target rows: 130,792
+2026-03-21 12:53:40,143 [stage3_analysis.dnn_probe] INFO:   Inner join: 130,467 hexagons with both embeddings and targets
+2026-03-21 12:53:40,152 [stage3_analysis.dnn_probe] INFO:   After dropna: 130,467 (dropped 0)
+2026-03-21 12:53:40,153 [stage3_analysis.dnn_probe] INFO:   Loading regions from C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\regions_gdf\netherlands_res9.parquet
+2026-03-21 12:53:42,232 [stage3_analysis.dnn_probe] INFO:   After region join: 130,467 hexagons
+2026-03-21 12:53:42,444 [stage3_analysis.dnn_probe] INFO: Creating spatial blocks: 5 folds, 10000m x 10000m
+2026-03-21 12:53:43,020 [stage3_analysis.dnn_probe] INFO:   Created 443 spatial blocks across 5 folds
+2026-03-21 12:53:43,116 [stage3_analysis.dnn_probe] WARNING:   2 points outside all blocks, assigning to fold 1
+2026-03-21 12:53:43,137 [stage3_analysis.dnn_probe] INFO:   Fold sizes: {1: 23550, 2: 26784, 3: 31209, 4: 24449, 5: 24475}
+2026-03-21 12:53:43,192 [stage3_analysis.dnn_probe] INFO: 
+Feature matrix: (130467, 74)
+2026-03-21 12:53:43,192 [stage3_analysis.dnn_probe] INFO: Targets: ['lbm', 'fys', 'onv', 'soc', 'vrz', 'won']
+2026-03-21 12:53:43,193 [stage3_analysis.dnn_probe] INFO: 
+--- Target: lbm (Overall Liveability) ---
+2026-03-21 12:53:43,193 [stage3_analysis.dnn_probe] INFO:   y range: [3.4200, 5.0361], mean=4.1980
+2026-03-21 12:53:43,193 [stage3_analysis.dnn_probe] INFO:   Using config defaults: hidden=256, layers=3, lr=0.0001
+2026-03-21 12:53:43,193 [stage3_analysis.dnn_probe] INFO:   Evaluating with spatial CV...
+2026-03-21 12:53:50,276 [stage3_analysis.dnn_probe] INFO:     Fold 1: R2=0.3222, RMSE=0.1003, MAE=0.0759 (train=106,917, test=23,550, epochs=114)
+2026-03-21 12:53:55,963 [stage3_analysis.dnn_probe] INFO:     Fold 2: R2=0.3221, RMSE=0.1031, MAE=0.0782 (train=103,683, test=26,784, epochs=107)
+2026-03-21 12:54:01,241 [stage3_analysis.dnn_probe] INFO:     Fold 3: R2=0.3016, RMSE=0.0993, MAE=0.0755 (train=99,258, test=31,209, epochs=98)
+2026-03-21 12:54:08,568 [stage3_analysis.dnn_probe] INFO:     Fold 4: R2=0.2868, RMSE=0.1075, MAE=0.0797 (train=106,018, test=24,449, epochs=136)
+2026-03-21 12:54:13,394 [stage3_analysis.dnn_probe] INFO:     Fold 5: R2=0.2910, RMSE=0.1082, MAE=0.0798 (train=105,992, test=24,475, epochs=87)
+2026-03-21 12:54:13,403 [stage3_analysis.dnn_probe] INFO:   Overall OOF: R2=0.3049, RMSE=0.1035, MAE=0.0777
+2026-03-21 12:54:13,405 [stage3_analysis.dnn_probe] INFO: 
+--- Target: fys (Physical Environment) ---
+2026-03-21 12:54:13,405 [stage3_analysis.dnn_probe] INFO:   y range: [-0.7443, 0.4637], mean=-0.0033
+2026-03-21 12:54:13,405 [stage3_analysis.dnn_probe] INFO:   Using config defaults: hidden=256, layers=3, lr=0.0001
+2026-03-21 12:54:13,405 [stage3_analysis.dnn_probe] INFO:   Evaluating with spatial CV...
+2026-03-21 12:54:20,444 [stage3_analysis.dnn_probe] INFO:     Fold 1: R2=0.4743, RMSE=0.0511, MAE=0.0362 (train=106,917, test=23,550, epochs=131)
+2026-03-21 12:54:25,184 [stage3_analysis.dnn_probe] INFO:     Fold 2: R2=0.4401, RMSE=0.0481, MAE=0.0332 (train=103,683, test=26,784, epochs=92)
+2026-03-21 12:54:31,219 [stage3_analysis.dnn_probe] INFO:     Fold 3: R2=0.3794, RMSE=0.0477, MAE=0.0332 (train=99,258, test=31,209, epochs=112)
+2026-03-21 12:54:37,707 [stage3_analysis.dnn_probe] INFO:     Fold 4: R2=0.3932, RMSE=0.0506, MAE=0.0351 (train=106,018, test=24,449, epochs=123)
+2026-03-21 12:54:44,605 [stage3_analysis.dnn_probe] INFO:     Fold 5: R2=0.4329, RMSE=0.0552, MAE=0.0367 (train=105,992, test=24,475, epochs=135)
+2026-03-21 12:54:44,617 [stage3_analysis.dnn_probe] INFO:   Overall OOF: R2=0.4263, RMSE=0.0504, MAE=0.0347
+2026-03-21 12:54:44,618 [stage3_analysis.dnn_probe] INFO: 
+--- Target: onv (Safety) ---
+2026-03-21 12:54:44,619 [stage3_analysis.dnn_probe] INFO:   y range: [-0.4661, 0.1638], mean=0.0779
+2026-03-21 12:54:44,619 [stage3_analysis.dnn_probe] INFO:   Using config defaults: hidden=256, layers=3, lr=0.0001
+2026-03-21 12:54:44,619 [stage3_analysis.dnn_probe] INFO:   Evaluating with spatial CV...
+2026-03-21 12:54:54,138 [stage3_analysis.dnn_probe] INFO:     Fold 1: R2=0.4989, RMSE=0.0446, MAE=0.0304 (train=106,917, test=23,550, epochs=178)
+2026-03-21 12:54:59,983 [stage3_analysis.dnn_probe] INFO:     Fold 2: R2=0.4652, RMSE=0.0465, MAE=0.0320 (train=103,683, test=26,784, epochs=112)
+2026-03-21 12:55:05,962 [stage3_analysis.dnn_probe] INFO:     Fold 3: R2=0.5082, RMSE=0.0440, MAE=0.0308 (train=99,258, test=31,209, epochs=108)
+2026-03-21 12:55:11,917 [stage3_analysis.dnn_probe] INFO:     Fold 4: R2=0.5354, RMSE=0.0462, MAE=0.0314 (train=106,018, test=24,449, epochs=112)
+2026-03-21 12:55:19,889 [stage3_analysis.dnn_probe] INFO:     Fold 5: R2=0.5132, RMSE=0.0461, MAE=0.0316 (train=105,992, test=24,475, epochs=154)
+2026-03-21 12:55:19,900 [stage3_analysis.dnn_probe] INFO:   Overall OOF: R2=0.5050, RMSE=0.0454, MAE=0.0312
+2026-03-21 12:55:19,901 [stage3_analysis.dnn_probe] INFO: 
+--- Target: soc (Social Cohesion) ---
+2026-03-21 12:55:19,901 [stage3_analysis.dnn_probe] INFO:   y range: [-0.4217, 0.4402], mean=0.0747
+2026-03-21 12:55:19,901 [stage3_analysis.dnn_probe] INFO:   Using config defaults: hidden=256, layers=3, lr=0.0001
+2026-03-21 12:55:19,901 [stage3_analysis.dnn_probe] INFO:   Evaluating with spatial CV...
+2026-03-21 12:55:26,292 [stage3_analysis.dnn_probe] INFO:     Fold 1: R2=0.6076, RMSE=0.0370, MAE=0.0263 (train=106,917, test=23,550, epochs=113)
+2026-03-21 12:55:32,466 [stage3_analysis.dnn_probe] INFO:     Fold 2: R2=0.6176, RMSE=0.0349, MAE=0.0257 (train=103,683, test=26,784, epochs=118)
+2026-03-21 12:55:39,968 [stage3_analysis.dnn_probe] INFO:     Fold 3: R2=0.6435, RMSE=0.0343, MAE=0.0252 (train=99,258, test=31,209, epochs=135)
+2026-03-21 12:55:46,215 [stage3_analysis.dnn_probe] INFO:     Fold 4: R2=0.6423, RMSE=0.0361, MAE=0.0264 (train=106,018, test=24,449, epochs=112)
+2026-03-21 12:55:53,249 [stage3_analysis.dnn_probe] INFO:     Fold 5: R2=0.6483, RMSE=0.0350, MAE=0.0261 (train=105,992, test=24,475, epochs=132)
+2026-03-21 12:55:53,259 [stage3_analysis.dnn_probe] INFO:   Overall OOF: R2=0.6333, RMSE=0.0354, MAE=0.0259
+2026-03-21 12:55:53,260 [stage3_analysis.dnn_probe] INFO: 
+--- Target: vrz (Amenities) ---
+2026-03-21 12:55:53,260 [stage3_analysis.dnn_probe] INFO:   y range: [-0.3298, 0.6882], mean=-0.1152
+2026-03-21 12:55:53,260 [stage3_analysis.dnn_probe] INFO:   Using config defaults: hidden=256, layers=3, lr=0.0001
+2026-03-21 12:55:53,260 [stage3_analysis.dnn_probe] INFO:   Evaluating with spatial CV...
+2026-03-21 12:56:00,879 [stage3_analysis.dnn_probe] INFO:     Fold 1: R2=0.7730, RMSE=0.0457, MAE=0.0358 (train=106,917, test=23,550, epochs=137)
+2026-03-21 12:56:07,912 [stage3_analysis.dnn_probe] INFO:     Fold 2: R2=0.6982, RMSE=0.0500, MAE=0.0389 (train=103,683, test=26,784, epochs=135)
+2026-03-21 12:56:14,908 [stage3_analysis.dnn_probe] INFO:     Fold 3: R2=0.7696, RMSE=0.0458, MAE=0.0354 (train=99,258, test=31,209, epochs=129)
+2026-03-21 12:56:24,185 [stage3_analysis.dnn_probe] INFO:     Fold 4: R2=0.7511, RMSE=0.0590, MAE=0.0397 (train=106,018, test=24,449, epochs=180)
+2026-03-21 12:56:31,304 [stage3_analysis.dnn_probe] INFO:     Fold 5: R2=0.7860, RMSE=0.0498, MAE=0.0377 (train=105,992, test=24,475, epochs=136)
+2026-03-21 12:56:31,316 [stage3_analysis.dnn_probe] INFO:   Overall OOF: R2=0.7582, RMSE=0.0501, MAE=0.0374
+2026-03-21 12:56:31,317 [stage3_analysis.dnn_probe] INFO: 
+--- Target: won (Housing Quality) ---
+2026-03-21 12:56:31,317 [stage3_analysis.dnn_probe] INFO:   y range: [-0.5287, 0.8859], mean=0.0616
+2026-03-21 12:56:31,317 [stage3_analysis.dnn_probe] INFO:   Using config defaults: hidden=256, layers=3, lr=0.0001
+2026-03-21 12:56:31,318 [stage3_analysis.dnn_probe] INFO:   Evaluating with spatial CV...
+2026-03-21 12:56:38,758 [stage3_analysis.dnn_probe] INFO:     Fold 1: R2=0.4493, RMSE=0.0359, MAE=0.0257 (train=106,917, test=23,550, epochs=139)
+2026-03-21 12:56:45,428 [stage3_analysis.dnn_probe] INFO:     Fold 2: R2=0.4820, RMSE=0.0375, MAE=0.0261 (train=103,683, test=26,784, epochs=130)
+2026-03-21 12:56:49,987 [stage3_analysis.dnn_probe] INFO:     Fold 3: R2=0.4839, RMSE=0.0369, MAE=0.0262 (train=99,258, test=31,209, epochs=78)
+2026-03-21 12:56:54,291 [stage3_analysis.dnn_probe] INFO:     Fold 4: R2=0.4777, RMSE=0.0412, MAE=0.0281 (train=106,018, test=24,449, epochs=112)
+2026-03-21 12:56:58,828 [stage3_analysis.dnn_probe] INFO:     Fold 5: R2=0.4532, RMSE=0.0387, MAE=0.0268 (train=105,992, test=24,475, epochs=120)
+2026-03-21 12:56:58,840 [stage3_analysis.dnn_probe] INFO:   Overall OOF: R2=0.4712, RMSE=0.0380, MAE=0.0265
+2026-03-21 12:56:58,840 [stage3_analysis.dnn_probe] INFO: 
+=== Summary ===
+2026-03-21 12:56:58,840 [stage3_analysis.dnn_probe] INFO:   lbm (Overall Liveability): R2=0.3049, RMSE=0.1035
+2026-03-21 12:56:58,840 [stage3_analysis.dnn_probe] INFO:   fys (Physical Environment): R2=0.4263, RMSE=0.0504
+2026-03-21 12:56:58,840 [stage3_analysis.dnn_probe] INFO:   onv (Safety): R2=0.5050, RMSE=0.0454
+2026-03-21 12:56:58,840 [stage3_analysis.dnn_probe] INFO:   soc (Social Cohesion): R2=0.6333, RMSE=0.0354
+2026-03-21 12:56:58,840 [stage3_analysis.dnn_probe] INFO:   vrz (Amenities): R2=0.7582, RMSE=0.0501
+2026-03-21 12:56:58,840 [stage3_analysis.dnn_probe] INFO:   won (Housing Quality): R2=0.4712, RMSE=0.0380
+2026-03-21 12:56:58,847 [stage3_analysis.dnn_probe] INFO: Saved metrics summary to C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\stage3_analysis\dnn_probe\2026-03-21\2026-03-21_custom_concat_74d_2022\metrics_summary.csv
+2026-03-21 12:56:59,323 [stage3_analysis.dnn_probe] INFO: Saved predictions to C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\stage3_analysis\dnn_probe\2026-03-21\2026-03-21_custom_concat_74d_2022
+2026-03-21 12:56:59,323 [stage3_analysis.dnn_probe] INFO: Saved config to C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\stage3_analysis\dnn_probe\2026-03-21\2026-03-21_custom_concat_74d_2022\config.json
+2026-03-21 12:56:59,337 [stage3_analysis.dnn_probe] INFO: Saved run_info.json to C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\stage3_analysis\dnn_probe\2026-03-21\2026-03-21_custom_concat_74d_2022\run_info.json
+2026-03-21 12:56:59,352 [stage3_analysis.dnn_probe] INFO: Saved training curves to C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\stage3_analysis\dnn_probe\2026-03-21\2026-03-21_custom_concat_74d_2022\training_curves (30 files)
+2026-03-21 12:56:59,353 [__main__] INFO:   concat_74d_2022: mean_r2=0.5165 in 3m 19s
+2026-03-21 12:56:59,354 [__main__] INFO: 
+Total probe time: 3m 19s
+2026-03-21 12:56:59,370 [__main__] INFO: Saved results to C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\stage3_analysis\dnn_probe\2026-03-21\2026-03-21_custom_comparison\probe_comparison.csv
+2026-03-21 12:56:59,371 [__main__] INFO: 
+====================================================================================================
+2026-03-21 12:56:59,371 [__main__] INFO: COMPARISON RESULTS (DNN Probe)
+2026-03-21 12:56:59,371 [__main__] INFO: ====================================================================================================
+2026-03-21 12:56:59,371 [__main__] INFO: Source                          lbm       fys       onv       soc       vrz       won   mean_r2
+2026-03-21 12:56:59,371 [__main__] INFO: ----------------------------------------------------------------------------------------------------
+2026-03-21 12:56:59,371 [__main__] INFO: concat_74d_2022            0.3049 *  0.4263 *  0.5050 *  0.6333 *  0.7582 *  0.4712 *    0.5165
+2026-03-21 12:56:59,371 [__main__] INFO: ----------------------------------------------------------------------------------------------------
+2026-03-21 12:56:59,371 [__main__] INFO: Best overall: concat_74d_2022 (mean R2 = 0.5165)
+2026-03-21 12:56:59,371 [__main__] INFO: * = best for that target
+2026-03-21 12:56:59,371 [__main__] INFO: ====================================================================================================
+2026-03-21 12:56:59,652 [__main__] INFO: Saved comparison plot to C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\stage3_analysis\dnn_probe\2026-03-21\2026-03-21_custom_comparison\probe_comparison.png
+2026-03-21 12:56:59,652 [__main__] INFO: 
+All outputs saved to: C:\Users\Bert Berkers\PycharmProjects\UrbanRepML\data\study_areas\netherlands\stage3_analysis\dnn_probe\2026-03-21\2026-03-21_custom_comparison
