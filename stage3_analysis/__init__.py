@@ -18,6 +18,7 @@ from .classification_viz import ClassificationVisualizer
 from .dnn_classification_probe import DNNClassificationProber, DNNClassificationConfig
 from .dnn_classification_viz import DNNClassificationVisualizer
 from .probe_results_writer import ProbeResultsWriter
+from .cluster_results_writer import ClusterResultsWriter
 
 __all__ = [
     'UrbanEmbeddingAnalyzer',
@@ -38,4 +39,5 @@ __all__ = [
     'DNNClassificationConfig',
     'DNNClassificationVisualizer',
     'ProbeResultsWriter',
+    'ClusterResultsWriter',
 ]

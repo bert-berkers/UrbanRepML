@@ -265,6 +265,24 @@ class StudyAreaPaths:
         """
         return self.probe_results_root() / approach
 
+    # -----------------------------------------------------------------
+    # Cluster results (cross-approach comparison store)
+    # -----------------------------------------------------------------
+
+    def cluster_results_root(self) -> Path:
+        """Base directory for all cluster result approaches."""
+        return self.root / "cluster_results"
+
+    def cluster_results(self, approach: str) -> Path:
+        """Directory for a specific approach's cluster results.
+
+        Layout::
+            data/study_areas/{area}/cluster_results/{approach}/
+            ├── assignments.parquet
+            └── metrics.parquet
+        """
+        return self.cluster_results_root() / approach
+
     def latest_run(self, stage_dir: Path) -> "Path | None":
         """Find the most recent run directory by YYYY-MM-DD prefix sort.
 
