@@ -19,7 +19,7 @@ from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from matplotlib.colors import TwoSlopeNorm, Normalize
+from matplotlib.colors import TwoSlopeNorm
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -29,7 +29,6 @@ from utils.spatial_db import SpatialDB
 from utils.visualization import (
     load_boundary,
     plot_spatial_map,
-    rasterize_continuous,
     RASTER_W,
     RASTER_H,
 )
@@ -203,89 +202,112 @@ class ProbeComparisonPlotter:
     # Scatter: y_true vs y_pred faceted by approach
     # ------------------------------------------------------------------
 
-    def plot_scatter(self, predictions_df: pd.DataFrame, target: str) -> Path:
-        """Faceted scatter of y_true vs y_pred, one panel per approach.
+    def plot_scatter(self, predictions_df: pd.DataFrame) -> Path:
+        """Full-grid scatter of y_true vs y_pred for all targets and approaches.
 
-        Shared axis limits across panels.  1:1 reference line and R2
+        Rows = target variables (lbm, fys, onv, soc, vrz, won), columns =
+        approaches.  Shared axis limits per row.  1:1 reference line and R2
         annotation per panel.
 
         Args:
             predictions_df: Combined predictions DataFrame.
-            target: Target variable name to plot.
 
         Returns:
             Path to saved figure.
         """
         sns.set_style("whitegrid")
 
-        df = predictions_df[predictions_df["target_variable"] == target].copy()
-        if df.empty:
-            raise ValueError(f"No predictions for target '{target}'")
+        # Canonical target order; fall back to sorted unique if not all present
+        canonical_order = ["lbm", "fys", "onv", "soc", "vrz", "won"]
+        all_targets = sorted(predictions_df["target_variable"].unique())
+        targets = [t for t in canonical_order if t in all_targets]
+        targets += [t for t in all_targets if t not in targets]
 
-        approaches = sorted(df["approach"].unique())
+        if not targets:
+            raise ValueError("No target variables found in predictions_df")
+
+        approaches = sorted(predictions_df["approach"].unique())
         colors = self._color_map(approaches)
-        n = len(approaches)
-        ncols = min(4, n)
-        nrows = math.ceil(n / ncols)
+
+        nrows = len(targets)
+        ncols = len(approaches)
 
         fig, axes = plt.subplots(
-            nrows, ncols, figsize=(5 * ncols, 5 * nrows), squeeze=False
+            nrows, ncols,
+            figsize=(5 * ncols, 4.5 * nrows),
+            squeeze=False,
         )
 
-        # Shared limits across all panels
-        vmin = min(df["y_true"].min(), df["y_pred"].min())
-        vmax = max(df["y_true"].max(), df["y_pred"].max())
-        pad = (vmax - vmin) * 0.05
-        lim = (vmin - pad, vmax + pad)
+        for row_idx, target in enumerate(targets):
+            tdf = predictions_df[predictions_df["target_variable"] == target]
 
-        for idx, approach in enumerate(approaches):
-            row, col = divmod(idx, ncols)
-            ax = axes[row, col]
-            sub = df[df["approach"] == approach]
+            # Shared limits across all approaches for this target
+            vmin = min(tdf["y_true"].min(), tdf["y_pred"].min())
+            vmax = max(tdf["y_true"].max(), tdf["y_pred"].max())
+            pad = (vmax - vmin) * 0.05
+            lim = (vmin - pad, vmax + pad)
 
-            # Subsample for readability if large
-            if len(sub) > 5000:
-                sub = sub.sample(5000, random_state=42)
+            for col_idx, approach in enumerate(approaches):
+                ax = axes[row_idx, col_idx]
+                sub = tdf[tdf["approach"] == approach]
 
-            ax.scatter(
-                sub["y_true"],
-                sub["y_pred"],
-                s=2,
-                alpha=0.3,
-                color=colors[approach],
-                rasterized=True,
-            )
-            ax.plot(lim, lim, "k--", linewidth=0.8, alpha=0.6, label="1:1")
-            ax.set_xlim(lim)
-            ax.set_ylim(lim)
+                if sub.empty:
+                    ax.text(
+                        0.5, 0.5, "no data",
+                        transform=ax.transAxes, ha="center", va="center",
+                        fontsize=10, color="gray",
+                    )
+                    ax.set_xlim(lim)
+                    ax.set_ylim(lim)
+                else:
+                    # Subsample for readability if large
+                    if len(sub) > 5000:
+                        sub = sub.sample(5000, random_state=42)
 
-            # R2 annotation
-            ss_res = ((sub["y_true"] - sub["y_pred"]) ** 2).sum()
-            ss_tot = ((sub["y_true"] - sub["y_true"].mean()) ** 2).sum()
-            r2 = 1 - ss_res / ss_tot if ss_tot > 0 else float("nan")
-            ax.text(
-                0.05,
-                0.95,
-                f"R2 = {r2:.4f}\nn = {len(sub):,}",
-                transform=ax.transAxes,
-                va="top",
-                fontsize=9,
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
-            )
-            ax.set_title(approach, fontsize=10)
-            ax.set_xlabel("Actual")
-            ax.set_ylabel("Predicted")
+                    ax.scatter(
+                        sub["y_true"],
+                        sub["y_pred"],
+                        s=2,
+                        alpha=0.3,
+                        color=colors[approach],
+                        rasterized=True,
+                    )
+                    ax.plot(lim, lim, "k--", linewidth=0.8, alpha=0.6)
+                    ax.set_xlim(lim)
+                    ax.set_ylim(lim)
 
-        # Hide unused axes
-        for idx in range(n, nrows * ncols):
-            row, col = divmod(idx, ncols)
-            axes[row, col].set_visible(False)
+                    # R2 annotation
+                    ss_res = ((sub["y_true"] - sub["y_pred"]) ** 2).sum()
+                    ss_tot = ((sub["y_true"] - sub["y_true"].mean()) ** 2).sum()
+                    r2 = 1 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+                    ax.text(
+                        0.05, 0.95,
+                        f"R2 = {r2:.4f}\nn = {len(sub):,}",
+                        transform=ax.transAxes, va="top", fontsize=8,
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
+                    )
 
-        fig.suptitle(f"y_true vs y_pred: {target}", fontsize=13)
+                # Row label (target) on leftmost column
+                if col_idx == 0:
+                    ax.set_ylabel(f"{target}\nPredicted", fontsize=10)
+                else:
+                    ax.set_ylabel("")
+
+                # Column label (approach) on top row
+                if row_idx == 0:
+                    ax.set_title(approach, fontsize=10)
+
+                # x-label on bottom row only
+                if row_idx == nrows - 1:
+                    ax.set_xlabel("Actual", fontsize=9)
+                else:
+                    ax.set_xlabel("")
+
+        fig.suptitle("y_true vs y_pred: all targets x approaches", fontsize=14, y=1.01)
         plt.tight_layout()
-        path = self._save(f"scatter_{target}", fig)
+        path = self._save("scatter_grid", fig)
         plt.close(fig)
-        logger.info("Saved scatter plot: %s", path)
+        logger.info("Saved scatter grid: %s", path)
         return path
 
     # ------------------------------------------------------------------
@@ -316,7 +338,7 @@ class ProbeComparisonPlotter:
         ncols = min(4, n)
         nrows = math.ceil(n / ncols)
 
-        # Load boundary
+        # Load boundary only for extent computation, not for rendering
         boundary_gdf = load_boundary(self.paths, crs=28992)
 
         # Compute shared symmetric vmax across all approaches
@@ -346,8 +368,9 @@ class ProbeComparisonPlotter:
         fig, axes = plt.subplots(
             nrows,
             ncols,
-            figsize=(6 * ncols, 7 * nrows),
+            figsize=(6 * ncols + 1.5, 7 * nrows),
             squeeze=False,
+            constrained_layout=True,
         )
 
         for idx, approach in enumerate(approaches):
@@ -394,7 +417,7 @@ class ProbeComparisonPlotter:
                 ax,
                 image,
                 render_extent,
-                boundary_gdf,
+                boundary_gdf=None,
                 title=approach,
                 show_rd_grid=False,
                 title_fontsize=10,
@@ -421,7 +444,6 @@ class ProbeComparisonPlotter:
             f"res{self.h3_resolution} | EPSG:28992 | RdBu_r symmetric",
             fontsize=13,
         )
-        plt.tight_layout(rect=[0, 0, 0.92, 0.95])
         path = self._save(f"residual_maps_{target}", fig)
         plt.close(fig)
         logger.info("Saved residual maps: %s", path)
@@ -434,8 +456,9 @@ class ProbeComparisonPlotter:
     def plot_all(self, target: Optional[str] = None) -> List[Path]:
         """Generate all comparison plots.
 
-        If *target* is not specified, uses the first target variable found
-        in the loaded data.
+        If *target* is not specified for residual maps, uses the first
+        target variable found in the loaded data.  Scatter plots always
+        show the full grid of all targets x approaches.
 
         Returns:
             List of paths to saved figures.
@@ -444,11 +467,11 @@ class ProbeComparisonPlotter:
 
         if target is None:
             target = predictions["target_variable"].unique()[0]
-            logger.info("Auto-selected target: %s", target)
+            logger.info("Auto-selected target for residual maps: %s", target)
 
         paths: List[Path] = []
         paths.append(self.plot_r2_bars(metrics))
-        paths.append(self.plot_scatter(predictions, target))
+        paths.append(self.plot_scatter(predictions))
         paths.append(self.plot_residual_maps(predictions, target))
         return paths
 
@@ -528,7 +551,7 @@ def main():
 
     saved = []
     saved.append(plotter.plot_r2_bars(metrics))
-    saved.append(plotter.plot_scatter(predictions, target))
+    saved.append(plotter.plot_scatter(predictions))
     saved.append(plotter.plot_residual_maps(predictions, target))
 
     print(f"\nSaved {len(saved)} plots:")

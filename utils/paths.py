@@ -253,13 +253,13 @@ class StudyAreaPaths:
 
     def probe_results_root(self) -> Path:
         """Base directory for all probe result approaches."""
-        return self.root / "probe_results"
+        return self.root / "stage3_analysis" / "probe_results"
 
     def probe_results(self, approach: str) -> Path:
         """Directory for a specific approach's probe results.
 
         Layout::
-            data/study_areas/{area}/probe_results/{approach}/
+            data/study_areas/{area}/stage3_analysis/probe_results/{approach}/
             ├── predictions.parquet
             └── metrics.parquet
         """
@@ -271,13 +271,13 @@ class StudyAreaPaths:
 
     def cluster_results_root(self) -> Path:
         """Base directory for all cluster result approaches."""
-        return self.root / "cluster_results"
+        return self.root / "stage3_analysis" / "cluster_results"
 
     def cluster_results(self, approach: str) -> Path:
         """Directory for a specific approach's cluster results.
 
         Layout::
-            data/study_areas/{area}/cluster_results/{approach}/
+            data/study_areas/{area}/stage3_analysis/cluster_results/{approach}/
             ├── assignments.parquet
             └── metrics.parquet
         """

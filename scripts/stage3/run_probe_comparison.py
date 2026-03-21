@@ -50,6 +50,7 @@ from sklearn.preprocessing import StandardScaler
 
 from stage3_analysis.dnn_probe import DNNProbeConfig, DNNProbeRegressor
 from stage3_analysis.linear_probe import TARGET_COLS, TARGET_NAMES
+from stage3_analysis.probe_results_writer import ProbeResultsWriter
 from utils.paths import StudyAreaPaths
 
 logger = logging.getLogger(__name__)
@@ -525,6 +526,7 @@ def run_probes(
     target_year: int,
     run_prefix: str,
     dry_run: bool = False,
+    write_standardized: bool = False,
 ) -> pd.DataFrame:
     """Run DNN regression probes on all given embedding sources.
 
@@ -566,6 +568,14 @@ def run_probes(
             regressor = DNNProbeRegressor(config)
             results = regressor.run()
             regressor.save_results()
+
+            # Write standardized probe results for cross-approach comparison
+            if write_standardized:
+                approach_slug = src.label
+                out = ProbeResultsWriter.write_from_regressor(
+                    regressor, approach=approach_slug, study_area=STUDY_AREA
+                )
+                logger.info("  Standardized results -> %s", out)
 
             row: Dict[str, Any] = {"name": src.name, "model": src.modality}
             r2_values = []
@@ -922,6 +932,12 @@ def main() -> None:
         default=None,
         help="Override output directory (default: auto-generated under stage3/dnn_probe)",
     )
+    parser.add_argument(
+        "--write-standardized",
+        action="store_true",
+        help="Write standardized probe results (predictions + metrics parquets) "
+        "via ProbeResultsWriter for cross-approach comparison",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -972,6 +988,7 @@ def main() -> None:
         target_year=target_year,
         run_prefix=args.config or "custom",
         dry_run=args.dry_run,
+        write_standardized=args.write_standardized,
     )
 
     if args.dry_run or results_df.empty:

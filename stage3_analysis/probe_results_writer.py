@@ -7,7 +7,7 @@ for cross-approach comparison.
 
 Output layout::
 
-    data/study_areas/{area}/probe_results/{approach}/
+    data/study_areas/{area}/stage3_analysis/probe_results/{approach}/
     ├── predictions.parquet   # per-hex, per-target
     └── metrics.parquet       # per-target, per-metric
 

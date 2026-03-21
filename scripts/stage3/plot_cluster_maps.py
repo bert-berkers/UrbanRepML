@@ -58,6 +58,7 @@ from utils.visualization import (
     plot_spatial_map,
     rasterize_categorical,
 )
+from stage3_analysis.cluster_results_writer import ClusterResultsWriter
 from stage3_analysis.visualization.clustering_utils import (
     apply_pca_reduction,
     perform_minibatch_clustering,
@@ -165,6 +166,15 @@ def main():
         "--filter-empty", action="store_true",
         help="Remove all-zero and low-variance hexagons before clustering (for sparse modalities)",
     )
+    parser.add_argument(
+        "--write-standardized", action="store_true",
+        help="Write standardized cluster results (assignments + metrics parquets) "
+        "via ClusterResultsWriter for cross-approach comparison",
+    )
+    parser.add_argument(
+        "--approach", type=str, default=None,
+        help="Approach slug for ClusterResultsWriter (required with --write-standardized)",
+    )
 
     args = parser.parse_args()
 
@@ -173,6 +183,10 @@ def main():
         format="%(asctime)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
     )
+
+    if args.write_standardized and not args.approach:
+        print("ERROR: --approach is required when using --write-standardized")
+        sys.exit(1)
 
     embedding_path = Path(args.embedding_path)
     if not embedding_path.exists():
@@ -234,6 +248,17 @@ def main():
     cluster_results = perform_minibatch_clustering(
         reduced, args.k_values, standardize=True,
     )
+
+    # 6b. Write standardized cluster results if requested
+    if args.write_standardized:
+        out = ClusterResultsWriter.write_from_clustering(
+            cluster_assignments=cluster_results,
+            region_ids=emb_df.index,
+            embeddings=reduced,
+            approach=args.approach,
+            study_area=args.study_area,
+        )
+        print(f"Standardized cluster results -> {out}")
 
     # 7. Render maps
     cmap = "tab20"
