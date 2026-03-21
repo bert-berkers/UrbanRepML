@@ -19,6 +19,7 @@ import logging
 import time
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import torch
 
@@ -152,7 +153,7 @@ def main():
     logger.info("Starting training...")
     t0 = time.time()
 
-    best_embeddings, best_state = trainer.train(
+    train_result = trainer.train(
         features_dict=features_dict,
         edge_indices=edge_indices,
         edge_weights=edge_weights,
@@ -163,6 +164,11 @@ def main():
     )
 
     train_time = time.time() - t0
+
+    best_embeddings = train_result['best_embeddings']
+    best_state = train_result['best_state']
+    loss_history = train_result['loss_history']
+    best_epoch = train_result['best_epoch']
 
     if best_state is None:
         logger.error("Training failed — no best state found")
@@ -176,6 +182,58 @@ def main():
         f"Best epoch: {best_state['epoch']}, "
         f"Best loss: {best_state['loss']:.6f}"
     )
+
+    # ---- 5a. Save loss history CSV ----
+    if loss_history:
+        loss_df = pd.DataFrame(loss_history)
+        csv_path = checkpoint_dir / "training_loss_history.csv"
+        loss_df.to_csv(csv_path, index=False)
+        logger.info(f"Loss history saved to {csv_path}")
+
+        # ---- 5b. Generate loss curve plot ----
+        epochs_completed = loss_df["epoch"].max() + 1
+        fig, ax1 = plt.subplots(figsize=(12, 5))
+
+        # Primary axis: losses (log scale)
+        ax1.semilogy(loss_df["epoch"], loss_df["total_loss"],
+                     color="#1f77b4", linewidth=1.5, label="Total loss")
+        ax1.semilogy(loss_df["epoch"], loss_df["reconstruction_loss"],
+                     color="#ff7f0e", linewidth=1.2, linestyle="--", label="Reconstruction loss")
+        ax1.semilogy(loss_df["epoch"], loss_df["consistency_loss"],
+                     color="#2ca02c", linewidth=1.2, linestyle=":", label="Consistency loss")
+
+        # Mark best epoch
+        if best_epoch >= 0:
+            ax1.axvline(x=best_epoch, color="red", linewidth=1.0,
+                        linestyle="--", alpha=0.7, label=f"Best epoch ({best_epoch})")
+
+        ax1.set_xlabel("Epoch")
+        ax1.set_ylabel("Loss (log scale)")
+        ax1.legend(loc="upper right", fontsize=9)
+        ax1.grid(True, which="both", alpha=0.3)
+
+        # Secondary axis: learning rate
+        ax2 = ax1.twinx()
+        ax2.plot(loss_df["epoch"], loss_df["lr"],
+                 color="#9467bd", linewidth=1.0, alpha=0.6, label="LR")
+        ax2.set_ylabel("Learning rate", color="#9467bd")
+        ax2.tick_params(axis="y", labelcolor="#9467bd")
+        ax2.legend(loc="center right", fontsize=9)
+
+        title = (
+            f"FullAreaUNet — {args.study_area} {args.year}  |  "
+            f"dims {dims}  |  "
+            f"{epochs_completed} epochs  |  "
+            f"best epoch {best_epoch}  |  "
+            f"best loss {best_state['loss']:.4e}"
+        )
+        fig.suptitle(title, fontsize=10)
+        fig.tight_layout()
+
+        plot_path = checkpoint_dir / "training_loss_curve.png"
+        fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        logger.info(f"Loss curve saved to {plot_path}")
 
     # ---- 5. Extract and save embeddings at ALL resolutions ----
     saved_paths = {}

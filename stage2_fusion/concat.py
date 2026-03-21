@@ -8,6 +8,7 @@ Usage::
 
     python -m stage2_fusion.concat --modalities alphaearth,poi --study-area netherlands
     python -m stage2_fusion.concat --modalities alphaearth,poi,roads --pca 64
+    python -m stage2_fusion.concat --modalities alphaearth,roads,gtfs --pca-per-modality roads:10 gtfs:8
 """
 
 import argparse
@@ -170,7 +171,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--study-area", default="netherlands")
     parser.add_argument("--resolution", type=int, default=10)
     parser.add_argument("--year", type=str, default="2022")
-    parser.add_argument("--pca", type=int, default=None, help="PCA components after concat")
+    parser.add_argument("--pca", type=int, default=None, help="PCA components after concat (global)")
+    parser.add_argument(
+        "--pca-per-modality",
+        nargs="+",
+        default=None,
+        metavar="MODALITY:N",
+        help=(
+            "Apply PCA to individual modality blocks before joining. "
+            "Pass one or more 'modality:n_components' pairs, e.g. roads:10 gtfs:8. "
+            "Modalities not listed are kept at full dimensionality."
+        ),
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
@@ -178,12 +190,57 @@ def main(argv: list[str] | None = None) -> None:
     modalities = [m.strip() for m in args.modalities.split(",")]
     paths = StudyAreaPaths(args.study_area)
 
+    # --- Parse --pca-per-modality ---
+    pca_per_modality: dict[str, int] = {}
+    if args.pca_per_modality:
+        for token in args.pca_per_modality:
+            parts = token.split(":")
+            if len(parts) != 2 or not parts[1].isdigit():
+                raise ValueError(
+                    f"--pca-per-modality expects 'modality:n_components' pairs, got: '{token}'"
+                )
+            pca_per_modality[parts[0].strip()] = int(parts[1])
+        logger.info("Per-modality PCA specs: %s", pca_per_modality)
+
     # --- Load & join ---
     logger.info("Loading %d modalities for %s res%d year=%s", len(modalities), args.study_area, args.resolution, args.year)
     frames: list[pd.DataFrame] = []
     for mod in modalities:
         df = _load_modality(paths, mod, args.resolution, args.year)
         logger.info("  %-12s  %d hexagons  %d cols", mod, len(df), len(df.columns))
+
+        # --- Optional per-modality PCA ---
+        if mod in pca_per_modality:
+            from sklearn.decomposition import PCA
+            from sklearn.preprocessing import StandardScaler
+
+            n_requested = pca_per_modality[mod]
+            n = min(n_requested, len(df.columns), len(df))
+            original_dims = len(df.columns)
+
+            # Standardize internally before PCA (does not affect the global z-score later)
+            scaler = StandardScaler()
+            scaled = scaler.fit_transform(df.values)
+
+            pca = PCA(n_components=n)
+            reduced = pca.fit_transform(scaled)
+            explained = pca.explained_variance_ratio_.sum() * 100
+
+            # Build column names using the modality prefix convention
+            prefix = MODALITY_PREFIXES.get(mod, mod[:2])
+            # For single-char prefixes (e.g. "R") use zero-padded integers: R00, R01, ...
+            # For multi-char prefixes (e.g. "gtfs2vec_") use a compact form: gtfs2vec_pca00, ...
+            if len(prefix) == 1:
+                col_names = [f"{prefix}{i:02d}" for i in range(n)]
+            else:
+                col_names = [f"{prefix}pca{i:02d}" for i in range(n)]
+
+            df = pd.DataFrame(reduced, index=df.index, columns=col_names)
+            logger.info(
+                "  %-12s  PCA %d -> %d components  explained=%.1f%%",
+                mod, original_dims, n, explained,
+            )
+
         frames.append(df)
 
     fused = frames[0]
@@ -266,6 +323,7 @@ def main(argv: list[str] | None = None) -> None:
             "year": args.year,
             "normalization": "per_modality_zscore",
             "pca_components": args.pca,
+            "pca_per_modality": pca_per_modality if pca_per_modality else None,
             "n_hexagons": len(fused),
             "n_columns": len(fused.columns),
         },

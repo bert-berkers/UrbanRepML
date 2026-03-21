@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import SAGEConv
+from torch_geometric.nn import GCNConv
 from typing import Dict, List, Tuple, Optional
 from tqdm.auto import tqdm
 
@@ -83,10 +83,10 @@ class SharedSparseMapping(nn.Module):
         return transformed
 
 class EncoderBlock(nn.Module):
-    """SAGEConv encoder block with optional input projection for dimension changes.
+    """GCNConv encoder block with optional input projection for dimension changes.
 
-    If in_dim != out_dim, an input projection maps features before SAGEConv processing.
-    All SAGEConv layers operate at out_dim. Residual connection projects to match.
+    If in_dim != out_dim, an input projection maps features before GCNConv processing.
+    All GCNConv layers operate at out_dim. Residual connection projects to match.
     """
     def __init__(self, in_dim: int, out_dim: int, num_convs: int = 10):
         super().__init__()
@@ -100,7 +100,7 @@ class EncoderBlock(nn.Module):
             )
 
         self.convs = nn.ModuleList([
-            SAGEConv(out_dim, out_dim)
+            GCNConv(out_dim, out_dim)
             for _ in range(num_convs)
         ])
 
@@ -119,7 +119,7 @@ class EncoderBlock(nn.Module):
         Args:
             x: Input features [num_nodes, in_dim]
             edge_index: Graph connectivity [2, num_edges]
-            edge_weight: Edge weights [num_edges] (kept for API compat, not passed to SAGEConv)
+            edge_weight: Edge weights [num_edges] (optional, passed to GCNConv)
         Returns:
             Processed features [num_nodes, out_dim]
         """
@@ -131,7 +131,7 @@ class EncoderBlock(nn.Module):
             out = x
 
         for conv, norm in zip(self.convs, self.norms):
-            out = conv(out, edge_index)
+            out = conv(out, edge_index, edge_weight=edge_weight)
             out = norm(out)
             out = F.gelu(out)
 
@@ -139,17 +139,17 @@ class EncoderBlock(nn.Module):
         return out
 
 class DecoderBlock(nn.Module):
-    """SAGEConv decoder block with skip connections and optional down-projection.
+    """GCNConv decoder block with skip connections and optional down-projection.
 
-    Skip connection is added before SAGEConv (both at in_dim).
-    If in_dim != out_dim, a down-projection maps output to out_dim after SAGEConv.
+    Skip connection is added before GCNConv (both at in_dim).
+    If in_dim != out_dim, a down-projection maps output to out_dim after GCNConv.
     """
     def __init__(self, in_dim: int, out_dim: int, num_convs: int = 10):
         super().__init__()
         self.needs_projection = (in_dim != out_dim)
 
         self.convs = nn.ModuleList([
-            SAGEConv(in_dim, in_dim)
+            GCNConv(in_dim, in_dim)
             for _ in range(num_convs)
         ])
 
@@ -176,7 +176,7 @@ class DecoderBlock(nn.Module):
             x: Input features [num_nodes, in_dim]
             skip: Skip connection from encoder [num_nodes, in_dim]
             edge_index: Graph connectivity [2, num_edges]
-            edge_weight: Edge weights [num_edges] (kept for API compat, not passed to SAGEConv)
+            edge_weight: Edge weights [num_edges] (optional, passed to GCNConv)
         Returns:
             Processed features [num_nodes, out_dim]
         """
@@ -185,7 +185,7 @@ class DecoderBlock(nn.Module):
 
         out = combined
         for conv, norm in zip(self.convs, self.norms):
-            out = conv(out, edge_index)
+            out = conv(out, edge_index, edge_weight=edge_weight)
             out = norm(out)
             out = F.gelu(out)
 
@@ -489,8 +489,17 @@ class FullAreaModelTrainer:
               learning_rate: float = 1e-4,
               warmup_epochs: int = 10,
               patience: int = 100,
-              gradient_clip: float = 1.0):
+              gradient_clip: float = 1.0) -> dict:
+        """Train the model and return a result dict.
 
+        Returns
+        -------
+        dict with keys:
+            best_embeddings : Dict[int, Tensor] — best embeddings per resolution
+            best_state      : dict — checkpoint state (model weights, epoch, loss, ...)
+            loss_history    : List[dict] — per-epoch loss/lr/grad_norm records
+            best_epoch      : int — epoch index of best model (early stopping point)
+        """
         logger.info(f"Starting training with lr={learning_rate}, epochs={num_epochs}")
 
         optimizer = torch.optim.AdamW(
@@ -505,6 +514,8 @@ class FullAreaModelTrainer:
         patience_counter = 0
         best_state = None
         best_embeddings = None
+        best_epoch = -1
+        loss_history: List[dict] = []
 
         for epoch in tqdm(range(num_epochs), desc="Training"):
             self.model.train()
@@ -542,14 +553,27 @@ class FullAreaModelTrainer:
                 # Log gradient norms for monitoring
                 grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.model.parameters() if p.grad is not None) ** 0.5
 
+                # Record per-epoch metrics
+                loss_history.append({
+                    "epoch": epoch,
+                    "total_loss": total_loss.item(),
+                    "reconstruction_loss": losses['reconstruction_loss'].item(),
+                    "consistency_loss": losses['consistency_loss'].item(),
+                    "lr": scheduler.get_last_lr()[0],
+                    "grad_norm": grad_norm,
+                })
+
                 if total_loss.item() < best_loss:
                     best_loss = total_loss.item()
+                    best_epoch = epoch
                     patience_counter = 0
                     best_state = {
                         'epoch': epoch,
                         'model_state': self.model.state_dict(),
                         'optimizer_state': optimizer.state_dict(),
                         'loss': best_loss,
+                        'loss_history': loss_history,
+                        'best_epoch': epoch,
                     }
                     best_embeddings = {k: v.detach().clone() for k, v in embeddings.items()}
                     self._save_checkpoint(best_state.copy(), "best_model.pt")
@@ -566,7 +590,15 @@ class FullAreaModelTrainer:
                 break
 
         if best_state:
+            # Update loss_history in best_state to the full history (not just up to best)
+            best_state['loss_history'] = loss_history
+            best_state['best_epoch'] = best_epoch
             self.model.load_state_dict(best_state['model_state'])
             logger.info(f"Restored best model from epoch {best_state['epoch']}")
 
-        return best_embeddings, best_state
+        return {
+            'best_embeddings': best_embeddings,
+            'best_state': best_state,
+            'loss_history': loss_history,
+            'best_epoch': best_epoch,
+        }
