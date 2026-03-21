@@ -171,3 +171,26 @@ compound_states:
       exploration_vs_exploitation: 2
     mode: focused
     tension_warning: null
+
+  reproduction-run:
+    description: "Execute known recipes at full speed. No exploration, standard quality. Ship baselines."
+    dimensions:
+      execution_speed: 5
+      exploration_vs_exploitation: 1
+      code_quality: 3
+      test_coverage: 3
+    mode: focused
+    tension_warning: null
+
+  pipeline-tooling:
+    description: "Build well-defined infrastructure modules. Schema contracts, clean code, no exploration. Data engineering over model work."
+    dimensions:
+      execution_speed: 4
+      code_quality: 4
+      data_engineering_diligence: 4
+      exploration_vs_exploitation: 2
+      model_architecture: 2
+      test_coverage: 2
+      spatial_correctness: 2
+    mode: focused
+    tension_warning: null

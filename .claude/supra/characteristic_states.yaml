@@ -1,18 +1,22 @@
 mode: focused
 dimensions:
-  execution_speed: 3
-  exploration_vs_exploitation: 4
-  code_quality: 4
-  test_coverage: 2
-  spatial_correctness: 2
-  model_architecture: 5
+  execution_speed: 4
+  exploration_vs_exploitation: 1
+  code_quality: 3
+  test_coverage: 3
+  spatial_correctness: 3
+  model_architecture: 3
+  urgency: 3
+  data_engineering_diligence: 3
+compound_state: reproduction-run
 focus:
-- "Stage 2 FullAreaUNet implementation (no accessibility graph) or UNet++ alternative"
-- "Clean and tidy setup for second OODA loop production work"
-- "Evaluate UNet++ (arxiv 2602.17250) as potential architecture"
+- "Reproduce all existing approaches through standardized probe format"
+- "Raw concat 208D z-scored, ring agg k=10 exponential, UNet-uniform 1000 epochs"
+- "Write each to probe_results/{approach}/results.parquet"
 suppress:
-- "Stage 1 modalities (handled by parallel agent)"
+- "Stage 1 modalities"
 - "supra infrastructure"
 - "highway2vec debugging"
-last_attuned: "2026-03-07T12:00:00Z"
-last_attuned_by: "profile:stage2-unet-setup"
+- "new architecture exploration"
+last_attuned: "2026-03-21T10:00:00Z"
+last_attuned_by: "valuate:coral-falling-snow"
