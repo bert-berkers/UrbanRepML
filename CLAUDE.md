@@ -184,7 +184,23 @@ The coordinator, SRAI, data-code, and index conventions are now enforced via:
 - **Hooks**: `.claude/settings.json` (SessionStart, SubagentStart/Stop, Stop)
 - **Skills**: `/valuate` (session entry point), `/niche` (OODA execution), `/sync` (lateral broadcast), `/vitals` (agent health)
 
-**Session Identity**: PPID-keyed files in `.claude/coordinators/sessions/` and `.claude/coordinators/supra/` isolate multi-terminal sessions. Each terminal gets its own session ID and supra identity, keyed by the Claude Code process PID. Messages are organized in `.claude/coordinators/messages/{date}/` subdirs.
+**Session Identity**: Terminal PID-keyed files in `.claude/coordinators/terminals/{pid}.yaml` isolate multi-terminal sessions. Each terminal gets its own session ID and supra identity. Messages are organized in `.claude/coordinators/messages/{date}/` subdirs.
+
+### Scratchpad Architecture
+
+Scratchpads (`.claude/scratchpad/{agent_type}/`) are the stigmergic memory layer — agents leave traces that coordinate across context windows and sessions.
+
+**Three isolation layers:**
+1. **File-level** (terminal isolation): `{date}-{session_id}.md` — different terminals write different files, no cross-terminal clobbering
+2. **Entry-level** (invocation isolation): Each agent invocation appends a `## HH:MM — summary` section. Earlier entries are never rewritten.
+3. **Cross-terminal** (lateral coordination): Coordinator messages (`.claude/coordinators/messages/`), not scratchpads, are the channel for cross-terminal communication.
+
+**Self-contained entries**: Each entry carries a `**Prior entries**:` index summarizing earlier entries in the same file. This makes every entry a complete context packet — the SubagentStart hook injects the last 100 lines, so the latest entry must carry forward the gist of the day's earlier work.
+
+**What goes where:**
+- Scratchpads: what this agent did, decisions made, unresolved items (intra-terminal memory)
+- Coordinator messages: cross-terminal signals, schema contracts, ready/blocked status
+- Memory files: cross-session knowledge that survives `/clear` and session rotation
 
 See `specs/claude_code_multi_agent_setup.md` for the full architecture description.
 
