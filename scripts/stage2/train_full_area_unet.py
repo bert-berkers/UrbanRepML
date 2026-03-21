@@ -66,6 +66,11 @@ def parse_args():
         "--feature-source", type=str, default=None,
         help="Explicit path to raw concat parquet. Overrides auto-resolution."
     )
+    parser.add_argument(
+        "--accessibility-graph", type=str, default=None,
+        help="Path to accessibility Parquet for finest resolution edges "
+             "(e.g. data/study_areas/netherlands/accessibility/walk_res9.parquet)"
+    )
     return parser.parse_args()
 
 
@@ -88,6 +93,8 @@ def main():
     print(f"  LR:          {args.lr}")
     print(f"  Epochs:      {args.epochs}")
     print(f"  Patience:    {args.patience}")
+    if args.accessibility_graph:
+        print(f"  Acc. graph:  {args.accessibility_graph}")
     print("=" * 60)
 
     # ---- 1. Load multi-resolution data ----
@@ -99,6 +106,7 @@ def main():
         resolutions=resolutions,
         year=args.year,
         feature_source=args.feature_source,
+        accessibility_graph=args.accessibility_graph,
     )
     data = loader.load()
     hex_ids = data["hex_ids"]
@@ -280,6 +288,7 @@ def main():
             "best_loss": best_state["loss"],
             "train_time_sec": round(train_time, 1),
             "n_params": n_params,
+            "accessibility_graph": args.accessibility_graph,
         },
     )
 

@@ -41,6 +41,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from utils.paths import StudyAreaPaths
+from utils.spatial_db import SpatialDB
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +73,26 @@ ROAD_SPEEDS: dict[str, float] = {
     "steps": 0.7,           # ~2.5 km/h
 }
 
-# Mode-specific road type exclusions
-MODE_EXCLUSIONS: dict[str, set[str]] = {
-    "walk": set(),  # pedestrians can use any road
-    "bike": {"motorway", "motorway_link", "trunk", "trunk_link"},
-    "drive": {"footway", "path", "pedestrian", "cycleway", "steps"},
+# Mode-specific road type inclusions (whitelist approach)
+# Walk excludes motorways, trunks, tracks (forest/field), cycleways
+# Bike excludes motorways, trunks, tracks, footways, steps
+# Drive excludes footways, paths, steps, cycleways, pedestrian, tracks, living_street
+MODE_INCLUSIONS: dict[str, set[str]] = {
+    "walk": {
+        "residential", "living_street", "pedestrian", "footway", "path", "steps",
+        "service", "unclassified", "tertiary", "tertiary_link", "secondary",
+        "secondary_link", "primary", "primary_link",
+    },
+    "bike": {
+        "cycleway", "residential", "living_street", "service", "unclassified",
+        "tertiary", "tertiary_link", "secondary", "secondary_link", "primary",
+        "primary_link", "path",
+    },
+    "drive": {
+        "motorway", "motorway_link", "trunk", "trunk_link", "primary",
+        "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link",
+        "unclassified", "residential", "service",
+    },
 }
 
 # Gravity decay constants (beta) per mode — from legacy graph_construction.py
@@ -160,13 +176,11 @@ def step_sjoin(
     if "highway" not in roads_gdf.columns:
         raise ValueError("OSMPbfLoader did not return a 'highway' column.")
 
-    # --- Filter by travel mode ---
-    # e.g. walk mode keeps all roads, bike excludes motorways, etc.
-    excluded = MODE_EXCLUSIONS[mode]
-    if excluded:
-        before = len(roads_gdf)
-        roads_gdf = roads_gdf[~roads_gdf["highway"].isin(excluded)]
-        logger.info(f"  Mode '{mode}': removed {before - len(roads_gdf):,} excluded road types, {len(roads_gdf):,} remaining")
+    # --- Filter by travel mode (inclusion whitelist) ---
+    included = MODE_INCLUSIONS[mode]
+    before = len(roads_gdf)
+    roads_gdf = roads_gdf[roads_gdf["highway"].isin(included)]
+    logger.info(f"  Mode '{mode}': kept {len(roads_gdf):,} of {before:,} roads (included types only)")
 
     # --- Load hex polygons ---
     logger.info("Step 1: Loading hex polygons...")
@@ -268,18 +282,29 @@ def step_edges(
     centroids_df = pd.read_parquet(centroids_path)
     logger.info(f"  {len(assignments_df):,} road-hex assignments, {len(centroids_df):,} centroids")
 
-    # --- Filter assignments by mode ---
-    # Remove road types excluded for this mode (e.g., footways for drive mode)
-    excluded = MODE_EXCLUSIONS[mode]
-    if excluded:
-        before = len(assignments_df)
-        assignments_df = assignments_df[~assignments_df["highway"].isin(excluded)]
-        logger.info(f"  Mode '{mode}': filtered to {len(assignments_df):,} assignments (removed {before - len(assignments_df):,})")
+    # --- Filter assignments by mode (inclusion whitelist) ---
+    included = MODE_INCLUSIONS[mode]
+    before = len(assignments_df)
+    assignments_df = assignments_df[assignments_df["highway"].isin(included)]
+    logger.info(f"  Mode '{mode}': kept {len(assignments_df):,} of {before:,} assignments (included types only)")
 
     # Build centroid lookup dicts (hex_id -> x, hex_id -> y)
     cx = dict(zip(centroids_df["region_id"], centroids_df["cx"]))
     cy = dict(zip(centroids_df["region_id"], centroids_df["cy"]))
     hex_id_set = set(centroids_df["region_id"])
+
+    # --- Build H3 adjacency set (k=1 neighbours only) ---
+    # This prevents long roads from creating O(n^2) edges across many hexes.
+    # A road through hexes A->B->C creates A-B and B-C, not A-C.
+    logger.info("Step 2: Building H3 adjacency set...")
+    db = SpatialDB(study_area)
+    neighbour_map = db.neighbours(list(hex_id_set), resolution)
+    valid_pairs: set[frozenset] = set()
+    for hex_id, nbrs in neighbour_map.items():
+        for nbr in nbrs:
+            if nbr in hex_id_set:  # only keep neighbours within our study area
+                valid_pairs.add(frozenset((hex_id, nbr)))
+    logger.info(f"  {len(valid_pairs):,} valid H3-adjacent pairs")
 
     # --- Group assignments by road ---
     # road_hex_map: road_idx -> [(region_id, highway), ...]
@@ -314,12 +339,16 @@ def step_edges(
 
         hex_list = list(hex_ids_for_road.keys())
 
-        # Generate all pairs of hexagons this road connects.
-        # NOTE: we do NOT filter by H3 adjacency — a highway crossing
-        # non-adjacent hexes creates a valid long-range edge.
+        # Only create edges between H3-adjacent hex pairs.
+        # Without this filter, a long road through N hexes creates O(N^2)
+        # edges; with it, we get O(N) edges — sequential along the road.
         for i in range(len(hex_list)):
             for j in range(i + 1, len(hex_list)):
                 h_a, h_b = hex_list[i], hex_list[j]
+
+                # Skip non-adjacent pairs
+                if frozenset((h_a, h_b)) not in valid_pairs:
+                    continue
 
                 # Take the fastest road class between the two hexes
                 speed_a, cls_a = hex_ids_for_road[h_a]
@@ -580,8 +609,8 @@ def build_accessibility_graph(
     Convenience wrapper that calls step_sjoin -> step_edges -> step_rudifun -> step_gravity.
     Each step saves intermediates, so if it crashes partway you can resume from the last step.
     """
-    if mode not in MODE_EXCLUSIONS:
-        raise ValueError(f"Unknown mode {mode!r}. Choose from: {list(MODE_EXCLUSIONS)}")
+    if mode not in MODE_INCLUSIONS:
+        raise ValueError(f"Unknown mode {mode!r}. Choose from: {list(MODE_INCLUSIONS)}")
 
     step_sjoin(study_area, resolution, mode, osm_date)
     step_edges(study_area, resolution, mode)
