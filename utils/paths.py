@@ -252,14 +252,15 @@ class StudyAreaPaths:
     # -----------------------------------------------------------------
 
     def probe_results_root(self) -> Path:
-        """Base directory for all probe result approaches."""
-        return self.root / "stage3_analysis" / "probe_results"
+        """Base directory for standardized probe result approaches (today's date folder)."""
+        from datetime import date
+        return self.root / "stage3_analysis" / "dnn_probe" / date.today().isoformat()
 
     def probe_results(self, approach: str) -> Path:
         """Directory for a specific approach's probe results.
 
         Layout::
-            data/study_areas/{area}/stage3_analysis/probe_results/{approach}/
+            data/study_areas/{area}/stage3_analysis/dnn_probe/{date}/{approach}/
             ├── predictions.parquet
             └── metrics.parquet
         """

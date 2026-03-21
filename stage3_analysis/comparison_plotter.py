@@ -229,16 +229,18 @@ class ProbeComparisonPlotter:
         approaches = sorted(predictions_df["approach"].unique())
         colors = self._color_map(approaches)
 
-        nrows = len(targets)
-        ncols = len(approaches)
+        # Landscape layout: rows = approaches, cols = targets
+        nrows = len(approaches)
+        ncols = len(targets)
+        cell_size = 2.8
 
         fig, axes = plt.subplots(
             nrows, ncols,
-            figsize=(5 * ncols, 4.5 * nrows),
+            figsize=(cell_size * ncols, cell_size * nrows),
             squeeze=False,
         )
 
-        for row_idx, target in enumerate(targets):
+        for col_idx, target in enumerate(targets):
             tdf = predictions_df[predictions_df["target_variable"] == target]
 
             # Shared limits across all approaches for this target
@@ -247,7 +249,7 @@ class ProbeComparisonPlotter:
             pad = (vmax - vmin) * 0.05
             lim = (vmin - pad, vmax + pad)
 
-            for col_idx, approach in enumerate(approaches):
+            for row_idx, approach in enumerate(approaches):
                 ax = axes[row_idx, col_idx]
                 sub = tdf[tdf["approach"] == approach]
 
@@ -283,27 +285,29 @@ class ProbeComparisonPlotter:
                     ax.text(
                         0.05, 0.95,
                         f"R2 = {r2:.4f}\nn = {len(sub):,}",
-                        transform=ax.transAxes, va="top", fontsize=8,
-                        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
+                        transform=ax.transAxes, va="top", fontsize=7,
+                        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.8),
                     )
 
-                # Row label (target) on leftmost column
+                # Row label (approach) on leftmost column
                 if col_idx == 0:
-                    ax.set_ylabel(f"{target}\nPredicted", fontsize=10)
+                    ax.set_ylabel(f"{approach}\nPredicted", fontsize=8)
                 else:
                     ax.set_ylabel("")
 
-                # Column label (approach) on top row
+                # Column label (target) on top row
                 if row_idx == 0:
-                    ax.set_title(approach, fontsize=10)
+                    ax.set_title(target, fontsize=10)
 
                 # x-label on bottom row only
                 if row_idx == nrows - 1:
-                    ax.set_xlabel("Actual", fontsize=9)
+                    ax.set_xlabel("Actual", fontsize=8)
                 else:
                     ax.set_xlabel("")
 
-        fig.suptitle("y_true vs y_pred: all targets x approaches", fontsize=14, y=1.01)
+                ax.tick_params(labelsize=6)
+
+        fig.suptitle("y_true vs y_pred: all targets x approaches", fontsize=12, y=1.01)
         plt.tight_layout()
         path = self._save("scatter_grid", fig)
         plt.close(fig)
@@ -361,9 +365,9 @@ class ProbeComparisonPlotter:
         pad = (maxx - minx) * 0.03
         render_extent = (minx - pad, miny - pad, maxx + pad, maxy + pad)
 
-        # Panel dimensions: scale down per panel so figure stays reasonable
-        panel_w = max(600, RASTER_W // ncols)
-        panel_h = max(720, RASTER_H // ncols)
+        # Panel dimensions: use full raster resolution per panel for fine detail
+        panel_w = RASTER_W
+        panel_h = RASTER_H
 
         fig, axes = plt.subplots(
             nrows,
@@ -480,8 +484,8 @@ class ProbeComparisonPlotter:
     # ------------------------------------------------------------------
 
     def _save(self, name: str, fig) -> Path:
-        """Save figure to date-keyed output directory."""
-        out_dir = self.output_dir / date.today().isoformat()
+        """Save figure to output directory."""
+        out_dir = self.output_dir
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"{name}.png"
         fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
