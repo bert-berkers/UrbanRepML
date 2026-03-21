@@ -180,9 +180,9 @@ Gravity maps are better (forests are dark = low FSI) but degree is wrong. The is
 
 ---
 
-## Wave 5c: Fix accessibility graph edge selection — NEW
+## Wave 5c: Fix accessibility graph edge selection — DONE
 
-The core problem: `stage2_fusion/graphs/accessibility_graph.py` includes ALL OSM road types in the walk/bike/drive graphs. It should filter by mode-appropriate road types.
+Two fixes applied and validated:
 
 ### Road type filtering per mode
 
@@ -206,8 +206,11 @@ The core problem: `stage2_fusion/graphs/accessibility_graph.py` includes ALL OSM
 3. **execution**: Re-run `scripts/one_off/accessibility_viz_all.py` to regenerate all plots
 4. **stage3-analyst**: Visual QA — do forests/highways/industrial now show lower degree?
 
-### Gate 5c: Are the graphs physically plausible?
-> Walk degree in Veluwe should be near 0 (no residential roads). Highway corridors should show low walk degree. Industrial areas should have moderate degree (service roads exist). If still wrong, iterate on the road type lists.
+### Gate 5c: PASSED
+> Lattice deviation maps exclusively blue/white, zero red hotspots. Veluwe clean, causeways clean, coastal clean.
+> Walk: 2.3M → 1.0M edges (-57%). Bike: 295K → 241K (-18%). Drive: 45K → 43K (-3%).
+> Spec: `specs/accessibility_graph_pipeline.md`. Figures: `accessibility/figures/adjacency_filtered/`.
+> Old results preserved in `accessibility/pre_adjacency_filter/`.
 
 ---
 
@@ -242,4 +245,6 @@ The core problem: `stage2_fusion/graphs/accessibility_graph.py` includes ALL OSM
 - `/ego-check`
 
 ## Execution
-Invoke: `/niche .claude/plans/2026-03-21-accessibility-unet.md — Wave 5c fix accessibility graph road type filtering, then Wave 6 train+probe. Session: sage-hovering-mist-2026-03-21. Baseline to beat: ring_agg R²=0.534.`
+Next up: Wave 6 (train + probe). Start fresh:
+1. `/clear`
+2. `/niche .claude/plans/2026-03-21-accessibility-unet.md — Wave 6 train AccessibilityUNet + probe. Baseline: ring_agg R²=0.534.`
