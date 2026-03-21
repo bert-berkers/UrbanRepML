@@ -247,6 +247,24 @@ class StudyAreaPaths:
         date_prefix = run_id[:10]
         return self.stage3(analysis_type) / date_prefix / run_id
 
+    # -----------------------------------------------------------------
+    # Probe results (cross-approach comparison store)
+    # -----------------------------------------------------------------
+
+    def probe_results_root(self) -> Path:
+        """Base directory for all probe result approaches."""
+        return self.root / "probe_results"
+
+    def probe_results(self, approach: str) -> Path:
+        """Directory for a specific approach's probe results.
+
+        Layout::
+            data/study_areas/{area}/probe_results/{approach}/
+            ├── predictions.parquet
+            └── metrics.parquet
+        """
+        return self.probe_results_root() / approach
+
     def latest_run(self, stage_dir: Path) -> "Path | None":
         """Find the most recent run directory by YYYY-MM-DD prefix sort.
 
