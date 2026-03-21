@@ -219,6 +219,52 @@ text: |
   Go ahead with your baseline runs.
 ```
 
+### Wave 4a — Explore clustering infrastructure (1 agent)
+
+| # | Agent | Task | Acceptance criteria |
+|---|-------|------|-------------------|
+| 4a | Explore | Investigate existing clustering code: `clustering_utils.py` (MiniBatchKMeans), `plot_cluster_maps.py`, any existing cluster-to-target sorting logic. Report: (1) how cluster labels are currently assigned, (2) how leefbaarometer targets can be joined to cluster assignments, (3) what sorting strategy makes clusters form a meaningful gradient (mean target value per cluster → relabel 0=lowest, k-1=highest). Also check if `rasterize_categorical` supports sequential colormaps or only discrete ones. | Clear report with file paths, line numbers, and recommended sorting approach |
+
+### SYNC 4a — Human decision point
+
+> **Go/no-go**: Does the exploration report give a clear path for ClusterResultsWriter?
+> Key question: sort by mean leefbaarometer per cluster? Which target column (lbm = overall)?
+
+### Wave 4b — Build ClusterResultsWriter + ClusterComparisonPlotter (parallel, 2 agents)
+
+**Design decision**: Writer stores raw labels only. Sorting by target variable (lbm/fys/etc or one-hot morphology levels 1-3) happens at plot time. This keeps the writer simple and sort criteria extensible.
+
+**Sort criteria** (computed at plot time by plotter):
+- 6 leefbaarometer: lbm, fys, onv, soc, vrz, won (continuous mean per cluster)
+- 14 morphology one-hot: level 1 (2 classes), level 2 (4), level 3 (8) — fraction per cluster
+- `--sort-by` CLI arg selects which criterion to use
+
+| # | Agent | Task | Files | Acceptance criteria |
+|---|-------|------|-------|-------------------|
+| 4b-1 | stage3-analyst | Build `stage3_analysis/cluster_results_writer.py`: `ClusterResultsWriter` class. Schema: `assignments.parquet` = (approach, k, region_id, cluster_label), `metrics.parquet` = (approach, k, metric, value). Metrics: calinski-harabasz (always), silhouette (subsampled to 50K). Add `cluster_results_root()` + `cluster_results()` to StudyAreaPaths. Wire into `__init__.py`. | `stage3_analysis/cluster_results_writer.py` (new), `utils/paths.py` (edit), `stage3_analysis/__init__.py` (edit) | Raw labels stored, no pre-sorted columns. Both parquets match schema. Silhouette subsampled. |
+| 4b-2 | stage3-analyst | Build `stage3_analysis/cluster_comparison_plotter.py`: `ClusterComparisonPlotter` class. Globs `cluster_results/*/assignments.parquet`. Side-by-side cluster maps per approach for given k. At render time: loads sort target (leefbaarometer or one-hot morphology via `urban_taxonomy_target.py`), computes mean per cluster, relabels 0=lowest..k-1=highest, renders with `rasterize_categorical(cmap="viridis")`. Also: R² bar equivalent = cluster quality bar chart (calinski-harabasz per approach). CLI with `--sort-by` (default: lbm). | `stage3_analysis/cluster_comparison_plotter.py` (new) | Sorted labels produce monotonic gradient. Maps use viridis. `--sort-by` works for all 20 criteria. |
+
+**__init__.py ownership**: Agent 4b-1.
+
+### SYNC 4b — Human decision point
+
+> **Go/no-go**: Do sorted cluster labels produce a meaningful gradient? Do maps look comparable?
+
+### Wave 4c — QAQC (1 agent)
+
+| # | Agent | Task | Acceptance criteria |
+|---|-------|------|-------------------|
+| 4c | qaqc | Verify cluster writer + plotter extension: imports, schema, sorting logic, no hardcoded paths, leefbaarometer join correctness | Verdict: committable or list of fixes |
+
+### SYNC 4c — Human decision point
+
+> Committable? → Wave 5. Fixes needed? → re-dispatch.
+
+### Wave 5 — Commit + Notify (coordinator direct)
+
+- Commit cluster pipeline additions
+- Send "ready" message to coral-falling-snow with updated capabilities
+
 ### Final Wave — Close-out (mandatory)
 
 1. Write coordinator scratchpad (`.claude/scratchpad/coordinator/2026-03-21.md`)
