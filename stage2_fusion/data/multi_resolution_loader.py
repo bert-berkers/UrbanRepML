@@ -4,7 +4,7 @@ Multi-resolution data loader for FullAreaUNet.
 Builds all four inputs the FullAreaUNet forward() method needs:
   - features_dict: per-modality tensors at finest resolution
   - edge_indices:  per-resolution adjacency graphs
-  - edge_weights:  per-resolution edge weights (uniform 1.0 for now)
+  - edge_weights:  per-resolution edge weights (uniform 1.0 or from accessibility graph)
   - mappings:      cross-resolution sparse parent-child matrices
 
 Lifetime: durable
@@ -46,6 +46,14 @@ class MultiResolutionLoader:
         Path to the raw concat parquet. If None, auto-resolves from StudyAreaPaths.
     year : str
         Data year label for path resolution (e.g. "2022", "20mix").
+    accessibility_graph : str or Path or None
+        Path to an accessibility-weighted edge Parquet produced by
+        ``stage2_fusion.graphs.accessibility_graph.build_accessibility_graph``.
+        When provided, the finest resolution uses edges and gravity weights
+        from this file instead of a uniform 1-ring lattice.  Coarser
+        resolutions still fall back to uniform 1-ring adjacency.
+        When None (default), all resolutions use uniform 1-ring with
+        edge_weight = 1.0 (backward-compatible).
     """
 
     def __init__(
@@ -54,11 +62,17 @@ class MultiResolutionLoader:
         resolutions: Optional[List[int]] = None,
         feature_source: Optional[str] = None,
         year: str = "2022",
+        accessibility_graph: Optional[str] = None,
     ):
         self.study_area = study_area
         self.resolutions = resolutions or [9, 8, 7]
         self.year = year
         self.paths = StudyAreaPaths(study_area)
+
+        # Accessibility graph (finest resolution only)
+        self._accessibility_graph_path: Optional[Path] = (
+            Path(accessibility_graph) if accessibility_graph is not None else None
+        )
 
         # Resolve feature source path
         if feature_source is not None:
@@ -253,60 +267,146 @@ class MultiResolutionLoader:
     ) -> Tuple[Dict[int, torch.Tensor], Dict[int, torch.Tensor]]:
         """Build adjacency edge_index tensors for each resolution.
 
-        Uses SRAI's H3Neighbourhood.get_neighbours() for neighbor lookup per
-        CLAUDE.md policy (grid_disk/grid_ring must go through SRAI).
-        H3Neighbourhood.get_neighbours(index) returns the 6 immediate neighbors
-        of a hex cell (does not include the center cell itself).
+        When an accessibility graph Parquet is provided, the **finest**
+        resolution uses edges and gravity weights from that file.  Coarser
+        resolutions always use the uniform 1-ring lattice (edge_weight=1.0).
 
-        Loads precomputed neighbourhood pickles from StudyAreaPaths.neighbourhood_dir()
-        when available (see scripts/stage2/precompute_neighbourhoods.py).  A precomputed
-        neighbourhood has _available_indices set, so get_neighbours() already filters to
-        study-area cells; the ``if neighbor in hex_set`` guard below is kept for
-        correctness when falling back to a bare (unfiltered) H3Neighbourhood.
+        For the uniform path, uses SRAI's H3Neighbourhood.get_neighbours()
+        for neighbor lookup per CLAUDE.md policy.  Loads precomputed
+        neighbourhood pickles from StudyAreaPaths.neighbourhood_dir() when
+        available.
 
         Returns
         -------
         edge_indices : Dict[int, Tensor [2, E]]
-        edge_weights : Dict[int, Tensor [E]]  — uniform 1.0 weights
+        edge_weights : Dict[int, Tensor [E]]
         """
         edge_indices = {}
         edge_weights = {}
 
         for res in self.resolutions:
-            neighbourhood = self._load_neighbourhood(res)
-
-            hex_list = self._hex_lists[res]
-            hex_set = set(hex_list)
-            hex_to_idx = self._hex_indices[res]
-
-            src_list = []
-            dst_list = []
-
-            for hex_id in hex_list:
-                idx_src = hex_to_idx[hex_id]
-                # get_neighbours returns the 6 immediate neighbors (no center cell).
-                # When neighbourhood has _available_indices, this call already filters
-                # to study-area cells.  The guard below is kept as a correctness
-                # backstop for the bare-neighbourhood fallback path.
-                neighbors = neighbourhood.get_neighbours(hex_id)
-                for neighbor in neighbors:
-                    if neighbor in hex_set:
-                        idx_dst = hex_to_idx[neighbor]
-                        src_list.append(idx_src)
-                        dst_list.append(idx_dst)
-
-            edge_index = torch.tensor([src_list, dst_list], dtype=torch.long)
-            edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float32)
-
-            edge_indices[res] = edge_index
-            edge_weights[res] = edge_weight
-
-            logger.info(
-                f"Built adjacency for res{res}: {len(hex_list):,} nodes, "
-                f"{edge_index.shape[1]:,} edges"
-            )
+            # Use accessibility graph for the finest resolution when available
+            if res == self.finest_res and self._accessibility_graph_path is not None:
+                ei, ew = self._load_accessibility_edges(res)
+                edge_indices[res] = ei
+                edge_weights[res] = ew
+            else:
+                ei, ew = self._build_uniform_adjacency(res)
+                edge_indices[res] = ei
+                edge_weights[res] = ew
 
         return edge_indices, edge_weights
+
+    def _build_uniform_adjacency(
+        self, res: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Build a uniform 1-ring adjacency graph for a single resolution.
+
+        Returns edge_index [2, E] and edge_weight [E] (all 1.0).
+        """
+        neighbourhood = self._load_neighbourhood(res)
+
+        hex_list = self._hex_lists[res]
+        hex_set = set(hex_list)
+        hex_to_idx = self._hex_indices[res]
+
+        src_list = []
+        dst_list = []
+
+        for hex_id in hex_list:
+            idx_src = hex_to_idx[hex_id]
+            neighbors = neighbourhood.get_neighbours(hex_id)
+            for neighbor in neighbors:
+                if neighbor in hex_set:
+                    idx_dst = hex_to_idx[neighbor]
+                    src_list.append(idx_src)
+                    dst_list.append(idx_dst)
+
+        edge_index = torch.tensor([src_list, dst_list], dtype=torch.long)
+        edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float32)
+
+        logger.info(
+            f"Built uniform adjacency for res{res}: {len(hex_list):,} nodes, "
+            f"{edge_index.shape[1]:,} edges"
+        )
+
+        return edge_index, edge_weight
+
+    def _load_accessibility_edges(
+        self, res: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Load edges and gravity weights from an accessibility Parquet.
+
+        Reads the Parquet produced by
+        ``stage2_fusion.graphs.accessibility_graph.build_accessibility_graph``,
+        maps hex string IDs to the integer indices already established in
+        ``self._hex_indices[res]``, and uses ``gravity_weight`` as the edge
+        weight (it already incorporates distance decay and building mass).
+
+        Edges whose origin or destination hex is not in the loader's hex set
+        for this resolution are silently dropped (the accessibility graph may
+        cover a slightly different footprint).
+
+        Returns
+        -------
+        edge_index : Tensor [2, E]
+        edge_weight : Tensor [E]
+        """
+        path = self._accessibility_graph_path
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Accessibility graph Parquet not found: {path}"
+            )
+
+        logger.info(f"Loading accessibility edges from {path}")
+        df = pd.read_parquet(path)
+
+        required_cols = {"origin_hex", "dest_hex", "gravity_weight"}
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(
+                f"Accessibility Parquet is missing columns: {missing}. "
+                f"Expected: {required_cols}"
+            )
+
+        hex_to_idx = self._hex_indices[res]
+
+        # Filter to edges where both endpoints are in our hex set
+        mask_origin = df["origin_hex"].isin(hex_to_idx)
+        mask_dest = df["dest_hex"].isin(hex_to_idx)
+        df = df[mask_origin & mask_dest]
+
+        if len(df) == 0:
+            logger.warning(
+                f"No accessibility edges matched hex set at res{res}. "
+                f"Falling back to uniform 1-ring adjacency."
+            )
+            return self._build_uniform_adjacency(res)
+
+        # Map hex IDs to integer indices
+        src_indices = df["origin_hex"].map(hex_to_idx).values
+        dst_indices = df["dest_hex"].map(hex_to_idx).values
+
+        edge_index = torch.tensor(
+            np.stack([src_indices, dst_indices], axis=0), dtype=torch.long
+        )
+        edge_weight = torch.tensor(
+            df["gravity_weight"].values, dtype=torch.float32
+        )
+
+        n_nodes = len(self._hex_lists[res])
+        logger.info(
+            f"Loaded accessibility graph for res{res}: {n_nodes:,} nodes, "
+            f"{edge_index.shape[1]:,} edges "
+            f"(gravity_weight range: [{edge_weight.min():.4f}, {edge_weight.max():.4f}])"
+        )
+
+        # TODO (Option B): For coarser resolutions, aggregate gravity weights
+        # from children's edges instead of falling back to uniform 1-ring.
+        # Implementation: for each coarser hex pair, average the gravity
+        # weights of edges between their children hexagons.
+
+        return edge_index, edge_weight
 
     # ------------------------------------------------------------------
     # Cross-resolution mappings
@@ -402,9 +502,21 @@ if __name__ == "__main__":
     print("MultiResolutionLoader smoke test")
     print("=" * 60)
 
+    # Optional: pass --accessibility-graph path/to/walk_res9.parquet
+    import argparse
+
+    parser = argparse.ArgumentParser(description="MultiResolutionLoader smoke test")
+    parser.add_argument(
+        "--accessibility-graph",
+        default=None,
+        help="Path to accessibility Parquet for finest resolution edges",
+    )
+    args = parser.parse_args()
+
     loader = MultiResolutionLoader(
         study_area="netherlands",
         resolutions=[9, 8, 7],
+        accessibility_graph=args.accessibility_graph,
     )
 
     data = loader.load()

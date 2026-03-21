@@ -163,28 +163,37 @@ def register_coordinator() -> tuple[str, list[dict]]:
         existing_claims = cr.read_all_claims(COORDINATORS_DIR)
         active_claims = [c for c in existing_claims if not cr.is_stale(c)]
 
-        # Generate a unique session ID
-        session_id = cr.generate_session_id(COORDINATORS_DIR)
-
-        # Write initial claim (broad -- coordinator will narrow after user states task)
+        # Check if this terminal already has a session (survives /clear)
+        existing_session = cr.read_ppid_session(COORDINATORS_DIR)
         now = datetime.now().isoformat(timespec="seconds")
-        claim_data = {
-            "session_id": session_id,
-            "started_at": now,
-            "heartbeat_at": now,
-            "task_summary": "Starting up -- task not yet specified",
-            "domain": {
-                "primary": "unknown",
-                "description": "Coordinator registering; will narrow claimed_paths after task is known",
-            },
-            "claimed_paths": ["*"],
-            "read_only_paths": [],
-            "active_agents": [],
-        }
-        cr.write_claim(COORDINATORS_DIR, claim_data)
 
-        # Persist session_id as PPID-keyed file
-        cr.write_ppid_session(COORDINATORS_DIR, session_id)
+        if existing_session:
+            # Same terminal after /clear — reuse session identity
+            session_id = existing_session
+            # Update heartbeat on existing claim (if claim file exists)
+            cr.update_heartbeat(COORDINATORS_DIR, session_id)
+        else:
+            # Fresh terminal — generate new session ID
+            session_id = cr.generate_session_id(COORDINATORS_DIR)
+
+            # Write initial claim (broad -- coordinator will narrow after user states task)
+            claim_data = {
+                "session_id": session_id,
+                "started_at": now,
+                "heartbeat_at": now,
+                "task_summary": "Starting up -- task not yet specified",
+                "domain": {
+                    "primary": "unknown",
+                    "description": "Coordinator registering; will narrow claimed_paths after task is known",
+                },
+                "claimed_paths": ["*"],
+                "read_only_paths": [],
+                "active_agents": [],
+            }
+            cr.write_claim(COORDINATORS_DIR, claim_data)
+
+            # Persist session_id as PPID-keyed file
+            cr.write_ppid_session(COORDINATORS_DIR, session_id)
 
         # Cleanup obviously stale sessions (2h+ old) from prior crashes
         cr.cleanup_stale(COORDINATORS_DIR, threshold_hours=2)

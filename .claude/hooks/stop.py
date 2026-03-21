@@ -115,17 +115,11 @@ def deregister_coordinator() -> None:
         # Delete this session's claim file
         cr.delete_claim(COORDINATORS_DIR, session_id)
 
-        # Archive terminal-PID-keyed session file — supra persists across /clear
-        # Supra files are archived by cleanup_stale_ppid_files when process is dead
-        ppid = cr.get_terminal_pid()
-        sessions_dir = COORDINATORS_DIR / cr.SESSIONS_SUBDIR
-        if sessions_dir.is_dir():
-            archive = sessions_dir / "archive"
-            for f in sessions_dir.glob(f"*.{ppid}"):
-                if f.is_dir():
-                    continue
-                archive.mkdir(exist_ok=True)
-                f.rename(archive / f.name)
+        # Clear session_id from terminal file — supra persists (same terminal)
+        data = cr._read_terminal_file(COORDINATORS_DIR)
+        if data and "session_id" in data:
+            del data["session_id"]
+            cr._write_terminal_file(COORDINATORS_DIR, data)
 
         # Clean up crashed sessions (2h+ old)
         cr.cleanup_stale(COORDINATORS_DIR, threshold_hours=2)

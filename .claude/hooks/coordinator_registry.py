@@ -468,11 +468,10 @@ def update_heartbeat(coordinators_dir: Path, session_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PPID-keyed session identity
+# Terminal-keyed identity: coordinators/terminals/{pid}.yaml
 # ---------------------------------------------------------------------------
 
-SESSIONS_SUBDIR = "sessions"   # coordinators/sessions/
-SUPRA_SUBDIR = "supra"         # coordinators/supra/
+TERMINALS_SUBDIR = "terminals"  # coordinators/terminals/
 
 
 def get_terminal_pid() -> int:
@@ -480,14 +479,11 @@ def get_terminal_pid() -> int:
 
     Walks up the process tree via psutil to find node.exe (Claude Code),
     then returns its parent's PID (the terminal shell, e.g. powershell.exe).
-    The terminal shell PID is stable for the lifetime of the terminal tab and
-    survives /clear (which only restarts node.exe).
 
     Process tree on this machine:
         pycharm64.exe -> powershell.exe (STABLE) -> node.exe (CHANGES) -> bash.exe -> python.exe (hook)
 
-    Falls back to os.getppid() if psutil is unavailable or the tree walk fails
-    (e.g., the hook runs in a context without a node.exe ancestor).
+    Falls back to os.getppid() if psutil is unavailable or the tree walk fails.
     """
     try:
         import psutil
@@ -496,13 +492,11 @@ def get_terminal_pid() -> int:
             p = p.parent()
             if p is None:
                 break
-            # Find the first node / node.exe process walking upward
             try:
                 name = p.name().lower()
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 break
             if name in ("node", "node.exe"):
-                # The terminal shell is node's parent
                 terminal = p.parent()
                 if terminal is not None:
                     try:
@@ -512,7 +506,6 @@ def get_terminal_pid() -> int:
                 break
     except Exception:
         pass
-    # Fallback: direct parent (original os.getppid() behaviour)
     return os.getppid()
 
 
@@ -533,90 +526,90 @@ def _is_process_alive(pid: int) -> bool:
             return False
 
 
-def write_ppid_session(coordinators_dir: Path, session_id: str) -> None:
-    """Write terminal-PID-keyed session file: sessions/{session_id}.{terminal_pid}
+def _read_terminal_file(coordinators_dir: Path, pid: int | None = None) -> dict | None:
+    """Read terminals/{pid}.yaml, returns parsed dict or None."""
+    if yaml is None:
+        return None
+    if pid is None:
+        pid = get_terminal_pid()
+    path = coordinators_dir / TERMINALS_SUBDIR / f"{pid}.yaml"
+    if not path.exists():
+        return None
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or None
+    except Exception:
+        return None
 
-    The key is the terminal shell PID (stable across /clear), not the direct
-    parent process PID. This ensures the session file survives Claude Code
-    restarts (/clear) within the same terminal tab.
-    """
-    ppid = get_terminal_pid()
-    sessions_dir = coordinators_dir / SESSIONS_SUBDIR
-    sessions_dir.mkdir(exist_ok=True)
-    # Archive any previous session file for this PPID (from prior /clear)
-    archive = sessions_dir / "archive"
-    for old in sessions_dir.glob(f"*.{ppid}"):
-        if old.is_dir():
-            continue
-        archive.mkdir(exist_ok=True)
-        old.rename(archive / old.name)
-    path = sessions_dir / f"{session_id}.{ppid}"
-    path.write_text(session_id, encoding="utf-8")
+
+def _write_terminal_file(coordinators_dir: Path, data: dict, pid: int | None = None) -> None:
+    """Atomically write terminals/{pid}.yaml."""
+    if yaml is None:
+        return
+    if pid is None:
+        pid = get_terminal_pid()
+    terminals_dir = coordinators_dir / TERMINALS_SUBDIR
+    terminals_dir.mkdir(parents=True, exist_ok=True)
+    path = terminals_dir / f"{pid}.yaml"
+    tmp = path.with_suffix(".yaml.tmp")
+    try:
+        tmp.write_text(
+            yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        os.replace(str(tmp), str(path))
+    except Exception as exc:
+        print(f"coordinator_registry: failed to write {path}: {exc}", file=sys.stderr)
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def write_ppid_session(coordinators_dir: Path, session_id: str) -> None:
+    """Set session_id in this terminal's identity file."""
+    data = _read_terminal_file(coordinators_dir) or {}
+    data["session_id"] = session_id
+    if "started_at" not in data:
+        data["started_at"] = datetime.now().isoformat(timespec="seconds")
+    _write_terminal_file(coordinators_dir, data)
 
 
 def write_ppid_supra(coordinators_dir: Path, supra_session_id: str) -> None:
-    """Write terminal-PID-keyed supra file: supra/{supra_session_id}.{terminal_pid}
-
-    The key is the terminal shell PID (stable across /clear), not the direct
-    parent process PID. Supra files persist across /clear cycles within the
-    same terminal tab.
-    """
-    ppid = get_terminal_pid()
-    supra_dir = coordinators_dir / SUPRA_SUBDIR
-    supra_dir.mkdir(exist_ok=True)
-    # Archive any previous supra file for this PPID
-    archive = supra_dir / "archive"
-    for old in supra_dir.glob(f"*.{ppid}"):
-        if old.is_dir():
-            continue
-        archive.mkdir(exist_ok=True)
-        old.rename(archive / old.name)
-    path = supra_dir / f"{supra_session_id}.{ppid}"
-    path.write_text(supra_session_id, encoding="utf-8")
+    """Set supra_session_id in this terminal's identity file."""
+    data = _read_terminal_file(coordinators_dir) or {}
+    data["supra_session_id"] = supra_session_id
+    _write_terminal_file(coordinators_dir, data)
 
 
 def read_ppid_session(coordinators_dir: Path) -> str | None:
-    """Read session_id for this terminal's stable PID."""
-    ppid = get_terminal_pid()
-    sessions_dir = coordinators_dir / SESSIONS_SUBDIR
-    if not sessions_dir.is_dir():
-        return None
-    matches = list(sessions_dir.glob(f"*.{ppid}"))
-    if matches:
-        return matches[0].read_text(encoding="utf-8").strip()
-    return None
+    """Read session_id for this terminal's PID."""
+    data = _read_terminal_file(coordinators_dir)
+    return data.get("session_id") if data else None
 
 
 def read_ppid_supra(coordinators_dir: Path) -> str | None:
-    """Read supra_session_id for this terminal's stable PID."""
-    ppid = get_terminal_pid()
-    supra_dir = coordinators_dir / SUPRA_SUBDIR
-    if not supra_dir.is_dir():
-        return None
-    matches = list(supra_dir.glob(f"*.{ppid}"))
-    if matches:
-        return matches[0].read_text(encoding="utf-8").strip()
-    return None
+    """Read supra_session_id for this terminal's PID."""
+    data = _read_terminal_file(coordinators_dir)
+    return data.get("supra_session_id") if data else None
 
 
 def cleanup_stale_ppid_files(coordinators_dir: Path) -> None:
-    """Archive session and supra files for dead processes into archive/ subdir."""
-    for subdir in (SESSIONS_SUBDIR, SUPRA_SUBDIR):
-        d = coordinators_dir / subdir
-        if not d.is_dir():
+    """Archive terminal files for dead processes."""
+    terminals_dir = coordinators_dir / TERMINALS_SUBDIR
+    if not terminals_dir.is_dir():
+        return
+    archive = terminals_dir / "archive"
+    for f in terminals_dir.iterdir():
+        if f.is_dir():
             continue
-        archive = d / "archive"
-        for f in d.iterdir():
-            if f.is_dir():
-                continue
-            try:
-                pid = int(f.name.rsplit(".", 1)[-1])
-                if not _is_process_alive(pid):
-                    archive.mkdir(exist_ok=True)
-                    f.rename(archive / f.name)
-            except (ValueError, OSError):
+        try:
+            pid = int(f.stem)
+            if not _is_process_alive(pid):
                 archive.mkdir(exist_ok=True)
                 f.rename(archive / f.name)
+        except (ValueError, OSError):
+            archive.mkdir(exist_ok=True)
+            f.rename(archive / f.name)
 
 
 def archive_old_messages(coordinators_dir: Path) -> None:
