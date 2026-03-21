@@ -10,7 +10,7 @@ SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
 COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
 
 # Lines of context to inject from each scratchpad source
-CONTEXT_LINES = 5
+CONTEXT_LINES = 100
 
 # Pipeline adjacency graph: which agents are "neighbors" in the processing pipeline.
 # When spawning an agent, we scan its neighbors' scratchpads for critical signals.
@@ -39,6 +39,7 @@ def last_lines(path: Path, n: int = CONTEXT_LINES) -> str:
         return ""
     lines = [l.strip() for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
     return "\n".join(lines[-n:])
+
 
 
 def latest_entry(agent_dir: Path) -> Path | None:
@@ -197,24 +198,37 @@ def main() -> None:
     agent_type = hook_input.get("agent_type", "unknown")
     today = date.today().isoformat()
 
+    # Resolve session ID for scratchpad isolation
+    session_id = "unknown"
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import coordinator_registry as cr
+        session_id = cr.read_ppid_session(SCRATCHPAD_ROOT.parent / "coordinators") or "unknown"
+    except Exception:
+        pass
+
+    scratchpad_path = f".claude/scratchpad/{agent_type}/{today}-{session_id}.md"
+
     # Build context injection
     parts = [
         f"## Scratchpad Protocol (auto-injected by SubagentStart hook)",
         f"**Today's date**: {today}",
         f"**Your agent type**: {agent_type}",
-        f"**Your scratchpad path**: `.claude/scratchpad/{agent_type}/{today}.md`",
+        f"**Session**: {session_id}",
+        f"**Your scratchpad path**: `{scratchpad_path}`",
         "",
-        "Before returning, you MUST write a scratchpad entry containing:",
-        "- `<!-- SUMMARY: one-line summary of what you did -->` (first line, machine-extractable)",
+        "Before returning, you MUST write a scratchpad entry to the path above.",
+        "Entry format: `## HH:MM — one-line summary` as section header (24h clock), then:",
         "- **What I did**: actions taken, files modified, decisions made",
         "- **Cross-agent observations**: what you read from other agents, what was useful/confusing",
         "- **Unresolved**: each item tagged `[open]`, `[stale]`, or `[blocked:reason]`",
         "",
-        "**Consolidation**: If today's entry exists, READ it first, then REWRITE as a single coherent",
-        "log — not append. Reconcile existing Unresolved items against reality before adding new ones.",
-        "Use summary tables over narrative when listing multiple items.",
+        "**Append, don't overwrite**: If the file exists, READ it first, then APPEND your new section at the bottom.",
+        "Do NOT rewrite or delete earlier entries — they belong to earlier agent invocations in this session.",
+        "Start each new entry with `**Prior entries**: ` followed by a one-line-per-entry index of what came before",
+        "(e.g., `10:15 — built probe writer | 10:45 — added paths.py methods`). This makes every entry a self-contained",
+        "context packet: the hook injects the tail of the file, so your entry must carry forward the gist of earlier work.",
         "For large outputs (code, data, reports), write to files and reference by path — don't paste inline.",
-        "Keep entries under 80 lines. If you need more, you're writing too much detail.",
     ]
 
     # Inject ego's latest assessment
@@ -227,8 +241,14 @@ def main() -> None:
             if stale:
                 parts.append(stale)
 
-    # Inject coordinator's latest entry
-    coord_entry = latest_entry(SCRATCHPAD_ROOT / "coordinator")
+    # Inject coordinator's latest entry (prefer this session's coordinator)
+    coord_dir = SCRATCHPAD_ROOT / "coordinator"
+    coord_session_file = coord_dir / f"{today}-{session_id}.md" if session_id != "unknown" else None
+    coord_entry = None
+    if coord_session_file and coord_session_file.exists():
+        coord_entry = coord_session_file
+    else:
+        coord_entry = latest_entry(coord_dir)
     if coord_entry:
         coord_tail = last_lines(coord_entry)
         if coord_tail:
@@ -238,11 +258,18 @@ def main() -> None:
                 parts.append(stale)
 
     # Inject the specialist's OWN most recent scratchpad for behavioral anchoring / continuity
-    own_entry = latest_entry(SCRATCHPAD_ROOT / agent_type)
+    # Prefer session-keyed file (same terminal), fall back to any latest entry
+    agent_dir = SCRATCHPAD_ROOT / agent_type
+    own_session_file = agent_dir / f"{today}-{session_id}.md" if session_id != "unknown" else None
+    own_entry = None
+    if own_session_file and own_session_file.exists():
+        own_entry = own_session_file
+    else:
+        own_entry = latest_entry(agent_dir)
     if own_entry:
         own_tail = last_lines(own_entry)
         if own_tail:
-            parts.extend(["", f"### Your last scratchpad ({own_entry.name}):", own_tail])
+            parts.extend(["", f"### Your scratchpad ({own_entry.name}):", own_tail])
             stale = staleness_warning(own_entry, "your last entry")
             if stale:
                 parts.append(stale)

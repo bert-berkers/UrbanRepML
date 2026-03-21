@@ -16,13 +16,14 @@ Every agent that does work MUST write a dated entry to `.claude/scratchpad/{agen
 
 ## Scratchpad Discipline
 
-- If an entry for today already exists, **update it in place** -- consolidate into a single coherent daily log
-- **Reconciliation-first**: Before writing ANY new Unresolved items, explicitly mark each existing item as resolved (remove) or still-open (keep with tag). Not optional.
+- **Session-keyed files**: Scratchpads are `{agent_type}/{date}-{session_id}.md`. Each terminal writes its own file — no cross-terminal clobbering.
+- **Append, don't overwrite**: Each agent invocation APPENDS a new timestamped section (`## HH:MM — summary`). Never rewrite earlier entries — they belong to earlier agent invocations.
+- **Prior entries index**: Start each new entry with `**Prior entries**: 10:15 — built X | 10:45 — added Y`. This makes every entry a self-contained context packet — the hook injects the tail, so your entry must carry forward the gist of earlier work.
+- Each entry should be self-contained and under 30 lines. Multiple short entries > one bloated rewrite.
+- **Reconciliation-first**: Before writing new Unresolved items, check if earlier entries in the same file already flagged them. Don't duplicate — reference by time.
 - Items tagged `[stale]` for 2+ sessions should be removed or escalated to the coordinator.
-- Do NOT append-only. Scratchpad bloat degrades signal quality (ego flagged this 2026-02-08)
-- Final entry should be a single coherent daily log, not an append-only stream
 - **Output references**: Reference large outputs by path, don't paste inline. Scratchpads are index + reasoning, not data.
-- Keep entries under 80 lines. If you need more, you're writing too much detail
+- The hook injects the last 100 lines of the most recent scratchpad — write your summary/unresolved at the bottom so it's what the next agent sees.
 
 ## Coordination Architecture
 
