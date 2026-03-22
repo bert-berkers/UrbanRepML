@@ -215,6 +215,8 @@ def main():
         "num_convs": 10,
         "resolutions": resolutions,
     }
+    if args.supervised:
+        model_config["n_targets"] = 5
 
     checkpoint_dir = paths.checkpoints("unet")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)

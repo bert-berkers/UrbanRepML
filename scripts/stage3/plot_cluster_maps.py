@@ -175,6 +175,15 @@ def main():
         "--approach", type=str, default=None,
         help="Approach slug for ClusterResultsWriter (required with --write-standardized)",
     )
+    parser.add_argument(
+        "--sort-by-lbm", action="store_true",
+        help="Reorder cluster IDs by ascending mean leefbaarometer (lbm) score. "
+        "Low cluster IDs = low liveability, high cluster IDs = high liveability.",
+    )
+    parser.add_argument(
+        "--lbm-year", type=int, default=2022,
+        help="Leefbaarometer year for --sort-by-lbm (default: 2022)",
+    )
 
     args = parser.parse_args()
 
@@ -249,6 +258,33 @@ def main():
         reduced, args.k_values, standardize=True,
     )
 
+    # 6a. Sort clusters by mean leefbaarometer score (ascending) if requested
+    lbm_df = None
+    if args.sort_by_lbm:
+        lbm_path = paths.target_file("leefbaarometer", resolution, args.lbm_year)
+        if not lbm_path.exists():
+            print(f"WARNING: leefbaarometer target not found at {lbm_path}, skipping sort")
+        else:
+            lbm_df = pd.read_parquet(lbm_path)
+            if lbm_df.index.name != "region_id" and "region_id" in lbm_df.columns:
+                lbm_df = lbm_df.set_index("region_id")
+            # Keep only hexagons present in embeddings
+            lbm_shared = lbm_df["lbm"].reindex(emb_df.index).dropna()
+            print(f"LBM target loaded: {len(lbm_shared):,} / {len(emb_df):,} hexagons have lbm scores")
+
+            for k in list(cluster_results.keys()):
+                labels = cluster_results[k]
+                # Build Series: region_id -> cluster_label
+                label_series = pd.Series(labels, index=emb_df.index, name="cluster")
+                # Compute mean lbm per cluster (only for hexagons with lbm data)
+                merged = pd.DataFrame({"cluster": label_series, "lbm": lbm_shared})
+                merged = merged.dropna()
+                mean_lbm = merged.groupby("cluster")["lbm"].mean().sort_values()
+                # Create mapping: old_label -> new_label (rank by ascending mean lbm)
+                rank_map = {old: new for new, old in enumerate(mean_lbm.index)}
+                cluster_results[k] = np.array([rank_map[l] for l in labels])
+                print(f"  k={k}: clusters reordered by lbm (range {mean_lbm.iloc[0]:.3f} .. {mean_lbm.iloc[-1]:.3f})")
+
     # 6b. Write standardized cluster results if requested
     if args.write_standardized:
         out = ClusterResultsWriter.write_from_clustering(
@@ -273,18 +309,32 @@ def main():
         )
         plot_spatial_map(ax, image, extent, boundary_gdf)
 
+        sort_suffix = " (sorted by lbm)" if args.sort_by_lbm and lbm_df is not None else ""
         ax.set_title(
-            f"{title_prefix} -- MiniBatchKMeans k={k}\n"
+            f"{title_prefix} -- MiniBatchKMeans k={k}{sort_suffix}\n"
             f"H3 res{resolution} | {len(emb_df):,} hexagons",
             fontsize=12, fontweight="bold", pad=10,
         )
 
-        # Cluster legend
+        # Cluster legend -- annotate with mean lbm if sorted
         cmap_obj = plt.get_cmap(cmap)
-        legend_elements = [
-            Patch(facecolor=cmap_obj(i / max(k - 1, 1)), label=f"Cluster {i}")
-            for i in range(k)
-        ]
+        if args.sort_by_lbm and lbm_df is not None:
+            label_series = pd.Series(labels, index=emb_df.index, name="cluster")
+            merged_leg = pd.DataFrame({"cluster": label_series, "lbm": lbm_shared})
+            merged_leg = merged_leg.dropna()
+            mean_per_k = merged_leg.groupby("cluster")["lbm"].mean()
+            legend_elements = [
+                Patch(
+                    facecolor=cmap_obj(i / max(k - 1, 1)),
+                    label=f"C{i} (lbm={mean_per_k.get(i, float('nan')):.2f})",
+                )
+                for i in range(k)
+            ]
+        else:
+            legend_elements = [
+                Patch(facecolor=cmap_obj(i / max(k - 1, 1)), label=f"Cluster {i}")
+                for i in range(k)
+            ]
         ncol = 4 if k > 8 else 3
         ax.legend(
             handles=legend_elements, loc="lower left", ncol=ncol,

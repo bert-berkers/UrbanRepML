@@ -110,10 +110,16 @@ def load_model_and_data(args, resolutions, device):
         }
         logger.info(f"Legacy checkpoint — using dims={dims} from args/defaults")
 
+    # Detect supervised head weights in checkpoint and set n_targets accordingly
+    supervised_keys = [k for k in checkpoint["model_state"] if k.startswith("supervised_head.")]
+    if supervised_keys and "n_targets" not in model_config:
+        model_config["n_targets"] = 5  # default: 5 leefbaarometer domains
+        logger.info("Detected supervised head in checkpoint, setting n_targets=5")
+
     model = FullAreaUNet(**model_config, device=str(device))
     model.to(device)
 
-    model.load_state_dict(checkpoint["model_state"])
+    model.load_state_dict(checkpoint["model_state"], strict=False)
     logger.info(
         f"Loaded checkpoint from epoch {checkpoint['epoch']}, "
         f"loss {checkpoint['loss']:.6f}"
@@ -132,7 +138,7 @@ def extract_embeddings(model, features_dict, edge_indices, edge_weights, mapping
     """Run forward pass and return embeddings at all resolutions."""
     model.eval()
     with torch.no_grad():
-        embeddings, _ = model(features_dict, edge_indices, edge_weights, mappings)
+        embeddings, *_ = model(features_dict, edge_indices, edge_weights, mappings)
 
     # Move to CPU
     return {res: emb.detach().cpu().numpy() for res, emb in embeddings.items()}
