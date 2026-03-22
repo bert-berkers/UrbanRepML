@@ -692,9 +692,28 @@ No other files are modified. No new files are created.
 
 ---
 
-## Execution
+## Execution Status
 
-Next: Wave 1 (SupervisedHead + LossComputer rewrite)
+- **Waves 1-3**: DONE (OODA 1, commit 06b085d). SupervisedHead + LossComputer Kendall rewrite + training script --supervised flag. QAQC 14/14 PASS.
+- **Wave 4**: OODA 2 (train + probe + compare)
+- **Wave 5**: OODA 2 or 3 (verification + documentation)
+
+### OODA 2: Train + Compare
+
 ```
-/niche .claude/plans/2026-03-22-supervised-decoder-head.md -- Wave 1: SupervisedHead module + LossComputer Kendall rewrite
+/clear
+```
+Then:
+```
+/niche OODA 2 of 3: Train supervised UNet + probe + compare. Run: python scripts/stage2/train_full_area_unet.py --study-area netherlands --epochs 1500 --supervised --dims 74,37,18 --resolutions 9,8,7 --year 2022 --lr 1e-2 --patience 200 --warmup-epochs 50 --accessibility-graph data/study_areas/netherlands/accessibility/walk_res9.parquet --wandb --wandb-name "unet-74-37-18-supervised-kendall". Then extract embeddings, run leefbaarometer probes (res9 + multiscale), write via ProbeResultsWriter, generate comparison chart across all approaches (concat 0.517, ring_agg 0.534, uniform 0.324, accessibility 0.441, accessibility_multiscale 0.476, supervised, supervised_multiscale). Target: beat ring_agg mean R^2=0.534.
+```
+
+### OODA 3: Weekend Close-Off
+
+```
+/clear
+```
+Then:
+```
+/niche OODA 3 of 3: Weekend close-off. Mark Wave 6 DONE in accessibility plan. Plan GTFS as public transport modality. Housekeeping: review scripts/one_off for stale items, ensure data/results organized. Write forward-look for next Friday.
 ```
