@@ -83,6 +83,16 @@ def parse_args():
         "--wandb-name", type=str, default=None,
         help="Custom wandb run name. Auto-generated if not set."
     )
+    parser.add_argument(
+        "--supervised", action="store_true", default=False,
+        help="Enable supervised leefbaarometer prediction heads "
+             "(Levering semantic bottleneck + Kendall loss weighting)"
+    )
+    parser.add_argument(
+        "--target-year", type=int, default=2022,
+        help="Leefbaarometer target year (default: 2022). "
+             "Only used when --supervised is set."
+    )
     return parser.parse_args()
 
 
@@ -107,6 +117,8 @@ def main():
     print(f"  Patience:    {args.patience}")
     if args.accessibility_graph:
         print(f"  Acc. graph:  {args.accessibility_graph}")
+    if args.supervised:
+        print(f"  Supervised:  YES (target year {args.target_year})")
     print("=" * 60)
 
     # ---- 1. Load multi-resolution data ----
@@ -147,6 +159,55 @@ def main():
         k: v.to(device) for k, v in data["mappings"].items()
     }
 
+    # ---- 2b. Load supervised targets (optional) ----
+    target_data = None
+    if args.supervised:
+        target_path = paths.target_file("leefbaarometer", finest_res, args.target_year)
+        logger.info(f"Loading leefbaarometer targets from {target_path}")
+
+        target_df = pd.read_parquet(target_path)
+
+        # Domain columns: fys, onv, soc, vrz, won (NOT lbm -- that's derived via semantic bottleneck)
+        domain_cols = ["fys", "onv", "soc", "vrz", "won"]
+        lbm_col = "lbm"
+
+        # Align targets to hex_ids[finest_res] via index matching, preserving hex_ids order
+        hex_ids_finest = hex_ids[finest_res]
+        hex_series = pd.Series(range(len(hex_ids_finest)), index=hex_ids_finest, name="idx")
+
+        # Build mask: True for hexes that have leefbaarometer data
+        target_mask = torch.zeros(len(hex_ids_finest), dtype=torch.bool)
+        matched = hex_series.index.intersection(target_df.index)
+        matched_indices = hex_series.loc[matched].values
+        target_mask[matched_indices] = True
+
+        # Extract target values for masked hexes, in the order they appear in hex_ids
+        target_values = target_df.reindex([h for h in hex_ids_finest if h in target_df.index])
+
+        domain_tensor = torch.tensor(
+            target_values[domain_cols].values, dtype=torch.float32
+        ).to(device)
+        lbm_tensor = torch.tensor(
+            target_values[[lbm_col]].values, dtype=torch.float32
+        ).to(device)
+
+        target_data = {
+            'domain': domain_tensor,
+            'lbm': lbm_tensor,
+            'mask': target_mask.to(device),
+        }
+
+        n_valid = target_mask.sum().item()
+        assert target_mask.sum() == len(target_data['domain']), (
+            f"Mask count ({target_mask.sum()}) != target rows ({len(target_data['domain'])})"
+        )
+        logger.info(
+            f"Supervised targets loaded: {n_valid:,} / {len(hex_ids_finest):,} "
+            f"hexagons have leefbaarometer data ({100*n_valid/len(hex_ids_finest):.1f}%)"
+        )
+        print(f"  Supervised:  {n_valid:,} / {len(hex_ids_finest):,} hexagons "
+              f"({100*n_valid/len(hex_ids_finest):.1f}%)")
+
     # ---- 3. Configure and create trainer ----
     model_config = {
         "feature_dims": {"fused": feature_dim},
@@ -163,6 +224,7 @@ def main():
         city_name=args.study_area,
         checkpoint_dir=checkpoint_dir,
         year=args.year,
+        supervised=args.supervised,
     )
 
     # Log model parameter count
@@ -184,6 +246,8 @@ def main():
             run_name = f"unet-{dims_str}-{args.year}"
             if args.accessibility_graph:
                 run_name += "-accessibility"
+            if args.supervised:
+                run_name += "-supervised"
         wandb_config = {
             "run_name": run_name,
             "study_area": args.study_area,
@@ -191,6 +255,8 @@ def main():
             "accessibility_graph": args.accessibility_graph,
             "feature_dim": feature_dim,
             "n_params": n_params,
+            "supervised": args.supervised,
+            "target_year": args.target_year if args.supervised else None,
         }
 
     train_result = trainer.train(
@@ -203,6 +269,7 @@ def main():
         patience=args.patience,
         warmup_epochs=args.warmup_epochs,
         wandb_config=wandb_config,
+        target_data=target_data,
     )
 
     train_time = time.time() - t0
@@ -323,6 +390,8 @@ def main():
             "train_time_sec": round(train_time, 1),
             "n_params": n_params,
             "accessibility_graph": args.accessibility_graph,
+            "supervised": args.supervised,
+            "target_year": args.target_year if args.supervised else None,
         },
     )
 
@@ -334,6 +403,9 @@ def main():
     print(f"  Resolutions:    {resolutions}")
     print(f"  Feature dim:    {feature_dim} -> {dims[0]}D embeddings (pyramid {dims})")
     print(f"  Parameters:     {n_params:,}")
+    if args.supervised:
+        lc_params = sum(p.numel() for p in trainer.loss_computer.parameters())
+        print(f"  Supervised:     YES ({lc_params} Kendall log_sigma params)")
     print(f"  Best epoch:     {best_state['epoch']}")
     print(f"  Best loss:      {best_state['loss']:.6f}")
     print(f"  Training time:  {train_time:.1f}s ({train_time/60:.1f} min)")

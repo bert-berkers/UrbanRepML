@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 from tqdm.auto import tqdm
 
 try:
@@ -89,6 +89,43 @@ class SharedSparseMapping(nn.Module):
         # Then learnable transform (in_dim -> out_dim)
         transformed = self.transform(mapped)
         return transformed
+
+class SupervisedHead(nn.Module):
+    """Levering-style semantic bottleneck: embedding -> N domains -> 1 lbm.
+
+    The lbm prediction MUST pass through the N domain scores (semantic bottleneck).
+    This forces the embedding to encode interpretable liveability dimensions.
+
+    Architecture:
+        embedding [N, input_dim]
+            -> Linear(input_dim, input_dim // 2) + LayerNorm + GELU
+            -> Linear(input_dim // 2, n_domains)
+            -> domain_preds [N, n_domains]
+            -> Linear(n_domains, 1)
+            -> lbm_pred [N, 1]
+    """
+    def __init__(self, input_dim: int, n_domains: int = 5):
+        super().__init__()
+        self.domain_head = nn.Sequential(
+            nn.Linear(input_dim, input_dim // 2),
+            nn.LayerNorm(input_dim // 2),
+            nn.GELU(),
+            nn.Linear(input_dim // 2, n_domains),
+        )
+        self.lbm_head = nn.Linear(n_domains, 1)
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            x: Embedding tensor [N, input_dim]
+        Returns:
+            domain_preds: [N, n_domains] predicted domain scores
+            lbm_pred: [N, 1] predicted overall liveability
+        """
+        domain_preds = self.domain_head(x)
+        lbm_pred = self.lbm_head(domain_preds)
+        return domain_preds, lbm_pred
+
 
 class EncoderBlock(nn.Module):
     """GCNConv encoder block with optional input projection for dimension changes.
@@ -241,6 +278,7 @@ class FullAreaUNet(nn.Module):
             num_convs: int = 10,
             device: str = "cuda",
             resolutions: Optional[list] = None,
+            n_targets: int = 0,
             # Legacy args — ignored but accepted for backward compat
             hidden_dim: int = None,
             output_dim: int = None,
@@ -265,6 +303,14 @@ class FullAreaUNet(nn.Module):
 
         # Initial fusion: input -> dim_fine
         self.fusion = ModalityFusion(feature_dims, dim_fine)
+
+        # Supervised head (optional — Levering semantic bottleneck)
+        self.supervised = n_targets > 0
+        if self.supervised:
+            self.supervised_head = SupervisedHead(
+                input_dim=dim_fine,
+                n_domains=n_targets,
+            )
 
         # Encoder path (fine to coarse, dimensions expand)
         self.enc1 = EncoderBlock(dim_fine, dim_fine, num_convs)      # 64 -> 64
@@ -318,7 +364,10 @@ class FullAreaUNet(nn.Module):
             edge_indices: Dict[int, torch.Tensor],
             edge_weights: Dict[int, torch.Tensor],
             mappings: Dict[Tuple[int, int], torch.Tensor]
-    ) -> Tuple[Dict[int, torch.Tensor], Dict[str, torch.Tensor]]:
+    ) -> Union[
+        Tuple[Dict[int, torch.Tensor], Dict[str, torch.Tensor]],
+        Tuple[Dict[int, torch.Tensor], Dict[str, torch.Tensor], Dict[str, torch.Tensor]],
+    ]:
         """
         Args:
             features_dict: Input features per modality
@@ -326,8 +375,13 @@ class FullAreaUNet(nn.Module):
             edge_weights: Edge weights per resolution
             mappings: Cross-resolution mappings (fine->coarse sparse matrices)
         Returns:
-            embeddings: Learned embeddings per resolution (all dim_fine)
-            reconstructed: Reconstructed features per modality
+            When self.supervised is False:
+                embeddings: Learned embeddings per resolution (all dim_fine)
+                reconstructed: Reconstructed features per modality
+            When self.supervised is True:
+                embeddings, reconstructed, predictions
+                where predictions = {'domain_preds': [N_res_fine, n_targets],
+                                     'lbm_pred': [N_res_fine, 1]}
         """
         rf, rm, rc = self.res_fine, self.res_mid, self.res_coarse
 
@@ -362,12 +416,51 @@ class FullAreaUNet(nn.Module):
             for name in features_dict.keys()
         }
 
+        if self.supervised:
+            domain_preds, lbm_pred = self.supervised_head(embeddings[rf])
+            predictions = {
+                'domain_preds': domain_preds,
+                'lbm_pred': lbm_pred,
+            }
+            return embeddings, reconstructed, predictions
+
         return embeddings, reconstructed
 
-class LossComputer:
-    """Simplified loss computation focusing on balanced MSE across scales"""
-    def __init__(self, epsilon: float = 1e-8):
+class LossComputer(nn.Module):
+    """Loss computation with optional Kendall uncertainty weighting.
+
+    When n_supervised_components > 0, uses learnable log_sigma per loss component
+    (Kendall et al. 2018). Otherwise, uses fixed weights (backward compatible).
+
+    Kendall formula: total = sum_i [ L_i * exp(-2 * s_i) + s_i ]
+    where s_i = log(sigma_i). Self-balancing: no manual weight tuning needed.
+    """
+    def __init__(
+        self,
+        n_supervised_components: int = 0,
+        epsilon: float = 1e-8,
+    ):
+        super().__init__()
         self.epsilon = epsilon
+        self.use_kendall = n_supervised_components > 0
+
+        if self.use_kendall:
+            # Initialize log_sigma to 0 => sigma=1 => initial weight = exp(0) = 1
+            self.log_sigmas = nn.ParameterDict({
+                'recon': nn.Parameter(torch.tensor(0.0)),
+                'consist': nn.Parameter(torch.tensor(0.0)),
+            })
+            if n_supervised_components >= 1:
+                self.log_sigmas['domain'] = nn.Parameter(torch.tensor(0.0))
+            if n_supervised_components >= 2:
+                self.log_sigmas['lbm'] = nn.Parameter(torch.tensor(0.0))
+
+    def _kendall_weight(self, loss: torch.Tensor, log_sigma: nn.Parameter) -> torch.Tensor:
+        """Apply Kendall uncertainty weighting to a single loss component.
+
+        Returns: loss * exp(-2 * log_sigma) + log_sigma
+        """
+        return loss * torch.exp(-2 * log_sigma) + log_sigma
 
     def compute_losses(
             self,
@@ -375,8 +468,20 @@ class LossComputer:
             reconstructed: Dict[str, torch.Tensor],
             features_dict: Dict[str, torch.Tensor],
             mappings: Dict[Tuple[int, int], torch.Tensor],
-            loss_weights: Dict[str, float]
+            loss_weights: Dict[str, float],
+            predictions: Optional[Dict[str, torch.Tensor]] = None,
+            targets: Optional[Dict[str, torch.Tensor]] = None,
+            target_mask: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
+        """Compute all losses with optional supervised components.
+
+        New parameters (all optional, backward compatible):
+            predictions : dict with 'domain_preds' [N, n_domains] and 'lbm_pred' [N, 1]
+            targets     : dict with 'domain' [N_valid, n_domains] and 'lbm' [N_valid, 1]
+            target_mask : boolean tensor [N_res_fine], True where targets exist
+
+        Returns dict of named losses including 'total_loss'.
+        """
         # 1. Reconstruction loss (fine scale only)
         recon_losses = {}
         for name, pred in reconstructed.items():
@@ -385,29 +490,63 @@ class LossComputer:
                 F.normalize(pred, p=2, dim=1, eps=1e-8),
                 F.normalize(target, p=2, dim=1, eps=1e-8)
             )
-        total_recon_loss = sum(recon_losses.values()) * loss_weights['reconstruction']
+        raw_recon = sum(recon_losses.values())
 
         # 2. Consistency loss between scales (with equal weighting)
         consistency_losses = {}
         for (res_fine, res_coarse), mapping in mappings.items():
-            # Map fine embeddings to coarse resolution
             fine_mapped = torch.sparse.mm(mapping.t(), embeddings[res_fine])
             fine_mapped = F.normalize(fine_mapped, p=2, dim=1, eps=1e-8)
             coarse_emb = F.normalize(embeddings[res_coarse], p=2, dim=1, eps=1e-8)
-
-            # Calculate MSE for this scale pair
             consistency_losses[(res_fine, res_coarse)] = F.mse_loss(fine_mapped, coarse_emb)
+        raw_consist = sum(consistency_losses.values()) / len(consistency_losses)
 
-        # Average the consistency losses (equal weight per scale transition)
-        total_consistency_loss = (sum(consistency_losses.values()) / len(consistency_losses)) * loss_weights['consistency']
+        # 3. Supervised losses (only when predictions + targets provided)
+        raw_domain = None
+        raw_lbm = None
+        has_supervised = (
+            predictions is not None
+            and targets is not None
+            and target_mask is not None
+        )
 
-        return {
-            'total_loss': total_recon_loss + total_consistency_loss,
-            'reconstruction_loss': total_recon_loss,
-            'consistency_loss': total_consistency_loss,
+        if has_supervised:
+            masked_domain_preds = predictions['domain_preds'][target_mask]
+            masked_lbm_pred = predictions['lbm_pred'][target_mask]
+            raw_domain = F.mse_loss(masked_domain_preds, targets['domain'])
+            raw_lbm = F.mse_loss(masked_lbm_pred, targets['lbm'])
+
+        # 4. Combine losses
+        if self.use_kendall:
+            total = self._kendall_weight(raw_recon, self.log_sigmas['recon'])
+            total = total + self._kendall_weight(raw_consist, self.log_sigmas['consist'])
+
+            if has_supervised and raw_domain is not None:
+                total = total + self._kendall_weight(raw_domain, self.log_sigmas['domain'])
+                total = total + self._kendall_weight(raw_lbm, self.log_sigmas['lbm'])
+        else:
+            # Fixed weights (backward compatible path)
+            total = raw_recon * loss_weights['reconstruction']
+            total = total + raw_consist * loss_weights['consistency']
+
+        result = {
+            'total_loss': total,
+            'reconstruction_loss': raw_recon,
+            'consistency_loss': raw_consist,
             **{f'recon_loss_{name}': loss for name, loss in recon_losses.items()},
-            **{f'consistency_loss_{k[0]}_{k[1]}': v for k, v in consistency_losses.items()}
+            **{f'consistency_loss_{k[0]}_{k[1]}': v for k, v in consistency_losses.items()},
         }
+
+        if has_supervised:
+            result['domain_loss'] = raw_domain
+            result['lbm_loss'] = raw_lbm
+
+        if self.use_kendall:
+            for name, log_sigma in self.log_sigmas.items():
+                result[f'log_sigma_{name}'] = log_sigma
+                result[f'effective_weight_{name}'] = torch.exp(-2 * log_sigma)
+
+        return result
 
 class FullAreaModelTrainer:
     """Trainer for the Urban U-Net model."""
@@ -420,15 +559,29 @@ class FullAreaModelTrainer:
             wandb_project: str = "urbanrepml",
             checkpoint_dir: Optional[Path] = None,
             year: str = "2022",
+            supervised: bool = False,
+            n_targets: int = 5,
     ):
         logger.info("Initializing FullAreaModelTrainer...")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model_config = model_config
+        self.supervised = supervised
+
+        # Add n_targets to model_config when supervised
+        if supervised:
+            model_config = {**model_config, 'n_targets': n_targets}
+
         self.model = FullAreaUNet(**model_config, device=self.device)
         self.model.to(self.device)
         logger.info(f"Model initialized on {self.device}")
 
-        self.loss_computer = LossComputer()
+        # LossComputer: nn.Module when supervised (owns learnable log_sigma params)
+        if supervised:
+            self.loss_computer = LossComputer(n_supervised_components=2)
+            self.loss_computer.to(self.device)
+        else:
+            self.loss_computer = LossComputer()
+
         self.loss_weights = loss_weights or {
             'reconstruction': 1.0,
             'consistency': 0.3
@@ -517,7 +670,8 @@ class FullAreaModelTrainer:
               warmup_epochs: int = 10,
               patience: int = 100,
               gradient_clip: float = 1.0,
-              wandb_config: Optional[dict] = None) -> dict:
+              wandb_config: Optional[dict] = None,
+              target_data: Optional[Dict[str, torch.Tensor]] = None) -> dict:
         """Train the model and return a result dict.
 
         Parameters
@@ -527,6 +681,10 @@ class FullAreaModelTrainer:
             Expected keys: run_name (str), plus any metadata to log as config
             (study_area, year, accessibility_graph, etc.).
             wandb is opt-in: pass None to disable.
+        target_data : dict, optional
+            Supervised targets. Only used when self.supervised is True.
+            Keys: 'domain' [N_valid, n_targets], 'lbm' [N_valid, 1],
+                  'mask' [N_res_fine] bool.
 
         Returns
         -------
@@ -563,8 +721,14 @@ class FullAreaModelTrainer:
         elif wandb_config and not _WANDB_AVAILABLE:
             logger.warning("wandb_config provided but wandb is not installed — skipping")
 
+        # Optimizer includes loss_computer params when supervised (Kendall log_sigmas)
+        if self.supervised:
+            all_params = list(self.model.parameters()) + list(self.loss_computer.parameters())
+        else:
+            all_params = list(self.model.parameters())
+
         optimizer = torch.optim.AdamW(
-            self.model.parameters(),
+            all_params,
             lr=learning_rate,
             weight_decay=0.01,
             eps=1e-8
@@ -584,16 +748,26 @@ class FullAreaModelTrainer:
                 optimizer.zero_grad()
 
                 try:
-                    embeddings, reconstructed = self.model(
-                        features_dict, edge_indices, edge_weights, mappings
-                    )
+                    # Forward pass: supervised returns extra predictions dict
+                    if self.supervised:
+                        embeddings, reconstructed, predictions = self.model(
+                            features_dict, edge_indices, edge_weights, mappings
+                        )
+                    else:
+                        embeddings, reconstructed = self.model(
+                            features_dict, edge_indices, edge_weights, mappings
+                        )
+                        predictions = None
 
                     losses = self.loss_computer.compute_losses(
                         embeddings=embeddings,
                         reconstructed=reconstructed,
                         features_dict=features_dict,
                         mappings=mappings,
-                        loss_weights=self.loss_weights
+                        loss_weights=self.loss_weights,
+                        predictions=predictions,
+                        targets=target_data if self.supervised else None,
+                        target_mask=target_data['mask'] if self.supervised and target_data else None,
                     )
 
                     total_loss = losses['total_loss']
@@ -604,32 +778,39 @@ class FullAreaModelTrainer:
 
                     total_loss.backward()
 
-                    # Gradient clipping
+                    # Gradient clipping (include loss_computer params when supervised)
                     torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), max_norm=gradient_clip
+                        all_params, max_norm=gradient_clip
                     )
 
                     optimizer.step()
                     scheduler.step()
 
                     # Log gradient norms for monitoring
-                    grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in self.model.parameters() if p.grad is not None) ** 0.5
+                    grad_norm = sum(p.grad.data.norm(2).item() ** 2 for p in all_params if p.grad is not None) ** 0.5
 
                     current_lr = scheduler.get_last_lr()[0]
 
                     # Record per-epoch metrics
-                    loss_history.append({
+                    epoch_record = {
                         "epoch": epoch,
                         "total_loss": total_loss.item(),
                         "reconstruction_loss": losses['reconstruction_loss'].item(),
                         "consistency_loss": losses['consistency_loss'].item(),
                         "lr": current_lr,
                         "grad_norm": grad_norm,
-                    })
+                    }
+                    if self.supervised and 'domain_loss' in losses:
+                        epoch_record["domain_loss"] = losses['domain_loss'].item()
+                        epoch_record["lbm_loss"] = losses['lbm_loss'].item()
+                        for name in self.loss_computer.log_sigmas:
+                            epoch_record[f"log_sigma_{name}"] = losses[f'log_sigma_{name}'].item()
+                            epoch_record[f"effective_weight_{name}"] = losses[f'effective_weight_{name}'].item()
+                    loss_history.append(epoch_record)
 
                     # wandb per-epoch logging
                     if wb_run is not None:
-                        wandb.log({
+                        log_dict = {
                             "epoch": epoch,
                             "total_loss": total_loss.item(),
                             "reconstruction_loss": losses['reconstruction_loss'].item(),
@@ -637,7 +818,14 @@ class FullAreaModelTrainer:
                             "lr": current_lr,
                             "grad_norm": grad_norm,
                             "patience_counter": patience_counter,
-                        }, step=epoch)
+                        }
+                        if self.supervised and 'domain_loss' in losses:
+                            log_dict["domain_loss"] = losses['domain_loss'].item()
+                            log_dict["lbm_loss"] = losses['lbm_loss'].item()
+                            for name in self.loss_computer.log_sigmas:
+                                log_dict[f"log_sigma_{name}"] = losses[f'log_sigma_{name}'].item()
+                                log_dict[f"effective_weight_{name}"] = losses[f'effective_weight_{name}'].item()
+                        wandb.log(log_dict, step=epoch)
 
                     if total_loss.item() < best_loss:
                         best_loss = total_loss.item()
