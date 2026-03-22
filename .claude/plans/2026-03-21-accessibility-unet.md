@@ -214,37 +214,34 @@ Two fixes applied and validated:
 
 ---
 
-## Wave 6: Train and probe (sequential)
+## Wave 6: Train and probe (sequential) — DONE
 
-9. **execution**: Train FullAreaUNet with accessibility graph (1000 epochs, patience=100, LR=0.001). Save checkpoint with versioning to `data/study_areas/netherlands/stage2_fusion/checkpoints/`.
+Executed across OODA 1+2 on 2026-03-22. Evolved beyond original scope: supervised decoder head with Kendall uncertainty weighting (not just accessibility graph training).
 
-10. **stage3-analyst**: Probe the AccessibilityUNet embeddings against leefbaarometer. Write results to `probe_results/unet_accessibility/` using the standardized format (if Terminal B's writer is available, otherwise raw format and convert later).
+**Results**: Supervised multiscale R²=0.574 beats ring_agg 0.535. Per-target: lbm 0.562, vrz 0.826 (best), won 0.483 (raw_concat still wins at 0.618). Full comparison: `data/study_areas/netherlands/stage3_analysis/comparison/2026-03-22/summary.md`.
 
-### Gate 6: Did it beat ring agg?
-> **The question**: R² > 0.556?
-> - If yes → success, proceed to verification
-> - If no but close → worth investigating (hyperparameter tuning, different modes, graph refinement)
-> - If much worse → investigate why (graph may be too sparse, weights may need normalization)
+### Gate 6: PASSED (with nuance)
+> R² 0.574 > 0.556 target. But no single approach dominates all targets — local-vs-spatial tradeoff is real. Next: gated architecture to learn when to smooth vs preserve.
 
 ---
 
-## Wave 7: Verification
+## Wave 7: Verification — SKIPPED
 
-11. **qaqc**: Full verification pass:
-    - Accessibility graph: edge count, weight distribution, connectivity
-    - UNet training: convergence curve, final loss, no obvious pathologies
-    - Probe results: R² comparison table (raw concat, ring agg, UNet-uniform, UNet-accessibility)
-    - Code quality: new modules follow project conventions, no hardcoded paths
+Verification folded into OODA 2's inline QAQC (14/14 checks PASS in OODA 1, extraction bugs caught and fixed in OODA 2). Full verification not separately executed — the supervised decoder head plan (`2026-03-22-supervised-decoder-head.md`) superseded this wave.
 
 ---
 
-## Final Wave: Close-out
+## Final Wave: Close-out — DONE 2026-03-22
 
-- Coordinator scratchpad
-- `/librarian-update`
-- `/ego-check`
+Executed as OODA 3/3 weekend close-off.
 
-## Execution
-Next up: Wave 6 (train + probe). Start fresh:
-1. `/clear`
-2. `/niche .claude/plans/2026-03-21-accessibility-unet.md — Wave 6 train AccessibilityUNet + probe. Baseline: ring_agg R²=0.534.`
+## Status: COMPLETE
+
+This plan is finished. The accessibility UNet pipeline (Waves 1-6) delivered:
+- Accessibility graph generator with mode-specific road filtering
+- FullAreaUNet with SAGEConv edge_weight support
+- Supervised decoder head with Kendall uncertainty weighting
+- Mean R²=0.574 (vs ring_agg 0.535 baseline)
+- Full comparison suite with per-target analysis
+
+**Next direction**: Gated architecture to address local-vs-spatial tradeoff. See ego forward-look 2026-03-22.
