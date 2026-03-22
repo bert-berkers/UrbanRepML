@@ -376,6 +376,10 @@ def main() -> None:
             landscape = supra_reader.format_for_coordinator(supra_states, schema)
             if landscape:
                 parts.extend(["", "### Human's Attentional Landscape:", landscape])
+            # Inject strategic intent if set — this is the terminal's mission from /valuate
+            intent = supra_states.get("intent")
+            if intent:
+                parts.append(f"**Intent**: {intent}")
     except Exception as exc:
         print(f"session-start: supra state read failed: {exc}", file=sys.stderr)
 

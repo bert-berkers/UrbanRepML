@@ -151,10 +151,17 @@ def main() -> None:
         accepted_scratchpads = ["valuate", "coordinator"]
         found_scratchpad = None
         for sp_name in accepted_scratchpads:
-            sp_path = SCRATCHPAD_ROOT / sp_name / f"{today}.md"
+            sp_dir = SCRATCHPAD_ROOT / sp_name
+            # Check exact date match first, then session-keyed files ({date}-{session_id}.md)
+            sp_path = sp_dir / f"{today}.md"
             if sp_path.exists():
                 found_scratchpad = (sp_name, sp_path)
                 break
+            if sp_dir.is_dir():
+                session_keyed = sorted(sp_dir.glob(f"{today}-*.md"))
+                if session_keyed:
+                    found_scratchpad = (sp_name, session_keyed[-1])
+                    break
 
         # Check if any subagent scratchpads were written today (for richer error message)
         subagent_scratchpads = []
@@ -163,7 +170,7 @@ def main() -> None:
                 if not agent_dir.is_dir() or agent_dir.name in accepted_scratchpads:
                     continue
                 scratchpad = agent_dir / f"{today}.md"
-                if scratchpad.exists():
+                if scratchpad.exists() or list(agent_dir.glob(f"{today}-*.md")):
                     subagent_scratchpads.append(agent_dir.name)
 
         if not found_scratchpad:

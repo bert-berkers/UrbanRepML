@@ -227,6 +227,9 @@ def format_for_coordinator(states: dict, schema: dict) -> str:
         lines.append(cs_line)
         if compound.get("tension_warning"):
             lines.append(f"**Warning**: {compound['tension_warning']}")
+    intent = states.get("intent")
+    if intent:
+        lines.append(f"**Intent**: {intent}")
     focus, suppress = states.get("focus", []), states.get("suppress", [])
     focus_str = ', '.join(f'"{item}"' for item in focus) if focus else "(none)"
     lines.append(f"**Focus**: {focus_str}")
@@ -251,6 +254,9 @@ def format_for_agent(states: dict, schema: dict, agent_type: str) -> str:
         suffix = f" -- {guidance}" if guidance else ""
         lines.append(f"- {name}: {eff}/5 ({level}){suffix}")
     lines.append(f"Mode: {mode} -- {mode_desc}")
+    intent = states.get("intent")
+    if intent:
+        lines.append(f"Intent: {intent}")
     focus, suppress = states.get("focus", []), states.get("suppress", [])
     if focus:
         lines.append(f"Focus: {', '.join(f'\"{f}\"' for f in focus)}")
