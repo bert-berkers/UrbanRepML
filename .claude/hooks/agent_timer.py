@@ -63,7 +63,7 @@ def _read_supra_weights() -> dict:
         if hooks_dir not in sys.path:
             sys.path.insert(0, hooks_dir)
         import supra_reader
-        states = supra_reader.read_states()
+        states = supra_reader.read_session_states()
         schema = supra_reader.read_schema()
         if states and schema:
             enriched = supra_reader.apply_mode_biases(states, schema)

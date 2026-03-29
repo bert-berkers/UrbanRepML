@@ -34,13 +34,13 @@ Set the active graph to "static" using `supra_reader.set_active_graph("static")`
 
 Read the supra session ID via `coordinator_registry.read_ppid_supra()` (PPID-isolated, multi-terminal safe). Then read states:
 1. Try `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml` (supra-scoped, takes priority)
-2. Fall back to `.claude/supra/characteristic_states.yaml` (global default/prior)
+2. Fall back to hardcoded neutral defaults (all dimensions = 3)
 3. Read `.claude/supra/schema.yaml` for dimension definitions, groups, mode biases, agent relevance
 4. Determine current temporal segment from local time (e.g., `friday-evening`) using `supra_reader._temporal_segment_key()`
 5. Look up that segment in `supra/temporal_priors.yaml` using `supra_reader.get_temporal_prior()`
 6. If it exists and has sufficient observations, it becomes the "suggested prior" — available for the morning inread and as a shorthand option
 
-The global file is the prior — it provides defaults for sessions that haven't attuned yet. Your attunement writes session-scoped only, so parallel sessions with different goals don't overwrite each other.
+There is no global state file. Defaults are hardcoded neutral 3s. Your attunement writes session-scoped only, so parallel sessions with different goals don't overwrite each other.
 
 ### Step 2: Show Current Landscape
 
@@ -228,13 +228,13 @@ Based on user answers (from questionnaire or shorthand):
 3. **Non-selected dimensions**: Leave at their current values. Do NOT reset them to defaults.
 4. **New dimensions from recommendations**: Add to both files:
    - `schema.yaml`: add under `dimensions:` with a reasonable `group`, `default: 3`, labels, and agent_relevance
-   - `characteristic_states.yaml`: add to `dimensions:` with value 3 (or 4 if the user selected it for amplification)
+   - supra session file: add to `dimensions:` with value 3 (or 4 if the user selected it for amplification)
 5. **Intent**: Store the user's strategic intent as `intent` in the supra session file. This is what `/niche` reads to understand the terminal's mission.
 6. **Focus/suppress**: Replace the lists with the user's selections. If user said "skip", leave unchanged.
 7. **Metadata**: Set `last_attuned` to current ISO timestamp, `last_attuned_by` to the session name (read via `coordinator_registry.read_ppid_session()`, otherwise use "manual")
 8. **Record temporal observation**: Call `supra_reader.record_temporal_observation(states)` to update the EMA prior for the current temporal segment. This fires regardless of how the values were set (shorthand, questionnaire, or `use prior`). Every valuation is an observation.
 
-Write states to the **supra session file** at `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml` using `supra_reader.write_supra_session_states()`. The supra session ID is `{poetic_name}-{date}` (e.g., `hushed-spinning-glen-2026-03-14`) — named by the first coordinator in this terminal, persisting across `/clear` cycles. If no supra session ID is available, fall back to `supra_reader.write_session_states()`. Do NOT write to the global `characteristic_states.yaml` — that file is the prior/default for sessions that haven't attuned. The file format is:
+Write states to the **supra session file** at `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml` using `supra_reader.write_supra_session_states()`. The supra session ID is `{poetic_name}-{date}` (e.g., `hushed-spinning-glen-2026-03-14`) — named by the first coordinator in this terminal, persisting across `/clear` cycles. If no supra session ID is available, fall back to `supra_reader.write_session_states()`. There is no global `characteristic_states.yaml` — defaults are hardcoded neutral 3s in `supra_reader._DEFAULT_STATES`. The file format is:
 ```yaml
 mode: {mode}
 intent: "{strategic intent — what this terminal is for}"
@@ -309,7 +309,7 @@ This makes `/valuate` the single entry point for all sessions: orient → tune �
 
 - **Speed over thoroughness**: This skill should complete in one exchange (shorthand) or two exchanges (questionnaire + answers). Do not over-explain.
 - **Idempotent**: Running `/valuate` multiple times is fine. Re-running with no arguments re-displays the landscape and re-asks questions.
-- **Preserve unknowns**: If `characteristic_states.yaml` has fields you do not recognize, preserve them when writing back.
+- **Preserve unknowns**: If the supra session file has fields you do not recognize, preserve them when writing back.
 - **Clamping**: All dimension values must be integers in [1, 5]. Clamp if the user says something outside this range.
 - **Scratchpad**: After applying changes (Step 5), write a scratchpad entry to `.claude/scratchpad/valuate/YYYY-MM-DD.md`. This is how terminals communicate valuation decisions to each other — stigmergy at the needs/desires level.
 - **Mode biases are NOT baked in**: Mode biases are applied at read-time by `supra_reader.py`. The states file stores raw values only. Do not pre-apply biases when writing.

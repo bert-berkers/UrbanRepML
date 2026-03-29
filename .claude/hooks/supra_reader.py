@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Shared library for reading/writing human characteristic states (supra layer)."""
+"""Shared library for reading/writing session-scoped supra states.
+
+Session state lives in .claude/supra/sessions/{supra_id}.{ppid}.yaml.
+No global singleton — defaults are hardcoded neutral 3s.
+"""
 import json, os, re, sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -11,7 +15,6 @@ except ImportError:
     yaml = None  # type: ignore[assignment]
 
 SUPRA_DIR = Path(__file__).resolve().parents[1] / "supra"
-STATES_PATH = SUPRA_DIR / "characteristic_states.yaml"
 SCHEMA_PATH = SUPRA_DIR / "schema.yaml"
 SESSIONS_DIR = SUPRA_DIR / "sessions"
 COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
@@ -30,34 +33,30 @@ def _read_yaml(path: Path) -> dict:
         print(f"supra_reader: failed to read {path}: {exc}", file=sys.stderr)
         return {}
 
+_DEFAULT_STATES: dict = {
+    "mode": "focused",
+    "dimensions": {
+        "execution_speed": 3,
+        "exploration_vs_exploitation": 3,
+        "code_quality": 3,
+        "test_coverage": 3,
+        "spatial_correctness": 3,
+        "model_architecture": 3,
+        "urgency": 3,
+        "data_engineering_diligence": 3,
+    },
+    "focus": [],
+    "suppress": [],
+}
+
+
 def read_states() -> dict:
-    """Parse characteristic_states.yaml."""
-    return _read_yaml(STATES_PATH)
+    """Return hardcoded neutral defaults. Session state lives in supra session files."""
+    return dict(_DEFAULT_STATES)
 
 def read_schema() -> dict:
     """Parse schema.yaml."""
     return _read_yaml(SCHEMA_PATH)
-
-def write_states(states: dict) -> bool:
-    """Write updated states to characteristic_states.yaml. Returns True on success."""
-    if yaml is None:
-        return False
-    try:
-        SUPRA_DIR.mkdir(parents=True, exist_ok=True)
-        tmp_path = STATES_PATH.with_suffix(".yaml.tmp")
-        tmp_path.write_text(
-            yaml.dump(states, default_flow_style=False, allow_unicode=True, sort_keys=False),
-            encoding="utf-8",
-        )
-        os.replace(str(tmp_path), str(STATES_PATH))
-        return True
-    except Exception as exc:
-        print(f"supra_reader: failed to write {STATES_PATH}: {exc}", file=sys.stderr)
-        try:
-            tmp_path.unlink(missing_ok=True)  # type: ignore[possibly-undefined]
-        except Exception:
-            pass
-        return False
 
 # -- Session-scoped states ---------------------------------------------------
 
@@ -78,7 +77,7 @@ def _session_states_path(session_id: str) -> Path:
 
 
 def read_session_states(session_id: str | None = None) -> dict:
-    """Read session-scoped states, falling back to global characteristic_states.yaml."""
+    """Read session-scoped states, falling back to hardcoded neutral defaults."""
     if session_id is None:
         session_id = _current_session_id()
     if session_id:
@@ -95,7 +94,8 @@ def write_session_states(states: dict, session_id: str | None = None) -> bool:
     if session_id is None:
         session_id = _current_session_id()
     if not session_id:
-        return write_states(states)
+        print("supra_reader: no session ID, cannot write session states", file=sys.stderr)
+        return False
     try:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         path = _session_states_path(session_id)
@@ -449,7 +449,7 @@ def read_supra_session_states(supra_session_id: str | None = None) -> dict:
     """Read supra session file, falling back to coordinator session then global.
 
     Priority: supra_session_id param -> _current_supra_session_id() ->
-    _current_session_id() -> global characteristic_states.yaml.
+    _current_session_id() -> hardcoded neutral defaults.
     """
     # Try the provided or detected supra session ID first
     sid = supra_session_id or _current_supra_session_id()
@@ -708,7 +708,7 @@ def temporal_prior_to_states(prior: dict) -> dict:
     """Convert a temporal prior dict to a states dict for use as session defaults.
 
     Rounds float dimensions to integers (round half up).
-    Returns a dict in the same shape as characteristic_states.yaml:
+    Returns a dict in the standard states shape:
     {mode, dimensions, focus=[], suppress=[]}.
     """
     import math
