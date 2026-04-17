@@ -447,5 +447,12 @@ h3_*.cache
 .claude/scheduled_tasks.lock
 
 # ==========================================
+# One-off script generated artifacts
+# ==========================================
+# cluster_brush_viz v2 builder outputs (reproducible from build_raster.py)
+scripts/one_off/cluster_brush_viz/labels.json
+scripts/one_off/cluster_brush_viz/debug_preview_*.png
+
+# ==========================================
 # End of .gitignore
 # ==========================================
