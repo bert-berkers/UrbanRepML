@@ -233,7 +233,8 @@ def format_for_coordinator(states: dict, schema: dict) -> str:
     focus, suppress = states.get("focus", []), states.get("suppress", [])
     focus_str = ', '.join(f'"{item}"' for item in focus) if focus else "(none)"
     lines.append(f"**Focus**: {focus_str}")
-    lines.append(f"**Suppress**: {', '.join(f'\"{s}\"' for s in suppress) if suppress else '(none)'}")
+    suppress_str = ', '.join(f'"{s}"' for s in suppress) if suppress else "(none)"
+    lines.append(f"**Suppress**: {suppress_str}")
     lines.append(f"**Last attuned**: {_staleness(states.get('last_attuned'))}")
     return "\n".join(lines)
 
@@ -259,9 +260,11 @@ def format_for_agent(states: dict, schema: dict, agent_type: str) -> str:
         lines.append(f"Intent: {intent}")
     focus, suppress = states.get("focus", []), states.get("suppress", [])
     if focus:
-        lines.append(f"Focus: {', '.join(f'\"{f}\"' for f in focus)}")
+        focus_str = ', '.join(f'"{f}"' for f in focus)
+        lines.append(f"Focus: {focus_str}")
     if suppress:
-        lines.append(f"Suppress: {', '.join(f'\"{s}\"' for s in suppress)}")
+        suppress_str = ', '.join(f'"{s}"' for s in suppress)
+        lines.append(f"Suppress: {suppress_str}")
     return "\n".join(lines)
 
 # -- Named profiles ----------------------------------------------------------
