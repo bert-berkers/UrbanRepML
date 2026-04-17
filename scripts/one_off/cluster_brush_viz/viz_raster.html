@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Cluster Brush Viz — v2 (raster cathedral)</title>
+<title>Cluster Brush Viz — v2 (holographic cathedral)</title>
 <style>
   html, body {
     margin: 0; padding: 0; height: 100%; width: 100%;
-    background: #111; color: #ddd;
+    background: #050710; color: #ddd;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     overflow: hidden;
   }
@@ -18,6 +18,8 @@
     overflow: hidden;
     perspective: 3200px;
     perspective-origin: 50% 45%;
+    /* Holographic void: deep indigo core fading to near-black edges */
+    background: radial-gradient(ellipse at center, #1a1f2e 0%, #050710 80%);
   }
 
   #stage {
@@ -25,22 +27,23 @@
     left: 50%; top: 50%;
     width: 0; height: 0;
     transform-style: preserve-3d;
-    transform: rotateX(55deg) rotateZ(-45deg);
-    transition: transform 450ms cubic-bezier(0.4, 0.0, 0.2, 1);
+    /* default transform set at boot; animated by transition */
+    transition: transform 250ms cubic-bezier(0.2, 0.7, 0.2, 1);
   }
 
   .slab {
     position: absolute;
-    /* centered on the #stage origin */
     transform-style: preserve-3d;
-    will-change: transform;
+    will-change: transform, opacity;
+    /* Blue hologram glow; drop-shadow respects canvas alpha so only hex area glows */
+    filter: drop-shadow(0 10px 40px rgba(120, 180, 255, 0.25));
+    /* Opacity animates on wheel-scrub — short transition feels responsive */
+    transition: opacity 120ms linear;
   }
   .slab canvas {
     display: block;
-    /* pixelated kills anti-alias seams between stamps; crisp hex pixels */
     image-rendering: pixelated;
     image-rendering: crisp-edges;
-    box-shadow: 0 0 40px rgba(0,0,0,0.6);
     cursor: crosshair;
   }
 
@@ -49,8 +52,8 @@
     position: fixed;
     top: 0; right: 0; bottom: 0;
     width: 300px;
-    background: #181818;
-    border-left: 1px solid #2a2a2a;
+    background: #0b0d15;
+    border-left: 1px solid #1a1f2e;
     padding: 16px 18px;
     box-sizing: border-box;
     overflow-y: auto;
@@ -66,25 +69,20 @@
   }
   #controls h3:first-child { margin-top: 0; }
 
-  .active-brush-row {
-    display: flex; align-items: center; gap: 10px;
-  }
+  .active-brush-row { display: flex; align-items: center; gap: 10px; }
   #active-brush {
     width: 48px; height: 48px;
     border-radius: 6px;
-    border: 2px solid #333;
-    cursor: pointer;
-    flex-shrink: 0;
+    border: 2px solid #2a2e3f;
+    cursor: pointer; flex-shrink: 0;
   }
   #active-brush-hex {
     font-family: "SF Mono", Consolas, monospace;
-    font-size: 11px;
-    color: #aaa;
+    font-size: 11px; color: #aaa;
   }
   #brush-picker {
     position: absolute;
-    opacity: 0;
-    pointer-events: none;
+    opacity: 0; pointer-events: none;
     width: 0; height: 0;
   }
 
@@ -103,17 +101,17 @@
 
   #preset-select {
     width: 100%;
-    background: #222; color: #ddd;
-    border: 1px solid #333;
+    background: #161a25; color: #ddd;
+    border: 1px solid #2a2e3f;
     padding: 6px 8px;
     border-radius: 4px;
     font-size: 12px;
   }
 
   button {
-    background: #2a2a2a;
+    background: #1a1f2e;
     color: #ddd;
-    border: 1px solid #3a3a3a;
+    border: 1px solid #2a2e3f;
     padding: 7px 10px;
     border-radius: 4px;
     cursor: pointer;
@@ -121,27 +119,34 @@
     width: 100%;
     margin-top: 6px;
   }
-  button:hover { background: #353535; }
+  button:hover { background: #22283a; }
 
-  #rotate-btn { font-family: "SF Mono", Consolas, monospace; }
+  #rotate-btn, #reset-view-btn { font-family: "SF Mono", Consolas, monospace; }
+
+  .hint {
+    font-size: 10px;
+    color: #666;
+    line-height: 1.5;
+    margin-top: 6px;
+    font-family: "SF Mono", Consolas, monospace;
+  }
 
   #status {
     position: fixed;
     bottom: 0; left: 0; right: 300px;
     height: 32px;
-    background: #0c0c0c;
-    border-top: 1px solid #2a2a2a;
+    background: #05070e;
+    border-top: 1px solid #1a1f2e;
     display: flex; align-items: center;
     padding: 0 14px;
     font-size: 11px;
     color: #aaa;
     font-family: "SF Mono", Consolas, monospace;
+    gap: 20px;
   }
   #status .left { flex: 1; }
-  #status .right {
-    color: #666;
-    font-size: 10px;
-  }
+  #status .mid { color: #8ab4ff; }
+  #status .right { color: #666; font-size: 10px; }
   #status .swatch-mini {
     display: inline-block;
     width: 12px; height: 12px;
@@ -152,7 +157,7 @@
 
   #loading {
     position: fixed; inset: 0;
-    background: #111;
+    background: #050710;
     display: flex; align-items: center; justify-content: center;
     color: #888; font-size: 14px;
     z-index: 100;
@@ -164,9 +169,7 @@
 <div id="loading">Loading label rasters...</div>
 
 <div id="viewport">
-  <div id="stage">
-    <!-- slabs injected by JS, ordered res7 (z=0) -> res6 -> res5 (top) -->
-  </div>
+  <div id="stage"></div>
 </div>
 
 <div id="controls">
@@ -194,49 +197,36 @@
 
   <h3>View</h3>
   <button id="rotate-btn">Rotate — NW</button>
+  <button id="reset-view-btn">Reset view (scale/pan/focus/σ)</button>
+  <div class="hint">
+    wheel: focus depth<br>
+    ctrl+wheel: zoom<br>
+    shift+wheel: σ (focus width)<br>
+    drag hex: brush<br>
+    drag empty: pan
+  </div>
 </div>
 
 <div id="status">
   <div class="left" id="status-left">Hover a hex...</div>
-  <div class="right" id="status-right">ring_agg res9 → res5/6/7 majority-vote | k=10 | raster PNG + canvas</div>
+  <div class="mid" id="status-mid">focus: — | σ: — | scale: 1.00x</div>
+  <div class="right">ring_agg → polygon-fill k=10</div>
 </div>
 
 <script>
 // ============================================================
-// Colormap presets (10-entry RGB arrays, from matplotlib)
+// Colormap presets
 // ============================================================
 const PRESETS = {
-  tab10: [
-    [31,119,180],[255,127,14],[44,160,44],[214,39,40],[148,103,189],
-    [140,86,75],[227,119,194],[127,127,127],[188,189,34],[23,190,207]
-  ],
-  pastel10: [
-    [174,199,232],[255,187,120],[152,223,138],[255,152,150],[197,176,213],
-    [196,156,148],[247,182,210],[199,199,199],[219,219,141],[158,218,229]
-  ],
-  set3: [
-    [141,211,199],[255,255,179],[190,186,218],[251,128,114],[128,177,211],
-    [253,180,98],[179,222,105],[252,205,229],[217,217,217],[188,128,189]
-  ],
-  paired: [
-    [166,206,227],[31,120,180],[178,223,138],[51,160,44],[251,154,153],
-    [227,26,28],[253,191,111],[255,127,0],[202,178,214],[106,61,154]
-  ],
-  viridis10: [
-    [68,1,84],[72,40,120],[62,74,137],[49,104,142],[38,130,142],
-    [31,158,137],[53,183,121],[109,205,89],[180,222,44],[253,231,37]
-  ],
-  plasma10: [
-    [13,8,135],[75,3,161],[125,3,168],[168,34,150],[203,70,121],
-    [229,107,93],[248,148,65],[253,195,40],[240,249,33],[245,255,50]
-  ],
-  turbo10: [
-    [48,18,59],[70,107,227],[48,180,234],[40,223,170],[128,245,99],
-    [210,234,56],[254,193,45],[253,126,39],[220,58,25],[122,4,3]
-  ],
+  tab10: [[31,119,180],[255,127,14],[44,160,44],[214,39,40],[148,103,189],[140,86,75],[227,119,194],[127,127,127],[188,189,34],[23,190,207]],
+  pastel10: [[174,199,232],[255,187,120],[152,223,138],[255,152,150],[197,176,213],[196,156,148],[247,182,210],[199,199,199],[219,219,141],[158,218,229]],
+  set3: [[141,211,199],[255,255,179],[190,186,218],[251,128,114],[128,177,211],[253,180,98],[179,222,105],[252,205,229],[217,217,217],[188,128,189]],
+  paired: [[166,206,227],[31,120,180],[178,223,138],[51,160,44],[251,154,153],[227,26,28],[253,191,111],[255,127,0],[202,178,214],[106,61,154]],
+  viridis10: [[68,1,84],[72,40,120],[62,74,137],[49,104,142],[38,130,142],[31,158,137],[53,183,121],[109,205,89],[180,222,44],[253,231,37]],
+  plasma10: [[13,8,135],[75,3,161],[125,3,168],[168,34,150],[203,70,121],[229,107,93],[248,148,65],[253,195,40],[240,249,33],[245,255,50]],
+  turbo10: [[48,18,59],[70,107,227],[48,180,234],[40,223,170],[128,245,99],[210,234,56],[254,193,45],[253,126,39],[220,58,25],[122,4,3]],
 };
 
-// Brush palette (20 swatches; reused verbatim from v1)
 const PALETTE_SWATCHES = [
   [230, 30, 30], [255, 140, 0], [240, 210, 30], [40, 180, 50],
   [30, 150, 230], [100, 60, 200], [220, 60, 180], [20, 200, 200],
@@ -245,26 +235,45 @@ const PALETTE_SWATCHES = [
   [240, 240, 240], [180, 180, 180], [110, 110, 110], [40, 40, 40],
 ];
 
-// ============================================================
-// State
-// ============================================================
-const state = {
-  colorMap: PRESETS.tab10.map(c => c.slice()),  // cluster id -> [r,g,b]
-  currentPreset: 'tab10',
-  activeBrush: PRESETS.tab10[0].slice(),
-  angleIdx: 0,  // 0=NW, 1=NE, 2=SE, 3=SW
-};
+// Cathedral Z per resolution (px). res7 at z=0 (bottom), res5 on top.
+const Z_BY_RES = { 5: 2400, 6: 1200, 7: 0 };
+const Z_MIN = 0;
+const Z_MAX = 2400;
+const Z_MID = (Z_MIN + Z_MAX) / 2;
 
-// NW/NE/SE/SW rotation around Z (viewed from above, clockwise from NW)
+// Defaults for scrub controls
+const SIGMA_DEFAULT = 800;  // px; full-width-at-1/e² ≈ 2σ
+const SIGMA_MIN = 100;
+const SIGMA_MAX = 4000;
+const SCALE_MIN = 0.3;
+const SCALE_MAX = 5.0;
+
+// Rotation
 const BEARINGS = [-45, -135, 135, 45];
 const BEARING_LABELS = ['NW', 'NE', 'SE', 'SW'];
 const PITCH = 55;
 
-// Per-resolution layer data: {width, height, imageData, canvas, ctx}
-const LAYER_DATA = {};
+// ============================================================
+// State
+// ============================================================
+const state = {
+  colorMap: PRESETS.tab10.map(c => c.slice()),
+  currentPreset: 'tab10',
+  activeBrush: PRESETS.tab10[0].slice(),
+  angleIdx: 0,
+  // Attentive focus
+  focusZ: Z_MID,
+  sigma: SIGMA_DEFAULT,
+  // View transform
+  scale: 1.0,
+  tx: 0,
+  ty: 0,
+};
+
+const LAYER_DATA = {};  // r -> {canvas, ctx, imageData, width, height, slab, z}
 
 // ============================================================
-// Load assets and boot
+// Boot
 // ============================================================
 async function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -285,30 +294,19 @@ async function boot() {
     throw e;
   }
 
-  const resolutions = meta.resolutions;  // [5, 6, 7]
+  const resolutions = meta.resolutions;
   const [h, w] = meta.raster_shape;
 
-  // Cathedral spacing. res7 at z=0 (bottom), res6 mid, res5 top.
-  // Tuned by eye — slabs visibly floating, not pancake.
-  const Z_BY_RES = { 5: 2400, 6: 1200, 7: 0 };
-
-  // Fit slabs to viewport while preserving aspect. Target: ~70% of viewport height.
   const viewport = document.getElementById('viewport');
   const vh = viewport.clientHeight;
   const vw = viewport.clientWidth;
-  // Display size: fit within viewport rect (shrunk a bit to leave room for isometric overflow).
   const targetH = Math.min(vh * 0.72, vw * 0.72 * (h / w));
   const targetW = targetH * (w / h);
 
   const stage = document.getElementById('stage');
-
-  // Paint bottom-up so z-order is natural (res7 underneath, res5 on top).
-  // With translateZ, higher Z = closer to viewer in perspective; our rotateX
-  // tilts the deck so higher Z appears "higher" in the cathedral.
-  const buildOrder = [...resolutions].sort((a, b) => b - a);  // [7, 6, 5]
+  const buildOrder = [...resolutions].sort((a, b) => b - a);
 
   for (const r of buildOrder) {
-    // Canvas at native PNG resolution for pixel-accurate brush lookups.
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
@@ -319,7 +317,6 @@ async function boot() {
     slab.className = 'slab';
     slab.style.width = targetW + 'px';
     slab.style.height = targetH + 'px';
-    // Center slab on stage origin (which is at viewport 50%/50%).
     slab.style.left = (-targetW / 2) + 'px';
     slab.style.top = (-targetH / 2) + 'px';
     slab.style.transform = `translateZ(${Z_BY_RES[r]}px)`;
@@ -328,16 +325,14 @@ async function boot() {
     stage.appendChild(slab);
 
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
     const img = await loadImage(`./labels_res${r}.png`);
     ctx.drawImage(img, 0, 0);
     const imageData = ctx.getImageData(0, 0, w, h);
 
     LAYER_DATA[r] = {
       width: w, height: h,
-      imageData,
-      canvas, ctx,
-      displayW: targetW, displayH: targetH,
+      imageData, canvas, ctx,
+      slab, z: Z_BY_RES[r],
     };
 
     attachInteraction(canvas, r);
@@ -345,21 +340,19 @@ async function boot() {
 
   document.getElementById('loading').remove();
 
-  // Initial paint with tab10
+  applyStageTransform();
+  applyFocus();
   repaintAll();
 }
 
 // ============================================================
-// Colorize pass (hot loop)
+// Colorize
 // ============================================================
 function repaint(r) {
   const L = LAYER_DATA[r];
   const src = L.imageData.data;
   const N = src.length;
-  // Re-use an output buffer per layer to avoid GC churn.
-  if (!L.out || L.out.length !== N) {
-    L.out = new Uint8ClampedArray(N);
-  }
+  if (!L.out || L.out.length !== N) L.out = new Uint8ClampedArray(N);
   const out = L.out;
   const cm = state.colorMap;
   for (let i = 0; i < N; i += 4) {
@@ -374,15 +367,89 @@ function repaint(r) {
 }
 
 function repaintAll() {
-  const t0 = performance.now();
   for (const r of Object.keys(LAYER_DATA)) repaint(Number(r));
-  const dt = performance.now() - t0;
-  // Keep status noise low — only log when over budget.
-  if (dt > 300) console.warn(`repaintAll ${dt.toFixed(0)}ms (budget 300)`);
 }
 
 // ============================================================
-// Brush + hover interaction
+// Focus (wheel scrub) — CSS opacity, no pixel repaint
+// ============================================================
+function applyFocus() {
+  const sigma = state.sigma;
+  for (const r of Object.keys(LAYER_DATA)) {
+    const L = LAYER_DATA[r];
+    const d = L.z - state.focusZ;
+    const op = Math.exp(-(d * d) / (sigma * sigma));
+    L.slab.style.opacity = op.toFixed(3);
+  }
+  updateMidStatus();
+}
+
+function nearestRes() {
+  let best = null, bestDist = Infinity;
+  for (const [r, data] of Object.entries(LAYER_DATA)) {
+    const d = Math.abs(data.z - state.focusZ);
+    if (d < bestDist) { bestDist = d; best = r; }
+  }
+  return best;
+}
+
+// ============================================================
+// View transform (zoom + pan + rotate)
+// ============================================================
+function applyStageTransform() {
+  const bearing = BEARINGS[state.angleIdx];
+  const stage = document.getElementById('stage');
+  // Order: translate (screen-space) → scale → rotateX → rotateZ
+  // Keeps pan in screen space; rotation applies to stacked slabs beneath.
+  stage.style.transform =
+    `translate(${state.tx}px, ${state.ty}px) ` +
+    `scale(${state.scale}) ` +
+    `rotateX(${PITCH}deg) rotateZ(${bearing}deg)`;
+  document.getElementById('rotate-btn').textContent =
+    `Rotate — ${BEARING_LABELS[state.angleIdx]}`;
+  updateMidStatus();
+}
+
+// ============================================================
+// Status bar mid-readout
+// ============================================================
+function updateMidStatus() {
+  const el = document.getElementById('status-mid');
+  const r = nearestRes();
+  el.textContent =
+    `focus: ${state.focusZ.toFixed(0)}px → res${r}` +
+    ` | σ: ${state.sigma.toFixed(0)}` +
+    ` | scale: ${state.scale.toFixed(2)}x`;
+}
+
+// ============================================================
+// Wheel handler: plain = focus, ctrl = zoom, shift = σ
+// ============================================================
+const viewport = document.getElementById('viewport');
+viewport.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) {
+    // Zoom
+    const factor = 1 + (-e.deltaY * 0.001);
+    state.scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, state.scale * factor));
+    applyStageTransform();
+  } else if (e.shiftKey) {
+    // σ scrub
+    const factor = 1 + (-e.deltaY * 0.001);
+    state.sigma = Math.max(SIGMA_MIN, Math.min(SIGMA_MAX, state.sigma * factor));
+    applyFocus();
+  } else {
+    // Focus scrub
+    // deltaY > 0 = wheel down = focusZ lowers toward res7 (z=0)
+    // deltaY < 0 = wheel up   = focusZ rises toward res5 (z=Z_MAX)
+    const step = e.deltaY * 2;  // 1 notch of mouse wheel ≈ 100deltaY → 200px Z
+    state.focusZ = Math.max(Z_MIN, Math.min(Z_MAX, state.focusZ - step));
+    applyFocus();
+  }
+}, { passive: false });
+
+// ============================================================
+// Brush + pan + hover
 // ============================================================
 function canvasPixelFromEvent(canvas, e) {
   const rect = canvas.getBoundingClientRect();
@@ -406,14 +473,18 @@ function labelAt(r, x, y) {
 let hoverPending = false;
 
 function attachInteraction(canvas, r) {
-  let dragging = false;
+  // Three mouse modes decided at mousedown:
+  //   - left button, cursor on a hex (alpha>0)  => brush-drag
+  //   - left button, cursor on empty (alpha==0) => pan-drag (moves #stage)
+  //   - any other button                         => ignored (native behavior)
+  let mode = null;   // 'brush' | 'pan' | null
+  let panStart = null;
 
   const tryBrush = (e) => {
     const p = canvasPixelFromEvent(canvas, e);
     if (!p) return;
     const label = labelAt(r, p.x, p.y);
     if (label === null) return;
-    // Skip if already that color (avoid redundant repaints during drag).
     const cur = state.colorMap[label];
     const b = state.activeBrush;
     if (cur[0] === b[0] && cur[1] === b[1] && cur[2] === b[2]) return;
@@ -423,15 +494,34 @@ function attachInteraction(canvas, r) {
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
-    dragging = true;
-    tryBrush(e);
+    const p = canvasPixelFromEvent(canvas, e);
+    if (!p) return;
+    const label = labelAt(r, p.x, p.y);
+    if (label !== null) {
+      mode = 'brush';
+      tryBrush(e);
+    } else {
+      mode = 'pan';
+      panStart = { x: e.clientX, y: e.clientY, tx: state.tx, ty: state.ty };
+    }
     e.preventDefault();
   });
-  window.addEventListener('mouseup', () => { dragging = false; });
-  canvas.addEventListener('mousemove', (e) => {
-    if (dragging) tryBrush(e);
 
-    // Hover status (rAF throttled).
+  window.addEventListener('mousemove', (e) => {
+    if (mode === 'pan' && panStart) {
+      state.tx = panStart.tx + (e.clientX - panStart.x);
+      state.ty = panStart.ty + (e.clientY - panStart.y);
+      applyStageTransform();
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    mode = null;
+    panStart = null;
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (mode === 'brush') tryBrush(e);
     if (!hoverPending) {
       hoverPending = true;
       requestAnimationFrame(() => {
@@ -439,19 +529,19 @@ function attachInteraction(canvas, r) {
         const p = canvasPixelFromEvent(canvas, e);
         if (!p) return;
         const label = labelAt(r, p.x, p.y);
-        updateStatus(r, label);
+        updateHoverStatus(r, label);
       });
     }
   });
   canvas.addEventListener('mouseleave', () => {
-    if (!dragging) updateStatus(null, null);
+    if (mode !== 'brush') updateHoverStatus(null, null);
   });
 }
 
 // ============================================================
-// Status bar
+// Status (hover left panel)
 // ============================================================
-function updateStatus(r, label) {
+function updateHoverStatus(r, label) {
   const el = document.getElementById('status-left');
   if (r === null || label === null) {
     el.innerHTML = 'Hover a hex...';
@@ -463,7 +553,7 @@ function updateStatus(r, label) {
 }
 
 // ============================================================
-// Active brush controls
+// Brush controls
 // ============================================================
 function setActiveBrush(rgb) {
   state.activeBrush = rgb.slice();
@@ -479,9 +569,6 @@ function hexToRgb(hex) {
   return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
 }
 
-// ============================================================
-// Colormap preset
-// ============================================================
 function applyPreset(name) {
   const preset = PRESETS[name];
   if (!preset) return;
@@ -491,18 +578,7 @@ function applyPreset(name) {
 }
 
 // ============================================================
-// Rotation
-// ============================================================
-function applyRotation() {
-  const bearing = BEARINGS[state.angleIdx];
-  document.getElementById('stage').style.transform =
-    `rotateX(${PITCH}deg) rotateZ(${bearing}deg)`;
-  document.getElementById('rotate-btn').textContent =
-    `Rotate — ${BEARING_LABELS[state.angleIdx]}`;
-}
-
-// ============================================================
-// Wire up DOM
+// DOM wiring
 // ============================================================
 const paletteDiv = document.getElementById('palette');
 PALETTE_SWATCHES.forEach(rgb => {
@@ -526,11 +602,19 @@ document.getElementById('reset-btn').addEventListener('click', () => {
 });
 document.getElementById('rotate-btn').addEventListener('click', () => {
   state.angleIdx = (state.angleIdx + 1) % 4;
-  applyRotation();
+  applyStageTransform();
+});
+document.getElementById('reset-view-btn').addEventListener('click', () => {
+  state.scale = 1.0;
+  state.tx = 0;
+  state.ty = 0;
+  state.focusZ = Z_MID;
+  state.sigma = SIGMA_DEFAULT;
+  applyStageTransform();
+  applyFocus();
 });
 
 setActiveBrush(state.activeBrush);
-applyRotation();
 boot();
 </script>
 </body>
