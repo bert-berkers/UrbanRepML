@@ -15,6 +15,7 @@ Built-in named configs reproduce the experiments from the original scripts:
     - pca_192d:       concat PCA-192D vs UNet multiscale 192D (YEAR=20mix)
     - sageconv:       SAGEConv UNet 64D + 192D vs prior baselines (YEAR=20mix)
     - ring_agg:       concat PCA-64D vs ring-aggregated PCA-64D (YEAR=20mix)
+    - ring_agg_plus_unet: concat 208D vs ring_agg 208D vs UNet-MS 192D vs combined 400D
 
 Custom comparisons via --embeddings:
     python scripts/stage3/run_probe_comparison.py \\
@@ -392,6 +393,124 @@ def build_sageconv(
     ]
 
 
+def build_ring_agg_plus_unet(
+    paths: StudyAreaPaths, output_dir: Path
+) -> List[EmbeddingSource]:
+    """4-way comparison: concat 208D, ring_agg 208D, UNet multiscale 192D, combined 400D.
+
+    Tests whether concatenating ring_agg (local k=10 neighbourhood smoothing) with
+    UNet multiscale (hierarchical multi-resolution) recovers fys regression while
+    preserving lbm/onv/vrz gains from the supervised UNet.
+
+    The UNet 192D block is z-scored before concatenation; ring_agg is already
+    z-scored at creation time (per feedback_normalize_before_fusion.md).
+    """
+    year = "20mix"
+
+    # --- Ring agg 208D (already z-scored) ---
+    ring_agg_path = paths.fused_embedding_file("ring_agg", H3_RESOLUTION, year)
+    if not ring_agg_path.exists():
+        raise FileNotFoundError(
+            f"Ring agg embeddings not found: {ring_agg_path}\n"
+            "Run ring aggregation first."
+        )
+
+    # --- UNet multiscale 192D ---
+    unet_ms_path = _unet_multiscale_path(paths, year)
+    if not unet_ms_path.exists():
+        raise FileNotFoundError(
+            f"UNet multiscale embeddings not found: {unet_ms_path}\n"
+            "Run: python scripts/stage2/extract_highway_exits.py "
+            "--study-area netherlands --year 20mix"
+        )
+
+    # --- Combined 400D: build or reuse ---
+    combined_path = output_dir / f"ring_unet_combined_{year}.parquet"
+    if combined_path.exists():
+        logger.info("Reusing existing combined embeddings: %s", combined_path)
+    else:
+        logger.info("Building combined ring_agg + UNet embeddings...")
+        ring_df = pd.read_parquet(ring_agg_path)
+        unet_df = pd.read_parquet(unet_ms_path)
+
+        n_ring = len(ring_df)
+        n_unet = len(unet_df)
+        logger.info("  Ring agg: %d regions x %dD", n_ring, ring_df.shape[1])
+        logger.info("  UNet MS:  %d regions x %dD", n_unet, unet_df.shape[1])
+
+        # Track which columns belong to which source before joining
+        ring_cols = list(ring_df.columns)
+        unet_cols = list(unet_df.columns)
+
+        # Inner join on region_id (columns don't overlap, so no suffix needed)
+        combined = ring_df.join(unet_df, how="inner")
+        n_combined = len(combined)
+        loss_pct = 1.0 - n_combined / max(n_ring, n_unet)
+        logger.info(
+            "  Inner join: %d regions (%.2f%% loss)", n_combined, loss_pct * 100
+        )
+        assert loss_pct < 0.01, (
+            f"Inner join lost {loss_pct:.1%} of regions (threshold: 1%). "
+            f"ring_agg={n_ring}, unet={n_unet}, combined={n_combined}"
+        )
+
+        # Z-score only the UNet columns (ring_agg already z-scored)
+        logger.info(
+            "  Z-scoring %d UNet columns (keeping %d ring_agg columns as-is)",
+            len(unet_cols),
+            len(ring_cols),
+        )
+        scaler = StandardScaler()
+        combined[unet_cols] = scaler.fit_transform(combined[unet_cols].values)
+
+        # Rename columns to clean names: emb_0..emb_N
+        rename_map = {}
+        for i, c in enumerate(ring_cols):
+            rename_map[c] = f"emb_{i}"
+        for i, c in enumerate(unet_cols):
+            rename_map[c] = f"emb_{len(ring_cols) + i}"
+        combined = combined.rename(columns=rename_map)
+        combined.index.name = "region_id"
+
+        combined.to_parquet(combined_path)
+        logger.info(
+            "  Saved combined %dD embeddings to %s",
+            combined.shape[1],
+            combined_path,
+        )
+        del ring_df, unet_df, combined
+
+    # --- Concat 208D (raw, for reference) ---
+    concat_path = _concat_path(paths, year)
+
+    return [
+        EmbeddingSource(
+            name="Concat 208D",
+            label="concat_208d",
+            path=str(concat_path),
+            modality="concat",
+        ),
+        EmbeddingSource(
+            name="RingAgg-k10 208D",
+            label="ring_agg_k10_208d",
+            path=str(ring_agg_path),
+            modality="ring_agg",
+        ),
+        EmbeddingSource(
+            name="UNet-MS 192D",
+            label="unet_ms_192d",
+            path=str(unet_ms_path),
+            modality="unet",
+        ),
+        EmbeddingSource(
+            name="Ring+UNet 400D",
+            label="ring_unet_400d",
+            path=str(combined_path),
+            modality="ring_agg_plus_unet",
+        ),
+    ]
+
+
 def build_ring_agg(
     paths: StudyAreaPaths, output_dir: Path
 ) -> List[EmbeddingSource]:
@@ -469,6 +588,12 @@ NAMED_CONFIGS = {
         "target_year": 2022,
         "description": "Concat PCA-64D vs Ring-Aggregated PCA-64D (year=20mix)",
         "original_script": "probe_ring_agg_comparison.py",
+    },
+    "ring_agg_plus_unet": {
+        "builder": build_ring_agg_plus_unet,
+        "target_year": 2022,
+        "description": "Concat 208D vs RingAgg 208D vs UNet-MS 192D vs Ring+UNet 400D",
+        "original_script": "(new — ring-agg-plus-unet-probe-comparison.md)",
     },
 }
 
