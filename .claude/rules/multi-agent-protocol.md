@@ -20,6 +20,11 @@ Every agent that does work MUST write a dated entry to `.claude/scratchpad/{agen
 - **Append, don't overwrite**: Each agent invocation APPENDS a new timestamped section (`## HH:MM — summary`). Never rewrite earlier entries — they belong to earlier agent invocations.
 - **Prior entries index**: Start each new entry with `**Prior entries**: 10:15 — built X | 10:45 — added Y`. This makes every entry a self-contained context packet — the hook injects the tail, so your entry must carry forward the gist of earlier work.
 - Each entry should be self-contained and under 30 lines. Multiple short entries > one bloated rewrite.
+- **`<!-- OVERRIDE: {rationale} -->` escape** (formal): the ≤30-line guideline is soft. Starting an entry with `<!-- OVERRIDE: {rationale} -->` on line 1 is a recognized escape from the line limit. The override is triggered when:
+  - The entry must satisfy **Contract 1** (coordinator close-out with all 7 items — see Markov-Completeness Contract section below), OR
+  - Preserving handoff completeness for the next context window requires more than 30 lines (e.g. a Wave-final audit synthesis with aged `[open|Nd]` items, peer-terminal pointers, and a full reference frame block).
+
+  **Length is not the cost; loss-of-state is.** A 60-line entry that a cold-start session can resume from is strictly better than a 25-line entry that leaks state forward. The override makes the cost explicit so reviewers can see "yes, this entry needed that length" rather than treating every long entry as discipline rot.
 - **Reconciliation-first**: Before writing new Unresolved items, check if earlier entries in the same file already flagged them. Don't duplicate — reference by time.
 - Items tagged `[stale]` for 2+ sessions should be removed or escalated to the coordinator.
 - **Output references**: Reference large outputs by path, don't paste inline. Scratchpads are index + reasoning, not data.
@@ -59,22 +64,89 @@ This asymmetry is by design — the human's attention is the scarcest resource, 
 - The librarian's `codebase_graph.md` is the shared map
 - Read other agents' scratchpads before starting work to avoid duplication
 
-## Signal Vocabulary
+## Signal Vocabulary (v2 — Structured Tags)
 
-Agents SHOULD use these keywords in their scratchpads when relevant. The SessionStart and SubagentStart hooks scan for these automatically and propagate them to adjacent agents.
+> **Migration note**: The earlier single-word signals (`BLOCKED`, `URGENT`, `CRITICAL`, `BROKEN`, `SHAPE_CHANGED`, `INTERFACE_CHANGED`, `DEPRECATED`, `NEEDS_TEST`) are **deprecated**. They flagged *attention* but not *actionability, routing, or contract coupling*. They are replaced by the structured tags below. Old signals still parse as legacy literals but new scratchpad entries MUST use v2 tags.
 
-| Signal | Meaning | Use When... |
-|--------|---------|-------------|
-| `BLOCKED` | Work cannot proceed | Missing dependency, broken upstream, waiting on external input |
-| `URGENT` | Needs attention this session | Time-sensitive issue, regression, data corruption risk |
-| `CRITICAL` | System-level concern | Pipeline broken, data loss risk, architectural violation |
-| `BROKEN` | Something that previously worked now fails | Test regression, import error, runtime crash |
-| `SHAPE_CHANGED` | Data shape or interface contract modified | Column added/removed, tensor dim changed, return type changed |
-| `INTERFACE_CHANGED` | Function signature or API modified | Parameters added/removed, renamed, new required args |
-| `DEPRECATED` | Code or pattern being phased out | Old API still works but should not be used in new code |
-| `NEEDS_TEST` | New or changed code lacks test coverage | Feature added without tests, bugfix without regression test |
+Agents use structured tags in scratchpads. The SessionStart, SubagentStart, and SubagentStop hooks scan for these and propagate relevant tags to adjacent agents along the pipeline adjacency graph (defined in `subagent-context.py`). Tags are machine-parseable; their bracket form is load-bearing.
 
-These signals propagate along the pipeline adjacency graph (defined in `subagent-context.py`), so a `SHAPE_CHANGED` from `stage2-fusion-architect` is automatically surfaced to `stage3-analyst`.
+### State markers (carried with age)
+
+| Tag | Meaning |
+|---|---|
+| `[open\|Nd]` | Open item; N = days since first raised. Increment, don't reset, across sessions. |
+| `[stale\|Nd]` | Open ≥ 14 days; needs attention this session. |
+| `[escalated\|Nd]` | Open ≥ 21 days; requires human decision. Surface at Final Wave. |
+| `[done\|YYYY-MM-DD]` | Resolved. Date records when, not who. |
+| `[wontfix:reason]` | Explicit abandonment with rationale. Not silence. |
+
+### Block reasons
+
+| Tag | Meaning |
+|---|---|
+| `[blocked:human-decision]` | Waiting on the supra-coordinator. |
+| `[blocked:upstream:agent-or-file]` | Waiting on a specific producer (agent type or file path). |
+| `[blocked:data-missing:path]` | Required data artifact not present on disk. |
+| `[blocked:design:question]` | Open design question — can't proceed without resolution. |
+
+### Change records
+
+| Tag | Meaning |
+|---|---|
+| `[shape-changed:path:before→after]` | Tensor/column/schema shape modification. |
+| `[interface-changed:func:old→new]` | Function signature or API change. |
+| `[file-moved:old→new]` | Relocation — preserve for librarian. |
+| `[file-deleted:path:reason]` | Removal with rationale. |
+
+### Routing
+
+| Tag | Meaning |
+|---|---|
+| `[→agent-type]` | Suggested next owner. |
+| `[needs:agent-type\|human]` | Required participant before this can close. |
+
+### Decision records
+
+| Tag | Meaning |
+|---|---|
+| `[decided:option:rationale]` | Resolved alternative, with why-X-not-Y compressed. |
+| `[deferred:topic:to-when-or-plan]` | Explicitly kicked forward, with target (date or plan path). Not silent drift. |
+
+### Contract coupling
+
+| Tag | Meaning |
+|---|---|
+| `[contract:N]` | Audit §4 Contract N this item couples to (1=scratchpad, 2=codebase_graph, 3=specs, 4=plans, 5=session-states). |
+| `[plan:path]` | Pointer to active plan file. |
+| `[audit:report-path#section]` | Pointer into an audit report (e.g. `reports/2026-04-18-organizational-flywheel-audit.md#theme-H`). |
+
+The hook-side Markov-completeness check (see `markov_check.py`) recognizes these tags explicitly. The regex that satisfies Contract 1 item 4 (aged open items in the coordinator close-out) is `\[(open|stale|escalated)\|\d+d\]` — any of the three aged-item tag forms counts. This is broader than `\[open\|\d+d\]` alone because a correctly-aged session may have escalated every `[open|Nd]` item past 14d (→ `[stale]`) or 21d (→ `[escalated]`), leaving no literal `[open]` tags; the check must not false-fail that case.
+
+## Markov-Completeness Contract (Coordinator Close-Out)
+
+The final entry of each agent-type's session-keyed scratchpad must be a self-contained context packet for the next fresh window. This is **Contract 1** from the 2026-04-18 organizational flywheel audit (`reports/2026-04-18-organizational-flywheel-audit.md §4`). It closes the primary state leak across `/clear`, terminal-switch, and calendar-day boundaries.
+
+### The seven items (coordinator close-out)
+
+The final coordinator scratchpad entry of every session MUST contain all seven:
+
+1. **`SUMMARY` comment** — `<!-- SUMMARY: one-line ... -->` on the first line (machine-extractable).
+2. **Prior-entries index** — cumulative for the day across session files. One line per prior entry: `HH:MM — one-line summary`. Carries forward even across session-keyed file boundaries within the same calendar day.
+3. **Reference frame block** — a block echoing the active supra values: `mode=... speed=N explore=N quality=N tests=N spatial=N model=N urgency=N data_eng=N intent="..." focus=[...] suppress=[...]`. If `/valuate` wasn't run, write `intent=null (plan-driven: {path})` or `intent=null (no plan, no valuation — under-valuated session)`.
+4. **Aged `[open|Nd]` / `[stale|Nd]` / `[escalated|Nd]` items** — every carried unresolved item, tagged with age in days. Do NOT re-open already-carried items; increment N across sessions. Escalate to `[stale|Nd]` at N ≥ 14 and `[escalated|Nd]` at N ≥ 21. The hook-enforceable marker is `\[(open|stale|escalated)\|\d+d\]` — any of the three forms satisfies the contract (see Signal Vocabulary section for rationale).
+5. **Active plan pointer** — `Plan: .claude/plans/{file}.md` if any. Plans function as frozen intent; their presence is load-bearing. If no plan, write `Plan: none (ad-hoc session)`.
+6. **Peer-terminal pointer** — read from `.claude/coordinators/terminals/*.yaml`: list other active or recently-ended terminals with their `supra_session_id`. `Peers: none` is an acceptable value but must be stated.
+7. **"If you only read this entry, here's the gist" paragraph** — single paragraph at the bottom, preceded by a heading matching `^## If you only read`. Must subsume items 1–6 in prose; must be sufficient to orient a cold-start session without reading anything else. **This paragraph is the Markov-complete summary.**
+
+### Two enforcement tiers
+
+**Specialist scratchpads** (all non-coordinator agent types): items **1, 2, 7** required. Items 3–6 inherit from the coordinator's reference frame.
+- Fail mode: **fail-OPEN**. `subagent-stop.py` logs a warning and accepts the write. The specialist's job is domain work; the contract is softest here because context is inherited.
+
+**Coordinator close-out scratchpads** (final entry of a `/niche` session, or at `/clear` / terminal close): all **seven** items required.
+- Fail mode: **fail-CLOSED**. `stop.py` refuses completion and lists the missing items to stderr. The coordinator is the handoff node; missing items here leak state forward silently.
+
+The single shared implementation lives in `markov_check.py` and is called by both `subagent-stop.py` (specialist, fail-open) and `stop.py` (coordinator, fail-closed). One helper, two callers, two fail modes.
 
 ## Autonomy Scope
 

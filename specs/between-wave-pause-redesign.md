@@ -1,6 +1,7 @@
 # Between-Wave Pause Redesign
 
 ## Status: Draft
+> Absorption status into `.claude/skills/niche/SKILL.md` is unverified as of 2026-04-18. If the Wave Results block is present in niche, this spec should be re-classified as Implemented; if not, keep as Draft and schedule a wave.
 
 ## Context
 

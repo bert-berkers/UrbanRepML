@@ -85,9 +85,10 @@ Keep messages sparse. Routine status belongs in your scratchpad, not the message
 | Path | Purpose |
 |------|---------|
 | `.claude/coordinators/session-{id}.yaml` | Claim per session (active or `status: ended`) |
-| `.claude/coordinators/sessions/{id}.{ppid}` | PPID-keyed session identity |
-| `.claude/coordinators/supra/{id}.{ppid}` | PPID-keyed supra identity |
+| `.claude/coordinators/terminals/{pid}.yaml` | Terminal-PID-keyed identity linking the shell to its `session_id` + `supra_session_id` (written by `coordinator_registry.write_ppid_session()` / `write_ppid_supra()`; archived to `terminals/archive/` when the terminal is reaped) |
 | `.claude/coordinators/messages/{date}/{ts}-{id}.yaml` | Per-day message files |
-| `.claude/hooks/coordinator_registry.py` | Shared library (I/O, PPID helpers) |
+| `.claude/hooks/coordinator_registry.py` | Shared library (I/O, PID helpers) |
 
 The `.claude/coordinators/` directory is gitignored -- ephemeral runtime state only.
+
+> **Note on the terminal-PID scheme**: earlier drafts of this protocol referenced `.claude/coordinators/sessions/{id}.{ppid}` and `.claude/coordinators/supra/{id}.{ppid}`. Both were consolidated into the single `terminals/{pid}.yaml` file in March 2026 (see auto-memory `project_desktop_app_quirks.md`). One shell PID → one terminal file that carries both `session_id` (rotates on `/clear`) and `supra_session_id` (persists across `/clear`).

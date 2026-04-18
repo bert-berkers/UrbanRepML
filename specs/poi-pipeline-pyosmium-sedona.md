@@ -1,6 +1,7 @@
 # POI Pipeline: pyosmium Extraction + Sedona Spatial Join
 
-## Status: Draft
+## Status: Draft (partial)
+> Partially implemented (stashed commit). Snapshot extractor not fully durable as of 2026-04-18.
 
 ## Context
 

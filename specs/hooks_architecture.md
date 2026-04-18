@@ -1,6 +1,7 @@
 # Hooks Architecture
 
-## Status: Draft (SubagentStop and Stop hooks pending migration to command type)
+## Status: Superseded (→ `claude_code_multi_agent_setup.md` §Phase 1)
+> Superseded by `claude_code_multi_agent_setup.md` §Phase 1, which covers all four lifecycle hooks (SessionStart, SubagentStart, SubagentStop, Stop) in broader architectural context. Kept for historical context.
 
 ## Context
 

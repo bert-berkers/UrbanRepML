@@ -1,6 +1,7 @@
 # Claude Code Multi-Agent Setup: Hooks, Rules, Skills, and Settings
 
-## Status: Implemented
+## Status: Implemented (v1, Feb 2026 — partial drift; see successors)
+> Implemented as described, but the identity/lifecycle layer has since evolved. For the current identity model see `session-identity-architecture.md`; for valuate/niche theory and temporal priors see `temporal-supra-profiles.md`. This spec remains the best architectural overview of how hooks + rules + skills wire together.
 
 ## Context
 

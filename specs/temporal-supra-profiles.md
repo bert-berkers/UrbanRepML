@@ -1,6 +1,7 @@
 # Valuation & Niche Construction: Temporal Supra Sessions
 
-## Status: Draft (ontology corrected 2026-03-13)
+## Status: Active
+> Ontology corrected 2026-03-13. Load-bearing: provides the theoretical grounding and temporal prior EMA store referenced throughout MEMORY.md. Candidate for future split (theory vs implementation).
 
 ## Theoretical Grounding
 

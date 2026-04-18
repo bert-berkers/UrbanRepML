@@ -1,6 +1,6 @@
 # Accessibility Graph Pipeline
 
-## Status: Implemented
+## Status: Active
 
 ## Context
 

@@ -1,5 +1,7 @@
 # Session Identity Architecture
 
+## Status: Active
+
 How multi-terminal session isolation works, and why there are two identity layers.
 
 ## The Problem

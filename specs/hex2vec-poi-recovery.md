@@ -1,6 +1,7 @@
 # Hex2Vec POI Recovery: Raw Counts to Spatial Embeddings
 
-## Status: Draft
+## Status: Implemented
+> All four waves executed. Hex2vec 50D is the POI standard (confirmed in MEMORY.md 2026-03-09). Kept for historical context.
 
 ## Context
 

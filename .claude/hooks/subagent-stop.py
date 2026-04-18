@@ -5,6 +5,16 @@ import sys
 from datetime import date
 from pathlib import Path
 
+# Markov-completeness check — fail-OPEN (warn only, never block)
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import markov_check as _markov_check
+    _MARKOV_CHECK_AVAILABLE = True
+except Exception as _mc_exc:
+    _MARKOV_CHECK_AVAILABLE = False
+    print(f"[markov_check WARN] import failed: {_mc_exc}", file=sys.stderr)
+
 SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
 COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
 
@@ -105,6 +115,26 @@ def main() -> None:
                 )
         except Exception as exc:
             print(f"SubagentStop: timer death failed: {exc}", file=sys.stderr)
+
+        # Markov-completeness check (Contract 1, specialist tier, fail-OPEN)
+        # Resolve the actual scratchpad path: prefer session-keyed file if it exists.
+        actual_scratchpad = scratchpad_path
+        sp_dir = SCRATCHPAD_ROOT / agent_type
+        if sp_dir.is_dir():
+            session_keyed = sorted(sp_dir.glob(f"{today}-*.md"))
+            if session_keyed:
+                actual_scratchpad = session_keyed[-1]
+        try:
+            if _MARKOV_CHECK_AVAILABLE:
+                missing = _markov_check.check_completeness(actual_scratchpad, agent_type="specialist")
+                if missing:
+                    print(
+                        f"[markov_check WARN] {agent_type} scratchpad missing: {', '.join(missing)}",
+                        file=sys.stderr,
+                    )
+        except Exception as _mc_err:
+            print(f"[markov_check WARN] check failed: {_mc_err}", file=sys.stderr)
+        # Never raise, never block — specialist tier is fail-OPEN.
 
         print(
             f"SubagentStop: {agent_type} wrote scratchpad ({len(non_empty)} lines), allowing",

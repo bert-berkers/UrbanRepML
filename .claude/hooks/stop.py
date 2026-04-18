@@ -6,6 +6,16 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
+# Markov-completeness check — coordinator tier is fail-CLOSED
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import markov_check as _markov_check
+    _MARKOV_CHECK_AVAILABLE = True
+except Exception as _mc_exc:
+    _MARKOV_CHECK_AVAILABLE = False
+    print(f"stop: markov_check import failed: {_mc_exc}", file=sys.stderr)
+
 SCRATCHPAD_ROOT = Path(__file__).resolve().parents[1] / "scratchpad"
 COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
 
@@ -202,6 +212,30 @@ def main() -> None:
                 ),
             }, sys.stdout)
             return
+
+        # Markov-completeness check — coordinator close-out is fail-CLOSED.
+        # Only applies when a coordinator scratchpad EXISTS. If no scratchpad
+        # was found at all, the earlier block already blocked above — so here
+        # we only run when sp_name == "coordinator" (not "valuate").
+        if sp_name == "coordinator" and _MARKOV_CHECK_AVAILABLE:
+            missing = _markov_check.check_completeness(sp_path, agent_type="coordinator")
+            if missing:
+                print(
+                    f"[markov_check BLOCK] coordinator close-out missing: {', '.join(missing)}",
+                    file=sys.stderr,
+                )
+                print(f"  scratchpad: {sp_path}", file=sys.stderr)
+                json.dump({
+                    "decision": "block",
+                    "reason": (
+                        f"Coordinator scratchpad is missing Contract 1 items: "
+                        f"{', '.join(missing)}. "
+                        f"Complete the Markov-completeness close-out at {sp_path} "
+                        f"before the session ends. See .claude/rules/multi-agent-protocol.md "
+                        f"Markov-Completeness Contract section."
+                    ),
+                }, sys.stdout)
+                return
 
         print(
             f"Stop: {sp_name} scratchpad OK ({len(non_empty)} lines), allowing",

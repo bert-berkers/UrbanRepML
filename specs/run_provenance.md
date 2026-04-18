@@ -1,6 +1,7 @@
 # Run-Level Provenance
 
 ## Status: Draft
+> This is the already-designed answer to MEMORY.md P0 #7 (checkpoint versioning). Not yet implemented; intersects with Theme B (experiment ledger) in the 2026-04-18 organizational flywheel audit.
 
 ## Context
 

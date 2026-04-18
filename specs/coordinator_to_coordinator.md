@@ -1,6 +1,7 @@
 # Coordinator-to-Coordinator Communication Protocol
 
-## Status: v1.2 — Implemented (2026-02-27)
+## Status: Superseded (→ `.claude/rules/coordinator-coordination.md`)
+> The runtime contract is now `.claude/rules/coordinator-coordination.md` (loaded on `.claude/**` edits). For the current identity model see `session-identity-architecture.md`. This spec is preserved as the design-rationale trail — it explains WHY we chose claims + messages + heartbeats, which the rule does not. Runtime constants (staleness thresholds, message levels) live in the rule, not here.
 
 ## Context
 

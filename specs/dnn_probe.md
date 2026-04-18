@@ -1,6 +1,6 @@
 # DNN Probe: MLP Probe for Liveability Prediction
 
-## Status: Implemented
+## Status: Active
 
 ## Context
 

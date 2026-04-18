@@ -1,6 +1,7 @@
 # Coordinator Hello Broadcast
 
-## Status: Draft
+## Status: Superseded (→ `.claude/skills/niche/SKILL.md` Wave 0)
+> Implemented. The HELLO broadcast step is now codified in `.claude/skills/niche/SKILL.md` Wave 0 and in `.claude/rules/coordinator-coordination.md`. This spec is kept for historical context.
 
 ## Context
 

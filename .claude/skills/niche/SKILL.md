@@ -52,7 +52,7 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
 4. **Discover active plan**: Check if `$ARGUMENTS` references a plan file (e.g. `.claude/plans/foo.md`). If so, read it — this is your blueprint. If `$ARGUMENTS` is a task description without a plan file reference, check `.claude/plans/` for recent files (by modification time). If a plan with a wave structure exists, ask the user: "I found plan `{file}`. Should I follow it?"
 5. If a plan specifies waves: **follow them exactly**. Do not redesign the wave structure. The plan was written with full context that may have been lost to compaction.
 6. **Read session name** via `coordinator_registry.read_ppid_session()` (PPID-isolated). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
-7. **Check supra states**: Read supra session ID via `coordinator_registry.read_ppid_supra()`, then read from `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml`. Falls back to hardcoded neutral defaults (all dimensions = 3). If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/valuate` to set your weights, or I'll use defaults." If the supra session has an `intent` field, this is the terminal's strategic mission set during `/valuate` — use it to frame your OODA waves. The user's `$ARGUMENTS` provide tactical steering within that intent.
+7. **Check supra states**: Read supra session ID via `coordinator_registry.read_ppid_supra()`, then read from `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml`. Falls back to hardcoded neutral defaults (all dimensions = 3). If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/valuate` to set your weights, or I'll use defaults." If the supra session has an `intent` field, this is the terminal's strategic mission set during `/valuate` — use it to frame your OODA waves. The user's `$ARGUMENTS` provide tactical steering within that intent. Also read `.claude/coordinators/terminals/{pid}.yaml` (via `coordinator_registry._read_terminal_file()`) for `active_plan` and `last_wave_completed_at` — these are the gyroscope fields (#23) indicating which plan is active and when the last wave completed.
 8. **Hello broadcast** -- write an `info` message to `"all"` via `coordinator_registry.write_message()`:
    ```
    HELLO {session_id}
@@ -257,7 +257,8 @@ This is your full set of available specialists. When you have work to do, scan t
 | `devops` | uv packages, environment, git operations, system diagnostics | All tools | Version conflicts, environment setup, git branch/stash, disk/GPU/memory checks, code quality tools |
 | `ego` | Process health, interaction quality between agents | All tools | End-of-session health check, after multi-agent workflows, when agents report errors |
 | `Explore` | Fast codebase search, file finding, keyword search | Read tools, Grep, Glob | Quick "find files matching X" or "search for keyword Y" when no specialist domain applies |
-| `general-purpose` | Broad research, multi-step investigation | All tools | Complex questions spanning multiple domains, web research, tasks that don't fit a specialist |
+
+**NEVER dispatch `general-purpose`.** The coordinator IS the general-purpose agent. `general-purpose` scratchpads are orphaned — no domain successor reads them. If no specialist fits, either (a) handle it coordinator-direct, or (b) pick the closest specialist as a stretch fit (e.g. `Explore` for searches, `librarian` for code-knowledge questions, `spec-writer` for design questions). See `memory/feedback_never_general_purpose.md`.
 
 ### Choosing between agents
 

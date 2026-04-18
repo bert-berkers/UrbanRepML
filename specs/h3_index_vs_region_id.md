@@ -1,6 +1,7 @@
 # h3_index vs region_id Naming Convention
 
-## Status: Draft
+## Status: Draft (decided; migration pending)
+> The decision to adopt `region_id` was made, but the code-wide migration is not executed — both column names still appear in code as of 2026-04-18. Either promote to a plan or close.
 
 ## Context
 

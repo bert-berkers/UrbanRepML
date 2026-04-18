@@ -1,8 +1,9 @@
 # Skip Connection Collapse Fix -- Implementation Spec
 
+## Status: Implemented
+
 **Date**: 2026-03-08
 **Author**: stage2-fusion-architect
-**Status**: SPEC (no code changes)
 **Affected file**: `stage2_fusion/models/full_area_unet.py`
 **Training script**: `scripts/stage2/train_full_area_unet.py`
 

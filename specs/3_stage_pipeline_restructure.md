@@ -1,5 +1,7 @@
 # Restructure into Explicit 3-Stage Pipeline
 
+## Status: Implemented
+
 ## Context
 
 The project has a natural 3-stage pipeline (modality encoding -> fusion -> analysis), but the current package structure doesn't reflect it cleanly:

@@ -1,6 +1,6 @@
 # Script Hygiene Conventions
 
-## Status: Draft
+## Status: Active
 
 ## Context
 

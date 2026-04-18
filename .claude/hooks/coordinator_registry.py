@@ -19,8 +19,17 @@ Terminal-shell-keyed session identity (stable across /clear):
   write_ppid_supra      -- Write terminal-PID-keyed supra file
   read_ppid_session     -- Read session_id for this terminal's PID
   read_ppid_supra       -- Read supra_session_id for this terminal's PID
+  set_active_plan       -- Set active_plan field in terminal file (item #23)
+  mark_wave_complete    -- Set last_wave_completed_at in terminal file (item #23)
   cleanup_stale_ppid_files -- Remove session/supra files for dead processes
   archive_old_messages  -- Move messages into per-day subdirs
+
+Terminal identity schema (terminals/{pid}.yaml):
+  session_id              str       -- coordinator session ID (rotates on /clear)
+  supra_session_id        str       -- supra session ID (persists across /clear)
+  started_at              iso8601   -- when this terminal was first registered
+  active_plan             str|null  -- path to plan file coordinator is following
+  last_wave_completed_at  iso8601|null -- timestamp of most recent wave completion
 """
 import fnmatch
 import os
@@ -610,6 +619,29 @@ def cleanup_stale_ppid_files(coordinators_dir: Path) -> None:
         except (ValueError, OSError):
             archive.mkdir(exist_ok=True)
             f.rename(archive / f.name)
+
+
+def set_active_plan(coordinators_dir: Path, plan_path: str, pid: int | None = None) -> None:
+    """Set active_plan in this terminal's identity file.
+
+    Records the path to the plan file the coordinator is currently following.
+    Sets active_plan to null when plan_path is empty string.
+    Non-breaking — existing fields (session_id, supra_session_id, started_at) are preserved.
+    """
+    data = _read_terminal_file(coordinators_dir, pid=pid) or {}
+    data["active_plan"] = plan_path if plan_path else None
+    _write_terminal_file(coordinators_dir, data, pid=pid)
+
+
+def mark_wave_complete(coordinators_dir: Path, pid: int | None = None) -> None:
+    """Record ISO8601 timestamp of the most recent wave completion in this terminal's file.
+
+    Sets last_wave_completed_at to the current time.
+    Non-breaking — existing fields are preserved.
+    """
+    data = _read_terminal_file(coordinators_dir, pid=pid) or {}
+    data["last_wave_completed_at"] = datetime.now().isoformat(timespec="seconds")
+    _write_terminal_file(coordinators_dir, data, pid=pid)
 
 
 def archive_old_messages(coordinators_dir: Path) -> None:
