@@ -1,7 +1,7 @@
 # Between-Wave Pause Redesign
 
-## Status: Draft
-> Absorption status into `.claude/skills/niche/SKILL.md` is unverified as of 2026-04-18. If the Wave Results block is present in niche, this spec should be re-classified as Implemented; if not, keep as Draft and schedule a wave.
+## Status: Historical
+> Superseded by `.claude/skills/niche/SKILL.md` (2026-04-19, Q5 verification by Terminal D spec-hygiene wave). Retained for historical reference. All design elements — Wave 0 report (5 fields incl. Deferred P0s), Wave Results format (Delivered/Surprises/Still on goal?/Needs your call), the two-part gap-statement protocol, the removal of `/summarize-scratchpads` from between-wave OBSERVE, the lightweight messages-dir check, and the plan-driven vs ad-hoc gating policy — are present in the niche SKILL.md (Wave 0 lines 99-106; Wave Results lines 110-116; "Still on goal?" protocol lines 118-124; OBSERVE protocol lines 79-90; gating lines 203-205). The implementation note's reference to `coordinate/SKILL.md` is stale — that skill was renamed to `niche/SKILL.md`.
 
 ## Context
 

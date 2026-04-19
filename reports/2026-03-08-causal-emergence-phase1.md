@@ -71,11 +71,9 @@ All under `data/study_areas/netherlands/stage2_multimodal/unet/embeddings/`:
 
 ### Probe Results
 
-- `data/study_areas/netherlands/stage3_analysis/multiscale_probe_results.csv` -- All R² values
-- `data/study_areas/netherlands/stage3_analysis/dnn_probe/multiscale_comparison.png` -- Bar chart
-- `data/study_areas/netherlands/stage3_analysis/dnn_probe/multiscale_delta.png` -- Delta plot
+> **Note (2026-04-19, audit §7 Q3 patch)**: The aggregate citations originally listed here (`multiscale_probe_results.csv`, `multiscale_comparison.png`, `multiscale_delta.png` under `stage3_analysis/`) were aspirational — those flat aggregate artifacts were never produced. The numeric R² table above is backed by the per-variant `metrics_summary.csv` files in the dated run directories listed below. To regenerate the aggregate CSV/plots, re-run `scripts/stage3/probe_multiscale_embeddings.py` (output goes to a new date-keyed run dir under `dnn_probe/YYYY-MM-DD/`).
 
-Per-variant run directories (training curves, predictions, configs):
+Per-variant run directories (training curves, predictions, configs, `metrics_summary.csv`):
 - `data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-07_multiscale_res9_only/`
 - `data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-07_multiscale_multiscale_avg/`
 - `data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-07_multiscale_multiscale_concat/`

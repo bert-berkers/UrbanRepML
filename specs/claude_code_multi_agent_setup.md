@@ -1,5 +1,7 @@
 # Claude Code Multi-Agent Setup: Hooks, Rules, Skills, and Settings
 
+> **Current state (2026-04-19, Q6 audit patch)**: This document captures the original multi-agent design (Feb 2026). Architecture has since evolved — terminal-PID session isolation is now specified in `specs/session-identity-architecture.md`; supra/temporal weight-decay machinery in `specs/temporal-supra-profiles.md`; the `/coordinate` skill has been renamed `/niche`. Read this for the foundational concepts; consult the newer specs for current implementation details.
+
 ## Status: Implemented (v1, Feb 2026 — partial drift; see successors)
 > Implemented as described, but the identity/lifecycle layer has since evolved. For the current identity model see `session-identity-architecture.md`; for valuate/niche theory and temporal priors see `temporal-supra-profiles.md`. This spec remains the best architectural overview of how hooks + rules + skills wire together.
 
