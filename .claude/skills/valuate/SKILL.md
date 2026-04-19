@@ -1,11 +1,26 @@
 ---
 name: valuate
 description: "Set characteristic states (valuation). Static graph: indicators → percepts ↔ needs/desires (you)."
-user-invocable: true
-disable-model-invocation: false
-context: fork
+allowed-tools: [Bash, Write, Edit, Read, Skill]
 argument-hint: "[optional: quick adjustment like 'speed 5, tests 1']"
 ---
+
+<!--
+  CHANGED 2026-04-19 (Terminal D willowy-leaning-maple, audit-trail cleanup):
+  Removed `context: fork` (and the now-superfluous `user-invocable` /
+  `disable-model-invocation` lines) so /valuate executes inline in the
+  coordinator's main context, exactly like /niche does. The forking
+  variant ran the skill in a fresh subprocess whose PID-walk could not
+  reliably resolve the real terminal — that subprocess then wrote
+  identity-bearing files (terminal yaml + supra yaml) under a freshly
+  generated session_id, colliding with the real Terminal B and breaking
+  the SessionStart-hook identity. See
+  `.claude/scratchpad/coordinator/notes.md` §"2026-04-19 — Failure Mode:
+  Identity Tagging Drift" for full root-cause + lessons. The user's
+  guidance on the fix: "valuate shouldn't run as subagent... it's just
+  the main terminal like niche."
+-->
+
 
 ## Task
 
