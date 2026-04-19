@@ -73,9 +73,23 @@ The practical takeaway: **do not concatenate embeddings from different spatial l
 
 ## Data
 
+> **Path convention**: Citations resolve to the dated+named subdirectories
+> shown below (e.g. `dnn_probe/2026-03-21/2026-03-21_custom_concat_74d/`), **not**
+> the flat-sibling directories of the same approach name that coexist under the
+> same dated parent (e.g. `dnn_probe/2026-03-21/concat_74d/`, which is a
+> separate earlier run). The UNet-MS 192D citation resolves specifically to the
+> 2026-03-22 `unet_supervised_multiscale/` directory; that run's checkpoint is
+> `best_model_2022_74D_2026-03-22.pt` — see `specs/run_provenance.md`
+> §Checkpoint Index for checkpoint disambiguation (two 74D checkpoints exist
+> with different dates).
+
 - Concat 74D probe: [`dnn_probe/2026-03-21/2026-03-21_custom_concat_74d/`](../data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-21/2026-03-21_custom_concat_74d/)
 - RingAgg k10 74D probe: [`dnn_probe/2026-03-21/2026-03-21_custom_ring_agg_k10/`](../data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-21/2026-03-21_custom_ring_agg_k10/)
-- UNet-MS 192D probe: [`dnn_probe/2026-03-22/unet_supervised_multiscale/`](../data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-22/unet_supervised_multiscale/)
+- UNet-MS 192D probe: [`dnn_probe/2026-03-22/unet_supervised_multiscale/`](../data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-22/unet_supervised_multiscale/) (checkpoint `best_model_2022_74D_2026-03-22.pt`)
 - Ring+UNet 400D probe: [`dnn_probe/2026-03-29/2026-03-29_custom_ring+unet_400d/`](../data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-29/2026-03-29_custom_ring+unet_400d/)
 - Combined 400D embeddings: [`ring_unet_combined_20mix.parquet`](../data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-29/2026-03-29_ring_agg_plus_unet_comparison/ring_unet_combined_20mix.parquet)
 - Probe comparison script: [`scripts/stage3/run_probe_comparison.py`](../scripts/stage3/run_probe_comparison.py) (config: `ring_agg_plus_unet`)
+
+---
+
+*Probe parity note (2026-04-19): the Ridge-vs-DNN gap noted in §Setup is a run artifact — see [`reports/2026-04-19-q8-probe-parity.md`](2026-04-19-q8-probe-parity.md) for shared-fold reconciliation. On matched 74D multiscale_avg + 5-fold 10km spatial-block CV, DNN mean R²=0.588 beats Ridge 0.557 by +0.030 (6/6 targets), so DNN — not Ridge — is the authoritative probe for UNet embeddings going forward.*

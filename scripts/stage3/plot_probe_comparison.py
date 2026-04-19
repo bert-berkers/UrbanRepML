@@ -405,6 +405,20 @@ def main():
     parser.add_argument("--study-area", default="netherlands")
     parser.add_argument("--dpi", type=int, default=300)
     parser.add_argument("--resolution", type=int, default=9)
+    parser.add_argument(
+        "--approach-dates",
+        action="append",
+        default=[],
+        metavar="approach=YYYY-MM-DD",
+        help=(
+            "Override the date directory for a single approach. Repeatable. "
+            "Example: --approach-dates concat_74d=2026-04-01 "
+            "--approach-dates unet_supervised_multiscale=2026-04-02. "
+            "Approaches not overridden fall back to built-in defaults "
+            "(ring_agg_k10=2026-03-21, concat_74d=2026-03-21, "
+            "unet_supervised=2026-03-22, unet_supervised_multiscale=2026-03-22)."
+        ),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -417,13 +431,27 @@ def main():
     output_dir = paths.root / "stage3_analysis" / "comparison" / today / "probes"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Define which approaches to load and from which date
+    # Define which approaches to load and from which date.
+    # These are defaults; override per-approach via --approach-dates approach=YYYY-MM-DD.
     approach_dates = {
         "ring_agg_k10": "2026-03-21",
         "concat_74d": "2026-03-21",
         "unet_supervised": "2026-03-22",
         "unet_supervised_multiscale": "2026-03-22",
     }
+    for item in args.approach_dates:
+        if "=" not in item:
+            raise ValueError(
+                f"--approach-dates expects approach=YYYY-MM-DD, got: {item!r}"
+            )
+        approach, date_str = item.split("=", 1)
+        approach = approach.strip()
+        date_str = date_str.strip()
+        if not approach or not date_str:
+            raise ValueError(
+                f"--approach-dates expects approach=YYYY-MM-DD, got: {item!r}"
+            )
+        approach_dates[approach] = date_str
 
     logger.info("Loading approaches: %s", list(approach_dates.keys()))
     predictions, metrics = load_approaches(paths, approach_dates)

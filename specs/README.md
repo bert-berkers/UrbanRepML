@@ -32,7 +32,7 @@ The three-stage UrbanRepML pipeline (stage1 modality encoders → stage2 fusion 
 | [`skip-connection-fix.md`](./skip-connection-fix.md) | Implemented | FullAreaUNet collapse fix (cosine coherence loss, removed normalisations, gated skip). |
 | [`poi-pipeline-pyosmium-sedona.md`](./poi-pipeline-pyosmium-sedona.md) | Draft (partial) | pyosmium + date-specific PBF extraction with SRAI IntersectionJoiner. Snapshot extractor not yet durable. |
 | [`h3_index_vs_region_id.md`](./h3_index_vs_region_id.md) | Draft (decided, pending) | Decision to use `region_id` throughout was made; code-wide migration not executed. |
-| [`run_provenance.md`](./run_provenance.md) | Draft | Dated run dirs + `run_info.json` manifest. This is the answer to MEMORY.md P0 #7 (checkpoint versioning). |
+| [`run_provenance.md`](./run_provenance.md) | Active (partial) | Dated run dirs + `run_info.json` manifest design (still Draft). Checkpoint Index section is Active: authoritative retro-filled pointer table for existing Stage 2 UNet checkpoints (added 2026-04-19, Q8 resolution). Answers MEMORY.md P0 #7. |
 
 ## Scripts / tooling specs
 

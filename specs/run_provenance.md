@@ -1,7 +1,9 @@
 # Run-Level Provenance
 
-## Status: Draft
-> This is the already-designed answer to MEMORY.md P0 #7 (checkpoint versioning). Not yet implemented; intersects with Theme B (experiment ledger) in the 2026-04-18 organizational flywheel audit.
+## Status: Active (partial)
+> The forward-looking design (directory layout, `run_info.json` schema, `utils/paths.py` API) remains **Draft** — not yet implemented. This is the already-designed answer to MEMORY.md P0 #7 (checkpoint versioning); intersects with Theme B (experiment ledger) in the 2026-04-18 organizational flywheel audit.
+>
+> The retro-filled **Checkpoint Index** at the bottom of this doc is **Active**: it is the authoritative pointer table for existing Stage 2 UNet checkpoints, added 2026-04-19 as part of the Q8 probe-confound resolution (Terminal C, `twilight-branching-tide`). Until the full `run_info.json` mechanism ships, this hand-curated index is the single source of truth for disambiguating which checkpoint backs which report.
 
 ## Context
 
@@ -136,3 +138,35 @@ write_run_info(
    `write_run_info()` when they want provenance. No existing code breaks.
 4. First adopters should be `stage3_analysis/linear_probe.py` and
    `stage3_analysis/dnn_probe.py` since those are the most actively iterated.
+
+## Checkpoint Index (Stage 2 UNet, retro-filled 2026-04-19)
+
+Hand-curated index of checkpoints currently on disk at
+`data/study_areas/netherlands/stage2_multimodal/unet/checkpoints/`. Added to
+resolve the 74D-checkpoint ambiguity flagged in the 2026-03-29 probe-confound
+report (Q8 ternary; Terminal C Wave 3). Rows capture only what is verifiable
+from filename, directory listing, and citing reports — no fields are guessed
+from model internals. When the forward-looking `run_info.json` mechanism
+ships, each row should migrate into a per-run manifest and this table becomes
+a redirect list.
+
+| Filename | Date | Input dims | Training data (year) | Citing reports | Notes |
+|----------|------|-----------|---------------------|----------------|-------|
+| `best_model_2022_74D_2026-03-21.pt` | 2026-03-21 | 74D (AE 64 + Roads 10) | 2022 | `reports/2026-03-21-accessibility-unet-probe-results.md` (§Data line 87) | Accessibility UNet (walk edges at res9, uniform 1-ring at res8/7); 1000 ep; wandb run `mt10aget`. Decreasing dim pyramid [74→37→18]. |
+| `best_model_2022_74D_2026-03-22.pt` | 2026-03-22 | 74D (AE 64 + Roads 10) | 2022 | `reports/2026-03-29-ring-agg-plus-unet-probe-comparison.md` (§Data, "unet_supervised_multiscale") | Supervised multiscale variant referenced as "UNet-MS 192D" in the 03-29 report (mean R²=0.574). Relation to the 03-21 checkpoint (re-train vs. later epoch vs. different head) not recorded — no wandb link captured in reports. |
+| `best_model_2022_64D_2026-03-21.pt` | 2026-03-21 | 64D (AE only) | 2022 | — | AE-only 64D variant; not cited in the current probe-confound reports but kept for baseline comparisons. |
+| `best_model_20mix_64D_2026-03-14.pt` | 2026-03-14 | 64D | 20mix (multi-year blend, see MEMORY "Data Temporal Mismatch") | `reports/2026-03-14-unet-vs-concat-probe-comparison.md` | Pre-74D-era 208D/130K baseline run; retained for historical comparison. |
+| `best_model.pt` | unknown | unknown | unknown | `reports/2026-03-08-causal-emergence-phase1.md` (§Method, "247K × 128" shape) | **Unversioned — do not rely on.** Per MEMORY.md P0 #3 this file has been overwritten at least once; the 03-08 CE phase 1 report references the 128D 3-modality era weights which are no longer recoverable from this path. |
+
+### Known provenance gaps
+
+- The 2026-03-22 74D checkpoint has no `run_info.json` sidecar and no wandb
+  link in the 03-29 report. Disambiguating its relation to the 2026-03-21 74D
+  checkpoint (re-train from scratch? resumed epoch? different supervised
+  head?) currently requires a human who was present at training time.
+- `best_model.pt` is an unversioned artifact that has been overwritten without
+  backup; the 03-08 CE story cannot be reproduced from the current tree and
+  is a candidate for either a 74D rerun (Q8 item 5a, deferred) or a
+  "superseded by future rerun" footer on the 03-08 report.
+- This table should be regenerated (not edited) once `run_info.json` manifests
+  exist for each checkpoint.

@@ -84,7 +84,14 @@ The result confirms that the UNet architecture works — graph quality and multi
 
 ## Data
 
-- Checkpoint: `data/study_areas/netherlands/stage2_multimodal/unet/checkpoints/best_model_2022_74D_2026-03-21.pt`
+> **Path convention**: Probe outputs in this report live under dated+named
+> subdirectories (`stage3_analysis/dnn_probe/{YYYY-MM-DD}/{YYYY-MM-DD}_custom_{approach}/`).
+> Flat-sibling directories with the same approach name (e.g.
+> `stage3_analysis/dnn_probe/2026-03-21/concat_74d/`) exist from earlier runs and
+> are **not** the citations below. See `specs/run_provenance.md` §Checkpoint Index
+> for checkpoint disambiguation.
+
+- Checkpoint: `data/study_areas/netherlands/stage2_multimodal/unet/checkpoints/best_model_2022_74D_2026-03-21.pt` (see `specs/run_provenance.md` §Checkpoint Index — accessibility UNet, wandb `mt10aget`)
 - Embeddings (res9): `data/study_areas/netherlands/stage2_multimodal/unet/embeddings/netherlands_res9_2022.parquet`
 - Embeddings (multiscale avg): `data/study_areas/netherlands/stage2_multimodal/unet/embeddings/netherlands_res9_multiscale_avg_2022.parquet`
 - Embeddings (multiscale concat): `data/study_areas/netherlands/stage2_multimodal/unet/embeddings/netherlands_res9_multiscale_concat_2022.parquet`
@@ -92,3 +99,7 @@ The result confirms that the UNet architecture works — graph quality and multi
 - Loss curve: `data/study_areas/netherlands/stage2_multimodal/unet/checkpoints/training_loss_curve.png`
 - Probe results (res9): `data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-21/2026-03-21_custom_unet_accessibility_74d/`
 - Probe results (multiscale): `data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-21/2026-03-21_custom_unet_acc_multiscale_concat_222d/`
+
+---
+
+*Probe parity note (2026-04-19): see [`reports/2026-04-19-q8-probe-parity.md`](2026-04-19-q8-probe-parity.md) for the Ridge-vs-DNN shared-fold reconciliation on the 74D multiscale_avg embedding.*
