@@ -305,6 +305,15 @@ def main() -> None:
     # Register coordinator regardless of source (handles resume/compact too)
     session_id, active_claims = register_coordinator()
 
+    # Daily archive sweep — gated by .last_archive_sweep, fail-open
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import archive_sweep
+        archive_sweep.maybe_run_sweep()
+    except Exception as _sweep_exc:
+        print(f"session-start: archive sweep failed: {_sweep_exc}", file=sys.stderr)
+
     # Inject full orientation context on startup AND after /clear (which sends
     # "compact" or "resume"). After /clear the coordinator loses all context, so
     # re-injection is essential — especially for the /clear → /coordinate plan workflow.

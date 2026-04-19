@@ -67,6 +67,9 @@ Keep messages sparse. Routine status belongs in your scratchpad, not the message
 ## Anti-Patterns (Do Not Do These)
 
 - **Claim squatting**: Leaving `claimed_paths: ["*"]` beyond the first OODA cycle.
+  > Enforced via hook: a warning is emitted by `subagent-stop.py` when a session's
+  > `claimed_paths` remain `['*']` more than 15 minutes after `started_at`. See
+  > `.claude/hooks/subagent-stop.py` (`check_claim_narrowing`).
 - **Hijacking**: Modifying files another active coordinator claims without checking or warning.
 - **Inferential imperialism**: Writing specs or assertions about paths outside your claimed_paths.
   If you need cross-domain information, read the code (read-only) or leave a `request` message.
@@ -79,6 +82,20 @@ Keep messages sparse. Routine status belongs in your scratchpad, not the message
 | 30 minutes | Claim treated as stale -- proceed with info log, do not block |
 | 2 hours | Claim marked as ended by next session's cleanup |
 | 7 days | Ended claims archived to `coordinators/archive/` |
+
+## Daily Archive Sweep
+
+> Archive sweep: a daily cron in `.claude/hooks/session-start.py` moves supra
+> sessions (last_attuned > 30d) to `supra/sessions/archive/` and message dirs
+> (date > 7d ago) to `messages/archive/{date}/`. Gated by `.last_archive_sweep`
+> timestamp. Preserve-don't-delete — nothing is removed.
+
+Implemented in `.claude/hooks/archive_sweep.py` (`maybe_run_sweep()`). Key properties:
+- Gate file: `.claude/coordinators/.last_archive_sweep` (plain ISO-8601 UTC timestamp)
+- Runs at most once per 24 hours; skipped silently if gate is recent
+- Fail-open: per-item errors logged to stderr, sweep continues; gate always rewritten
+- Live terminal protection: supra sessions referenced in `coordinators/terminals/*.yaml` are never moved, even if stale
+- Sessions with missing/malformed `last_attuned` are skipped (don't guess)
 
 ## Files
 

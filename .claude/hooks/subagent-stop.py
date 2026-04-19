@@ -21,6 +21,57 @@ COORDINATORS_DIR = Path(__file__).resolve().parents[1] / "coordinators"
 MIN_LINES = 5
 MAX_LINES = 80  # Per multi-agent-protocol.md rule
 
+# Q4 claim-narrowing: sessions older than this (minutes) should have narrowed claimed_paths
+CLAIM_NARROWING_THRESHOLD_MINUTES = 15
+
+
+def check_claim_narrowing(coordinators_dir: Path) -> None:
+    """Warn if any active session still has claimed_paths=['*'] past the first OODA cycle.
+
+    Detection: session age > CLAIM_NARROWING_THRESHOLD_MINUTES AND claimed_paths == ['*'].
+    Fail mode: warning to stderr only, never blocks. Silently no-ops on any error.
+    Per .claude/rules/coordinator-coordination.md Anti-Patterns: claim squatting.
+    """
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import coordinator_registry as cr
+        from datetime import datetime, timedelta
+
+        claims = cr.read_all_claims(coordinators_dir, include_ended=False)
+        threshold = timedelta(minutes=CLAIM_NARROWING_THRESHOLD_MINUTES)
+        now = datetime.now()
+
+        for claim in claims:
+            claimed_paths = claim.get("claimed_paths", [])
+            # Check for wildcard squatting: ['*'] is the sentinel
+            if claimed_paths != ["*"]:
+                continue
+
+            session_id = claim.get("session_id", "unknown")
+            started_at_str = claim.get("started_at")
+            if not started_at_str:
+                continue
+
+            try:
+                started_at = datetime.fromisoformat(str(started_at_str))
+            except (ValueError, TypeError):
+                continue
+
+            age = now - started_at
+            if age > threshold:
+                age_min = int(age.total_seconds() / 60)
+                print(
+                    f"\u26a0 claim-narrowing: session {session_id!r} still has "
+                    f"claimed_paths=['*'] after {age_min}m. "
+                    f"Per .claude/rules/coordinator-coordination.md — "
+                    f"narrow to actual working paths.",
+                    file=sys.stderr,
+                )
+    except Exception as exc:
+        # Fail silently — never let the check break sessions
+        print(f"SubagentStop: claim-narrowing check failed: {exc}", file=sys.stderr)
+
 
 def touch_heartbeat() -> None:
     """Update the coordinator's heartbeat_at to now.
@@ -49,6 +100,9 @@ def main() -> None:
 
         # Update coordinator heartbeat on every subagent completion
         touch_heartbeat()
+
+        # Q4 claim-narrowing check (warn only, fail-open)
+        check_claim_narrowing(COORDINATORS_DIR)
 
         # Try multiple possible field names for agent type (runtime API may vary)
         agent_type = None
