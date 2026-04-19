@@ -14,6 +14,7 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 from srai.regionalizers import H3Regionalizer
+from utils.paths import StudyAreaPaths
 
 logger = logging.getLogger(__name__)
 
@@ -106,17 +107,17 @@ def load_building_density(
     logger.warning("PLACEHOLDER: Building density loading not implemented")
     
     # Load H3 regions to generate dummy data
-    regions_path = f"data/study_areas/{study_area}/regions_gdf/h3_res{h3_resolution}.parquet"
-    
-    if Path(regions_path).exists():
+    regions_path = StudyAreaPaths(study_area).region_file(h3_resolution)
+
+    if regions_path.exists():
         regions_gdf = gpd.read_parquet(regions_path)
-        
+
         # Generate dummy building densities
         dummy_densities = pd.DataFrame({
             'h3_id': regions_gdf['region_id'],
             'building_count': np.random.poisson(50, len(regions_gdf))  # Dummy data
         })
-        
+
         return dummy_densities
     else:
         raise FileNotFoundError(f"H3 regions not found: {regions_path}")
@@ -140,11 +141,11 @@ def apply_gravity_weighting(
     """
     
     # Load travel times (from floodfill calculation)
-    travel_times_path = f"data/study_areas/{study_area}/urban_embedding/graphs/travel_times_res{h3_resolution}.parquet"
-    
-    if not Path(travel_times_path).exists():
+    travel_times_path = StudyAreaPaths(study_area).accessibility_graph_file("travel_times", h3_resolution)
+
+    if not travel_times_path.exists():
         raise FileNotFoundError(f"Travel times not found: {travel_times_path}")
-    
+
     travel_times = pd.read_parquet(travel_times_path)
     
     # Load building densities
@@ -183,8 +184,8 @@ if __name__ == "__main__":
     )
     
     # Save results [old 2024]
-    output_path = f"data/study_areas/{args.study_area}/urban_embedding/graphs/gravity_weighted_res{args.resolution}.parquet"
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    output_path = StudyAreaPaths(args.study_area).accessibility_graph_file("gravity_weighted", args.resolution)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     weighted_graph.to_parquet(output_path)
     
     logger.info(f"Gravity-weighted graph saved to {output_path}")

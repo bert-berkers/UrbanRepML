@@ -14,6 +14,7 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 from srai.regionalizers import H3Regionalizer
+from utils.paths import StudyAreaPaths
 
 logger = logging.getLogger(__name__)
 
@@ -136,11 +137,11 @@ def create_pruned_accessibility_graph(
     """
     
     # Load gravity-weighted graph
-    weighted_graph_path = f"data/study_areas/{study_area}/urban_embedding/graphs/gravity_weighted_res{h3_resolution}.parquet"
-    
-    if not Path(weighted_graph_path).exists():
+    weighted_graph_path = StudyAreaPaths(study_area).accessibility_graph_file("gravity_weighted", h3_resolution)
+
+    if not weighted_graph_path.exists():
         raise FileNotFoundError(f"Weighted graph not found: {weighted_graph_path}")
-    
+
     weighted_graph = pd.read_parquet(weighted_graph_path)
     
     # Prune by percentile
@@ -152,9 +153,9 @@ def create_pruned_accessibility_graph(
     
     # Ensure connectivity if requested
     if ensure_connectivity:
-        regions_path = f"data/study_areas/{study_area}/regions_gdf/h3_res{h3_resolution}.parquet"
-        
-        if Path(regions_path).exists():
+        regions_path = StudyAreaPaths(study_area).region_file(h3_resolution)
+
+        if regions_path.exists():
             regions_gdf = gpd.read_parquet(regions_path)
             pruned_graph = ensure_graph_connectivity(pruned_graph, regions_gdf)
         else:
@@ -194,8 +195,8 @@ def create_multi_resolution_graphs(
             graphs[resolution] = pruned_graph
             
             # Save individual graph
-            output_path = f"data/study_areas/{study_area}/urban_embedding/graphs/pruned_res{resolution}.parquet"
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            output_path = StudyAreaPaths(study_area).accessibility_graph_file("pruned", resolution)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
             pruned_graph.to_parquet(output_path)
             
             logger.info(f"Saved pruned graph to {output_path}")
@@ -240,8 +241,8 @@ if __name__ == "__main__":
             custom_thresholds
         )
         
-        output_path = f"data/study_areas/{args.study_area}/urban_embedding/graphs/pruned_res{args.resolution}.parquet"
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        output_path = StudyAreaPaths(args.study_area).accessibility_graph_file("pruned", args.resolution)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         pruned_graph.to_parquet(output_path)
         
         logger.info(f"Pruned graph saved to {output_path}")

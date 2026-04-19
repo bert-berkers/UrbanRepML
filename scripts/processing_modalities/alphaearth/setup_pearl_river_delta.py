@@ -20,6 +20,8 @@ import json
 import logging
 import sys
 
+from utils.paths import StudyAreaPaths
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -83,7 +85,7 @@ def setup_study_area_structure(study_area_name: str = 'pearl_river_delta') -> Pa
     logger.info(f"Setting up study area structure for {study_area_name}...")
     
     # Base path
-    study_area_path = Path(f'study_areas/{study_area_name}')
+    study_area_path = StudyAreaPaths(study_area_name).root
     
     # Create all required subdirectories per documentation
     directories = [

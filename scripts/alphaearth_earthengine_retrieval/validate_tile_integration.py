@@ -31,6 +31,7 @@ import numpy as np
 # Add project path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from stage1_modalities.alphaearth.processor import AlphaEarthProcessor
+from utils.paths import StudyAreaPaths
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ class TileIntegrationValidator:
     def __init__(self, study_area: str, year: int):
         self.study_area = study_area
         self.year = year
-        self.metadata_path = Path(f"data/study_areas/{study_area}/tiles_metadata_{year}.json")
+        self.metadata_path = StudyAreaPaths(study_area).tiles_metadata_file(year)
         self.validation_results = {}
         
     def load_tile_metadata(self) -> Dict:
@@ -296,7 +297,7 @@ class TileIntegrationValidator:
         }
         
         # Save report
-        report_path = Path(f"data/study_areas/{self.study_area}/tile_validation_report_{self.year}.json")
+        report_path = StudyAreaPaths(self.study_area).tile_validation_report_file(self.year)
         report_path.parent.mkdir(parents=True, exist_ok=True)
         
         with open(report_path, 'w') as f:

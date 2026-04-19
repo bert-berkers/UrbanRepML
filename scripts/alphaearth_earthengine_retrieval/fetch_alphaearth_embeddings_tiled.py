@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import json
 
+from utils.paths import StudyAreaPaths
 import ee
 import geopandas as gpd
 from dotenv import load_dotenv
@@ -104,7 +105,7 @@ class TiledAlphaEarthExporter:
             # Try alternative paths
             alt_paths = [
                 Path(f"study_areas/{self.study_area}/area_gdf/{self.study_area}_boundary.geojson"),
-                Path(f"data/study_areas/{self.study_area}/area_gdf/boundary.geojson")
+                StudyAreaPaths(self.study_area).area_gdf() / "boundary.geojson"
             ]
             
             for alt_path in alt_paths:
@@ -264,7 +265,7 @@ class TiledAlphaEarthExporter:
     def save_tile_metadata(self, output_path: Optional[Path] = None) -> Path:
         """Save tile metadata for processing pipeline integration."""
         if output_path is None:
-            output_path = Path(f"data/study_areas/{self.study_area}/tiles_metadata_{self.year}.json")
+            output_path = StudyAreaPaths(self.study_area).tiles_metadata_file(self.year)
         
         # Ensure directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)

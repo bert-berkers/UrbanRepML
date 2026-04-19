@@ -221,6 +221,75 @@ class StudyAreaPaths:
         """Directory for accessibility graph artifacts."""
         return self.root / "accessibility"
 
+    def urban_embedding_graphs_dir(self) -> Path:
+        """Output directory for the accessibility graph pipeline.
+
+        Layout::
+
+            data/study_areas/{area}/urban_embedding/graphs/
+            ├── travel_times_res{N}.parquet      # floodfill_travel_time.py output
+            ├── gravity_weighted_res{N}.parquet  # gravity_weighting.py output
+            └── pruned_res{N}.parquet            # percentile_pruning.py output
+
+        Pipeline: ``floodfill_travel_time.py`` → ``gravity_weighting.py``
+        → ``percentile_pruning.py``. All three scripts read/write from
+        this directory.
+        """
+        return self.root / "urban_embedding" / "graphs"
+
+    def accessibility_graph_file(
+        self, graph_type: str, resolution: int
+    ) -> Path:
+        """Parquet file for an accessibility graph pipeline artifact.
+
+        Args:
+            graph_type: One of ``"travel_times"``, ``"gravity_weighted"``,
+                or ``"pruned"``. ValueError raised for unknown types.
+            resolution: H3 resolution integer.
+
+        Returns:
+            ``urban_embedding_graphs_dir() / "{graph_type}_res{N}.parquet"``
+        """
+        valid = {"travel_times", "gravity_weighted", "pruned"}
+        if graph_type not in valid:
+            raise ValueError(
+                f"graph_type must be one of {sorted(valid)}, got {graph_type!r}"
+            )
+        return (
+            self.urban_embedding_graphs_dir()
+            / f"{graph_type}_res{resolution}.parquet"
+        )
+
+    def tiles_metadata_file(self, year: Union[int, str]) -> Path:
+        """JSON metadata file for an AlphaEarth tile fetch run.
+
+        Path: ``data/study_areas/{area}/tiles_metadata_{year}.json``
+
+        Written by ``fetch_alphaearth_embeddings_tiled.py`` and read by
+        ``validate_tile_integration.py``.
+        """
+        return self.root / f"tiles_metadata_{year}.json"
+
+    def tile_validation_report_file(self, year: Union[int, str]) -> Path:
+        """JSON validation report for an AlphaEarth tile integration run.
+
+        Path: ``data/study_areas/{area}/tile_validation_report_{year}.json``
+
+        Written by ``validate_tile_integration.py``.
+        """
+        return self.root / f"tile_validation_report_{year}.json"
+
+    def native_resolution_probe_results_file(self) -> Path:
+        """CSV results file for the native-resolution probe sweep.
+
+        Path: ``data/study_areas/{area}/stage3_analysis/native_resolution_probe_results.csv``
+
+        Note: this file sits at the ``stage3_analysis/`` root (not inside an
+        analysis_type subdir) — matches the literal path used by
+        ``scripts/stage3/plot_causal_emergence_lollipop.py``.
+        """
+        return self.root / "stage3_analysis" / "native_resolution_probe_results.csv"
+
     # -----------------------------------------------------------------
     # Run-level provenance
     # -----------------------------------------------------------------

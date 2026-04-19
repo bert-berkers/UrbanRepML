@@ -25,9 +25,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.spatial_db import SpatialDB
+from utils.paths import StudyAreaPaths
 
 # ── Paths ──────────────────────────────────────────────────────────────
-ACC_DIR = PROJECT_ROOT / "data" / "study_areas" / "netherlands" / "accessibility"
+ACC_DIR = StudyAreaPaths("netherlands").accessibility()
 FIG_DIR = PROJECT_ROOT / "reports" / "figures" / "accessibility" / "2026-03-21"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 REPORT_PATH = PROJECT_ROOT / "reports" / "accessibility_graph_analysis.md"
@@ -297,14 +298,14 @@ print(f"  Saved: {FIG_DIR / 'walk_res9_gravity_map.png'}")
 print("\n=== Connectivity check ===")
 
 # Load total res9 regions
-regions_path = PROJECT_ROOT / "data" / "study_areas" / "netherlands" / "regions_gdf" / "res9"
+regions_path = StudyAreaPaths("netherlands").regions() / "res9"
 import geopandas as gpd
 
 # Try to find the parquet
 region_files = list(regions_path.glob("*.parquet")) if regions_path.exists() else []
 if not region_files:
     # Try alternative path
-    alt = PROJECT_ROOT / "data" / "study_areas" / "netherlands" / "regions_gdf" / "netherlands_res9.parquet"
+    alt = StudyAreaPaths("netherlands").region_file(9)
     if alt.exists():
         region_files = [alt]
 

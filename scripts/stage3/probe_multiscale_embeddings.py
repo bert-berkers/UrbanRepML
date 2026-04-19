@@ -54,9 +54,7 @@ H3_RESOLUTION = 9
 YEAR = 2022
 
 # Base path for UNet embedding variants
-EMBEDDINGS_DIR = Path(
-    "data/study_areas/netherlands/stage2_multimodal/unet/embeddings"
-)
+EMBEDDINGS_DIR = StudyAreaPaths(STUDY_AREA).model_embeddings("unet")
 
 # Embedding variants to probe (Option A: all at res9 geometry)
 EMBEDDING_VARIANTS = [

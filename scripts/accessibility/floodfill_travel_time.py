@@ -15,6 +15,7 @@ import geopandas as gpd
 import numpy as np
 from srai.regionalizers import H3Regionalizer
 from srai.neighbourhoods import H3Neighbourhood
+from utils.paths import StudyAreaPaths
 
 logger = logging.getLogger(__name__)
 
@@ -96,11 +97,11 @@ def calculate_local_accessibility_matrix(
     """
     
     # Load study area regions (created with SRAI)
-    regions_path = f"data/study_areas/{study_area}/regions_gdf/h3_res{h3_resolution}.parquet"
-    
-    if not Path(regions_path).exists():
+    regions_path = StudyAreaPaths(study_area).region_file(h3_resolution)
+
+    if not regions_path.exists():
         raise FileNotFoundError(f"H3 regions not found: {regions_path}")
-    
+
     regions_gdf = gpd.read_parquet(regions_path)
     
     # Calculate travel times
@@ -135,8 +136,8 @@ if __name__ == "__main__":
     )
     
     # Save results [old 2024]
-    output_path = f"data/study_areas/{args.study_area}/urban_embedding/graphs/travel_times_res{args.resolution}.parquet"
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    output_path = StudyAreaPaths(args.study_area).accessibility_graph_file("travel_times", args.resolution)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     travel_times.to_parquet(output_path)
-    
+
     logger.info(f"Travel times saved to {output_path}")

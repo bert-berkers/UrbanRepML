@@ -7,6 +7,8 @@ Usage:
 
 import logging
 
+from utils.paths import StudyAreaPaths
+
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,8 @@ def main():
     validator = EmbeddingValidator()
 
     # Generate comprehensive report
-    validator.generate_report("data/study_areas/netherlands/validation_report.txt")
+    report_path = StudyAreaPaths("netherlands").root / "validation_report.txt"
+    validator.generate_report(str(report_path))
 
     # Validate specific intermediate data
     logger.info("\nValidating POI intermediate data...")

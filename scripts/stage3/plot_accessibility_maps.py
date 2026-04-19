@@ -34,7 +34,7 @@ from utils.visualization import (
 )
 
 STUDY_AREA = "netherlands"
-ACC_DIR = PROJECT_ROOT / "data" / "study_areas" / STUDY_AREA / "accessibility"
+ACC_DIR = StudyAreaPaths(STUDY_AREA).accessibility()
 FIG_DIR = ACC_DIR / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 

@@ -54,19 +54,21 @@ TARGET_NAMES = {
     "won": "Housing Quality",
 }
 
+_LINEAR_PROBE_DIR = StudyAreaPaths(STUDY_AREA).stage3("linear_probe")
+
 APPROACHES = {
-    "unet_supervised": (
-        "data/study_areas/netherlands/stage3_analysis/linear_probe/"
-        "2026-03-22/2026-03-22_supervised_unet_supervised"
+    "unet_supervised": str(
+        _LINEAR_PROBE_DIR / "2026-03-22" / "2026-03-22_supervised_unet_supervised"
     ),
-    "unet_supervised_multiscale": (
-        "data/study_areas/netherlands/stage3_analysis/linear_probe/"
-        "2026-03-22/2026-03-22_supervised_unet_supervised_multiscale"
+    "unet_supervised_multiscale": str(
+        _LINEAR_PROBE_DIR
+        / "2026-03-22"
+        / "2026-03-22_supervised_unet_supervised_multiscale"
     ),
 }
 
-OUTPUT_BASE = Path(
-    "data/study_areas/netherlands/stage3_analysis/comparison/2026-03-22/probes"
+OUTPUT_BASE = (
+    StudyAreaPaths(STUDY_AREA).stage3("comparison") / "2026-03-22" / "probes"
 )
 
 DPI = 150

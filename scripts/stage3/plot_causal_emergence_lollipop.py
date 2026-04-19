@@ -142,14 +142,7 @@ def load_r2_data(paths: StudyAreaPaths) -> Dict[Tuple[str, int], float]:
 
     Returns dict mapping (target_col, resolution) -> R2 value.
     """
-    csv_path = (
-        paths.project_root
-        / "data"
-        / "study_areas"
-        / STUDY_AREA
-        / "stage3_analysis"
-        / "native_resolution_probe_results.csv"
-    )
+    csv_path = paths.native_resolution_probe_results_file()
     logger.info(f"Loading R2 data from {csv_path}")
     df = pd.read_csv(csv_path)
 

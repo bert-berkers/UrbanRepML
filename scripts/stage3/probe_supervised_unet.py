@@ -23,6 +23,7 @@ import sys
 
 from stage3_analysis.linear_probe import LinearProbeConfig, LinearProbeRegressor
 from stage3_analysis.probe_results_writer import ProbeResultsWriter
+from utils.paths import StudyAreaPaths
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +31,7 @@ STUDY_AREA = "netherlands"
 YEAR = 2022
 H3_RESOLUTION = 9
 
-EMBEDDINGS_DIR = (
-    "data/study_areas/netherlands/stage2_multimodal/unet/embeddings"
-)
+EMBEDDINGS_DIR = str(StudyAreaPaths(STUDY_AREA).model_embeddings("unet"))
 
 APPROACHES = [
     {

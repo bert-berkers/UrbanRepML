@@ -268,9 +268,11 @@ def main() -> None:
         paths.model_embeddings("concat")
         / f"{STUDY_AREA}_res{H3_RESOLUTION}_20mix.parquet"
     )
-    ring_agg_path = Path(
-        "data/study_areas/netherlands/stage3_analysis/dnn_probe/"
-        "2026-03-14/2026-03-14_ring_agg_k10_comparison/ring_agg_k10_res9_20mix.parquet"
+    ring_agg_path = (
+        paths.stage3("dnn_probe")
+        / "2026-03-14"
+        / "2026-03-14_ring_agg_k10_comparison"
+        / "ring_agg_k10_res9_20mix.parquet"
     )
 
     if args.embeddings_only == "concat":
