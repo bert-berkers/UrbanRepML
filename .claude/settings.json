@@ -44,6 +44,11 @@
             "type": "command",
             "command": "python \"C:/Users/Bert Berkers/PycharmProjects/UrbanRepML/.claude/hooks/subagent-stop.py\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python \"C:/Users/Bert Berkers/PycharmProjects/UrbanRepML/.claude/hooks/between_waves_sync.py\"",
+            "timeout": 10
           }
         ]
       }

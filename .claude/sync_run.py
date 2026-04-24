@@ -12,6 +12,12 @@ import os
 from pathlib import Path
 from datetime import datetime, timedelta
 
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
+
 sys.path.insert(0, str(Path('.claude/hooks').resolve()))
 
 import coordinator_registry as cr
