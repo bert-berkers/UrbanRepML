@@ -2,13 +2,13 @@
 
 | Field | Value |
 |---|---|
-| **Status** | IN PROGRESS — W0 shipped; executing under session `sunlit-blooming-ridge` |
+| **Status** | SHIPPED — all 5 waves green under session `sunlit-blooming-ridge`, commits `71eb8c3` (W0) → `2a21327` (W1) → `a4113b8` (W2) → `bfada2b` (W3) → `a9bd824` (W4); Final Wave close-out in progress |
 | **Source** | `reports/2026-04-18-organizational-flywheel-audit.md` §5 roadmap items #9, #10, #11, #12 |
 | **Parent plan** | `.claude/plans/2026-04-18-flywheel-gyroscope-fix.md` (cluster 1, executed `99099c0`) |
 | **Cluster** | 2 — Territory (touches `utils/` + `stage3_analysis/` + `data/ledger/` + `.claude/rules/`) |
 | **Depends on** | `2026-04-18-cluster2-paths-consolidation.md` ✅ shipped `dcac83d` |
 | **Est** | ~4–6h (bounded single-session scope) |
-| **Progress** | W0 ✅ (`specs/artifact_provenance.md` frozen, 22 in-scope figure sites catalogued, fail-modes resolved); W1 pending |
+| **Progress** | W0 ✅ spec frozen; W1 ✅ `utils/provenance.py` + 24/24 tests; W2 ✅ 4 probes + 22 viz sites wired (W2a ‖ W2b parallel); W3 ✅ governance docs (canonical identity + supra-ghost recovery); W4 ✅ audit GREEN (invariant holds, 0 ghost, 0 without-row) |
 
 ## Coordinator adjustments at execution start (2026-04-24 sunlit-blooming-ridge)
 
