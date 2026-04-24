@@ -1,13 +1,24 @@
-# Cluster 2 — Ledger + Sidecars + Figure Provenance (READY, re-scoped 2026-04-24)
+# Cluster 2 — Ledger + Sidecars + Figure Provenance (IN PROGRESS, 2026-04-24)
 
 | Field | Value |
 |---|---|
-| **Status** | READY — executable next `/niche` |
+| **Status** | IN PROGRESS — W0 shipped; executing under session `sunlit-blooming-ridge` |
 | **Source** | `reports/2026-04-18-organizational-flywheel-audit.md` §5 roadmap items #9, #10, #11, #12 |
 | **Parent plan** | `.claude/plans/2026-04-18-flywheel-gyroscope-fix.md` (cluster 1, executed `99099c0`) |
 | **Cluster** | 2 — Territory (touches `utils/` + `stage3_analysis/` + `data/ledger/` + `.claude/rules/`) |
 | **Depends on** | `2026-04-18-cluster2-paths-consolidation.md` ✅ shipped `dcac83d` |
 | **Est** | ~4–6h (bounded single-session scope) |
+| **Progress** | W0 ✅ (`specs/artifact_provenance.md` frozen, 22 in-scope figure sites catalogued, fail-modes resolved); W1 pending |
+
+## Coordinator adjustments at execution start (2026-04-24 sunlit-blooming-ridge)
+
+Plan structure held, with three surgical adjustments made after the Wave-0 `/niche` OODA read:
+
+1. **W2 split into W2a ‖ W2b** (parallel). Probe `.save()` retrofit and figure-save retrofit share only the `utils/provenance.py` API and are otherwise independent; bundling them into a single sequential wave was sequential-disguised-as-one. Split matches the plan's own rate-enablement thesis.
+2. **Write-side fail-mode promoted from "implementer's discretion" to schema decision** — now resolved in W0's spec (see `## Fail-mode decisions` below).
+3. **Commit-per-wave-on-green** rather than end-of-session batch commit. A plan whose thesis is "enable the outer loop to run at a rate" should not itself ship as one monolithic commit — the commit log is part of the rate-enabled record.
+
+Plus one pre-flight gate for W3: verify the `scratchpad/coordinator/notes.md` identity-drift failure-mode entry exists before W3a writes its "2026-04-24 partially resolved" subsection. If the anchor is missing, W3a writes the parent entry first.
 
 ## Frame (why a single Selflet should read the whole plan before diving in)
 
@@ -22,34 +33,61 @@ Gyroscopically: this moves cross-run analysis from **event-driven** (user opens 
 3. **Prototype stage: stage3 probes first.** `LinearProbeRegressor` + `DNNProbeRegressor` have clean save boundaries, deterministic outputs, multiple instances to test the schema, immediate analytical payoff, and low blast radius. Stage1 (heterogeneous modality encoders) and stage2 (long training runs, checkpoint complexity) are retrofits for a later plan.
 4. **Sidecar minimum fields:** `run_id`, `git_commit`, `git_dirty`, `config_hash`, `config_path`, `input_paths`, `output_paths`, `seed`, `wall_time_seconds`, `started_at`, `ended_at`, `producer_script`, `study_area`, `stage`, `schema_version`. Optional fields (Dirichlet, metric values, any domain-specific keys) go under `extra:` so the minimum schema stays stable.
 5. **qaqc gates (W5):** (a) every new artifact path has a `*.run.yaml` sibling; (b) `len(read_ledger())` equals the count of on-disk `.run.yaml` files; (c) same `config_hash` + same inputs → same sidecar modulo `wall_time_seconds`.
+6. **Complementary to `specs/run_provenance.md`** (discovered during W0 audit). The existing spec covers the coarser `run_info.json` per-run-directory manifest. Our per-artifact `*.run.yaml` sibling + cross-run ledger is a finer layer; they coexist at the same run. All 4 probes already call `write_run_info()` via `create_run_id(run_descriptor)` — our new `run_id` format is richer; old names the run dir, new names the sidecar. No unification attempted (would require a 2.0 schema bump).
+
+## Fail-mode decisions (resolved in W0, documented in `specs/artifact_provenance.md`)
+
+1. **Read side, `read_ledger` on malformed row** → skip + stderr warn, fail-open.
+2. **Write side, `ledger_append` failure** → **raise** after bounded retry (3× at 100ms for benign multi-terminal lock contention). Rationale: swallowing breaks the W4 invariant `len(read_ledger()) == count(stage3 *.run.yaml)` and creates ghost sidecars. Write-sidecar-first-then-ledger-append means a raised `ledger_append` leaves a detectable sidecar-without-row for W4's audit script to flag — prioritises provenance integrity over run completion.
+3. **`SidecarWriter.__exit__` during wrapped-code exception** → write partial sidecar with `extra.status: "failed"` + `extra.exception_class`, then re-raise the original exception. Rationale: failed runs are the highest-signal cases for outer-loop adjustment; losing their provenance contradicts the plan thesis. Edge case: if the sidecar write itself fails during exception, the original exception takes precedence.
 
 ## Wave structure
 
-### W0 — Read-only audit + schema finalisation (spec-writer)
+### W0 — Read-only audit + schema finalisation (spec-writer) ✅ SHIPPED 2026-04-24
 
-- Read `stage3_analysis/linear_probe.py`, `dnn_probe.py`, `classification_probe.py` save paths.
-- Read `scripts/stage3/plot_cluster_maps.py` + any `stage3_analysis/*viz*.py` figure-write sites.
-- Freeze the sidecar schema as a spec file: `specs/artifact_provenance.md`. Include the 15 minimum fields + `extra:` conventions + figure-provenance specialisation (`source_runs`, `source_artifacts`, `plot_config`).
-- Acceptance: spec written, no code changes, librarian's `codebase_graph.md` updated with the new spec entry.
+- ✅ Audited `LinearProbeRegressor.save_results()` (linear_probe.py:548-635), `DNNProbeRegressor.save_results()` (dnn_probe.py:755-865), `ClassificationProber.save_results()` (classification_probe.py:423-493), `DNNClassificationProber.save_results()` (dnn_classification_probe.py:690-802).
+- ✅ Audited 22 in-scope figure-write sites across 4 viz files + `plot_cluster_maps.py`; catalogued ~60 out-of-scope sites as a future-plan index.
+- ✅ `specs/artifact_provenance.md` frozen (~280 lines): 15 minimum fields + `extra.*` conventions + figure-provenance `*.provenance.yaml` + JSONL ledger format + three fail-mode decisions + `config_hash` algorithm + `run_id` format + schema versioning + Appendix A audit findings.
+- ✅ Librarian specs index (`.claude/scratchpad/librarian/codebase_graph/infrastructure.md`) updated with cross-link to complementary `specs/run_provenance.md`.
+- **Surprises (for W1/W2 implementers):**
+  - Pre-existing `specs/run_provenance.md` is complementary, not superseded — coarser per-run-dir layer coexists with our per-artifact sibling layer.
+  - DNN probes write a `training_curves/` subdirectory of ~30 JSON files → produce ONE sidecar (`training_curves.run.yaml`) for the subdirectory, not 30 per-file sidecars.
+  - All 4 probes have ~95% duplicated `load_and_join_data` + `create_spatial_blocks` code (~250 lines each). Out of scope here; flagged `[open|0d]` for a future `BaseProbe` refactor plan.
+- **W0 scratchpad**: `.claude/scratchpad/spec-writer/2026-04-24-sunlit-blooming-ridge.md`.
 
-### W1 — Core utility module (devops + stage3-analyst)
+### W1 — Core utility module (devops + qaqc in parallel)
 
-- Write `utils/provenance.py`:
-  - `compute_config_hash(cfg: dict) -> str` (canonical JSON + sha256, stable across dict ordering)
-  - `SidecarWriter` context manager — captures `started_at`, on `__exit__` captures `ended_at`, `wall_time_seconds`, writes `*.run.yaml` next to the artifact
-  - `ledger_append(sidecar_path: Path)` — reads sidecar, appends a minimal row to `data/ledger/runs.jsonl` (uses advisory file-lock for cross-terminal append safety)
-  - `read_ledger(path: Path = None) -> pd.DataFrame` — convenience reader that handles malformed rows fail-open (skip + stderr warn)
-- Tests: `tests/utils/test_provenance.py` — config-hash stability, sidecar round-trip, ledger append idempotence, reader fail-open on malformed rows.
-- Acceptance: all tests pass; `python -c "from utils.provenance import SidecarWriter, compute_config_hash, ledger_append, read_ledger"` imports clean.
+Parallel: implementation (devops) and tests (qaqc) can run simultaneously once the spec is frozen. Test-writer pairs contract-first against the spec, not against the implementation.
 
-### W2 — Stage3 probe retrofit (stage3-analyst)
+- **devops — `utils/provenance.py`:**
+  - `compute_config_hash(cfg: dict) -> str` — canonical JSON (sorted keys, UTF-8) + SHA-256 → first 16 hex chars (per spec §config_hash algorithm).
+  - `SidecarWriter(artifact_path, config, inputs, producer_script=None, study_area=None, stage='stage3', extra=None)` — context manager. `__enter__` captures `started_at`, `git_commit`, `git_dirty`, computes `config_hash` and `run_id`. `__exit__` captures `ended_at`, `wall_time_seconds`, writes `{artifact_path}.run.yaml` sibling. On exception: writes partial sidecar with `extra.status="failed"` + `extra.exception_class`, then re-raises.
+  - `ledger_append(sidecar_path: Path)` — reads the sidecar, projects 14 fields (15 minimum minus `input_paths` + minus `output_paths`, plus `sidecar_path`) to a JSONL row, appends to `data/ledger/runs.jsonl` with advisory file-lock. **Bounded retry** (3× at 100ms) on lock contention, then raises.
+  - `read_ledger(path: Path = None) -> pd.DataFrame` — convenience reader; malformed row → skip + stderr warn (fail-open).
+- **qaqc — `tests/utils/test_provenance.py`:** config-hash stability (dict ordering invariance, nested dict/list normalisation, non-serialisable coercion), sidecar round-trip (write → read YAML → field equality), `__exit__`-on-exception writes failed sidecar then re-raises, ledger append idempotence, read_ledger fail-open on malformed rows, run_id format assertion.
+- **Acceptance:** all tests pass; `python -c "from utils.provenance import SidecarWriter, compute_config_hash, ledger_append, read_ledger"` imports clean; commit on green.
 
-- Wire `SidecarWriter` into `LinearProbeRegressor.save()`, `DNNProbeRegressor.save()`, `ClassificationProber.save()`, `DNNClassificationProber.save()`.
-- Add `stage3_analysis/save_figure.py`: `save_figure(fig, path: Path, sources: list[str], plot_config: dict = None)` — writes figure + `*.provenance.yaml` sibling.
-- Retrofit `linear_probe_viz.py`, `dnn_probe_viz.py`, `classification_probe_viz.py`, `dnn_classification_probe_viz.py` to call `save_figure()` instead of `fig.savefig()` directly. Sources = list of `run_id`s from the source probe sidecars.
-- Acceptance: run one probe end-to-end (e.g. `python -m stage3_analysis.linear_probe --study-area netherlands` if CLI exists, else an ad-hoc script); verify `.run.yaml` sits next to the probe output, `runs.jsonl` has a new row, figure has a `.provenance.yaml` sibling pointing at the probe's `run_id`.
+### W2 — Stage3 probe retrofit (split W2a ‖ W2b, both stage3-analyst)
+
+Split into parallel sub-waves at coordinator-execution time. They share only the `utils/provenance.py` API (frozen in W1) and are otherwise independent.
+
+**W2a — Probe save() sidecar wiring:**
+- Wire `SidecarWriter` into `LinearProbeRegressor.save_results()`, `DNNProbeRegressor.save_results()`, `ClassificationProber.save_results()`, `DNNClassificationProber.save_results()`.
+- DNN probes: produce ONE `training_curves.run.yaml` sidecar for the subdirectory-as-artifact (not 30 per-file sidecars).
+- Call `ledger_append()` after sidecar write. Coexists with the existing `write_run_info()` calls — do not remove those.
+- Acceptance: run one probe (e.g. `python -m stage3_analysis.linear_probe --study-area netherlands` if CLI exists, else ad-hoc); verify `.run.yaml` sibling + new row in `data/ledger/runs.jsonl`.
+
+**W2b — Figure save wrapper + viz retrofit:**
+- Add `stage3_analysis/save_figure.py`: `save_figure(fig, path: Path, sources: list[str], plot_config: dict = None)` — calls `fig.savefig` then writes `*.provenance.yaml` sibling per spec.
+- Retrofit the 22 in-scope figure-write sites in `linear_probe_viz.py`, `dnn_probe_viz.py`, `classification_probe_viz.py` (confirmed filename: `classification_viz.py` per W0 audit), `dnn_classification_viz.py`, and `scripts/stage3/plot_cluster_maps.py` to call `save_figure()` instead of raw `fig.savefig()`. Source run_ids come from the probe sidecars loaded at plot time (probes must expose their `run_id` in results structure).
+- Acceptance: re-run a probe's viz step; verify `.provenance.yaml` sibling exists next to each figure with `source_runs` populated.
+
+**Integration acceptance (after both):** one full probe-plus-viz cycle produces sidecar + ledger row + figure provenance; commit on green.
 
 ### W3 — Gyroscopic governance updates (spec-writer, docs-only, small)
+
+**Pre-flight gate:** Verify `scratchpad/coordinator/notes.md` "Failure Mode: Identity Tagging Drift" entry exists before writing the "2026-04-24 partially resolved" subsection. If the parent entry is missing, W3a writes the parent entry first (date-stamped 2026-04-19 per the plan's cross-link in W3a step 1) — otherwise the subsection has no anchor and the cross-link from the rule file dangles.
+
 
 This wave is docs-only and semantically adjacent: the sidecar/ledger work *is* outer-loop rate-enablement, and the identity/supra-ghost items are outer-loop coherence. Bundling keeps the governance layer in sync with the data layer.
 
@@ -65,6 +103,7 @@ This wave is docs-only and semantically adjacent: the sidecar/ledger work *is* o
 ### W4 — qaqc gate + README pass (qaqc)
 
 - qaqc script: `scripts/one_off/audit_sidecar_coverage.py` (temporary, 30-day shelf life) — walks `data/` + `reports/` + `stage3_analysis/` output dirs, finds artifact files without sibling `.run.yaml`, prints a count + a sample. Acceptance target: all stage3-probe-produced artifacts from W2 onward have sidecars; pre-W2 legacy artifacts are expected to be uncovered and that is fine (backfill is out of scope for this plan).
+- Also detects the write-side failure signature: sidecar-without-ledger-row (the raised `ledger_append` leaves this pattern — audit script flags it as a distinct bucket from missing-sidecar).
 - Verify: `len(read_ledger()) == count(*.run.yaml from stage3)` for artifacts produced during the session.
 - qaqc produces commit-readiness verdict: whether the working tree is committable.
 
