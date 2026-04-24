@@ -59,6 +59,7 @@ from utils.visualization import (
     rasterize_categorical,
 )
 from stage3_analysis.cluster_results_writer import ClusterResultsWriter
+from stage3_analysis.save_figure import save_figure
 from stage3_analysis.visualization.clustering_utils import (
     apply_pca_reduction,
     perform_minibatch_clustering,
@@ -343,7 +344,46 @@ def main():
 
         plt.tight_layout()
         out_path = output_dir / f"clusters_k{k}.png"
-        fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+
+        # Best-effort: if the embedding parquet has a sibling *.run.yaml
+        # sidecar (future-state; W2b-equivalent for stage2), read its run_id
+        # so this cluster map's *.provenance.yaml points back at it.
+        sources: list = []
+        emb_sidecar = Path(str(embedding_path) + ".run.yaml")
+        if emb_sidecar.exists():
+            try:
+                import yaml as _yaml
+                with open(emb_sidecar, encoding="utf-8") as fh:
+                    emb_run = _yaml.safe_load(fh) or {}
+                if emb_run.get("run_id"):
+                    sources = [emb_run["run_id"]]
+            except Exception:
+                pass
+
+        source_artifacts = [embedding_path]
+        if args.sort_by_lbm and lbm_df is not None:
+            source_artifacts.append(paths.target_file("leefbaarometer", resolution, args.lbm_year))
+
+        save_figure(
+            fig, out_path,
+            sources=sources,
+            source_artifacts=source_artifacts,
+            plot_config={
+                "plot": "cluster_map",
+                "k": int(k),
+                "cmap": cmap,
+                "stamp": int(stamp),
+                "resolution": int(resolution),
+                "n_hexagons": int(len(emb_df)),
+                "pca_components": int(args.pca_components),
+                "sort_by_lbm": bool(args.sort_by_lbm and lbm_df is not None),
+                "label": title_prefix,
+                "dpi": DPI,
+                "crs": "EPSG:28992",
+            },
+            dpi=DPI,
+            facecolor="white",
+        )
         plt.close(fig)
         print(f"  Saved: {out_path}")
 

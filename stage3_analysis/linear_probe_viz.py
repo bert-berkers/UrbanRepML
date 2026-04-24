@@ -34,6 +34,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from utils import StudyAreaPaths
 
 from .linear_probe import LinearProbeRegressor, TargetResult, TARGET_NAMES, TAXONOMY_TARGET_NAMES
+from .save_figure import save_figure
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ class LinearProbeVisualizer:
         dpi: int = 150,
         h3_resolution: int = 10,
         modality: str = "alphaearth",
+        source_run_ids: Optional[List[str]] = None,
     ):
         self.results = results
         self.output_dir = Path(output_dir)
@@ -63,6 +65,10 @@ class LinearProbeVisualizer:
         self.dpi = dpi
         self.h3_resolution = h3_resolution
         self.modality = modality
+        # Upstream probe run_ids — populated by callers from probe sidecars
+        # (e.g. SidecarWriter.run_id) so each saved figure's *.provenance.yaml
+        # can point back at the run(s) whose data it depicts.
+        self.source_run_ids: List[str] = list(source_run_ids) if source_run_ids else []
 
         # Set style
         sns.set_style("whitegrid")
@@ -127,7 +133,17 @@ class LinearProbeVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / f"coefficients_{target_col}.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "coefficient_bars",
+                "target_col": target_col,
+                "top_n": top_n,
+                "dpi": self.dpi,
+                "colormap": "RdBu_r",
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved coefficient bar chart: {path}")
@@ -208,7 +224,16 @@ class LinearProbeVisualizer:
         plt.tight_layout(rect=[0, 0, 1, 0.95])
 
         path = self.output_dir / "coefficients_faceted.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "coefficient_bars_faceted",
+                "dpi": self.dpi,
+                "colormap": "RdBu_r",
+                "targets": list(self.results.keys()),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved faceted coefficient bar chart: {path}")
@@ -268,7 +293,17 @@ class LinearProbeVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / "coefficient_heatmap.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "coefficient_heatmap",
+                "dpi": self.dpi,
+                "colormap": "RdBu_r",
+                "n_features": n_features,
+                "targets": list(targets),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved coefficient heatmap: {path}")
@@ -336,7 +371,16 @@ class LinearProbeVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / f"scatter_{target_col}.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "scatter_predicted_vs_actual",
+                "target_col": target_col,
+                "n_points": int(n_points),
+                "dpi": self.dpi,
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved scatter plot: {path}")
@@ -396,7 +440,16 @@ class LinearProbeVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / "metrics_comparison.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "metrics_comparison",
+                "dpi": self.dpi,
+                "has_pca_results": results_pca is not None,
+                "targets": list(targets),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved metrics comparison: {path}")
@@ -445,7 +498,16 @@ class LinearProbeVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / "cross_target_correlation.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "cross_target_correlation",
+                "dpi": self.dpi,
+                "colormap": "RdBu_r",
+                "targets": list(targets),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved cross-target correlation: {path}")
@@ -628,7 +690,17 @@ class LinearProbeVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / f"spatial_map_{target_col}.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "spatial_residuals",
+                "target_col": target_col,
+                "n_hexagons": int(n_hexagons),
+                "dpi": self.dpi,
+                "crs": "EPSG:28992",
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved spatial residual map: {path}")
@@ -1109,7 +1181,18 @@ class LinearProbeVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / f"rgb_top3_{target_col}.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "rgb_top3_map",
+                "target_col": target_col,
+                "n_hexagons": int(n_hexagons),
+                "channel_names": list(channel_names),
+                "percentile_normalization": [2, 98],
+                "dpi": self.dpi,
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved RGB top-3 map: {path}")
@@ -1165,7 +1248,15 @@ class LinearProbeVisualizer:
         plt.tight_layout()
 
         path = self.output_dir / "fold_metrics.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "fold_metrics",
+                "dpi": self.dpi,
+                "n_rows": len(rows),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved fold metrics plot: {path}")

@@ -30,6 +30,7 @@ from matplotlib.colors import TwoSlopeNorm
 
 from .linear_probe import TargetResult, TARGET_NAMES
 from .linear_probe_viz import LinearProbeVisualizer
+from .save_figure import save_figure
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         figsize_base: Tuple[float, float] = (10, 6),
         dpi: int = 150,
         h3_resolution: int = 10,
+        source_run_ids: Optional[List[str]] = None,
     ):
         """
         Args:
@@ -70,8 +72,14 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
             figsize_base: Base figure size (width, height).
             dpi: Dots per inch for saved figures.
             h3_resolution: H3 resolution level for spatial lookups.
+            source_run_ids: Upstream probe run_ids written into each figure's
+                ``*.provenance.yaml`` sibling (see ``save_figure``).
         """
-        super().__init__(results, output_dir, study_area, figsize_base, dpi, h3_resolution=h3_resolution)
+        super().__init__(
+            results, output_dir, study_area, figsize_base, dpi,
+            h3_resolution=h3_resolution,
+            source_run_ids=source_run_ids,
+        )
         self.training_curves = training_curves or {}
 
     # ------------------------------------------------------------------
@@ -181,7 +189,19 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         plt.tight_layout(rect=[0, 0, 1, 0.95])
 
         path = self.output_dir / "training_curves_all.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "training_curves_all",
+                "dpi": self.dpi,
+                "targets": list(targets),
+                "n_folds_max": max(
+                    (len(self.training_curves.get(t, {})) for t in targets),
+                    default=0,
+                ),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved training curves (all targets): {path}")
@@ -201,7 +221,16 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
 
         plt.tight_layout()
         path = self.output_dir / f"training_curves_{target_col}.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "training_curves_single",
+                "target_col": target_col,
+                "dpi": self.dpi,
+                "n_folds": len(self.training_curves.get(target_col, {})),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved training curves: {path}")
@@ -411,7 +440,15 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         plt.tight_layout(rect=[0, 0, 1, 0.92])
 
         path = self.output_dir / "comparison_linear_vs_dnn.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "comparison_linear_vs_dnn",
+                "dpi": self.dpi,
+                "targets": list(targets),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved comparison bars: {path}")
@@ -534,7 +571,18 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
         plt.tight_layout(rect=[0, 0, 1, 0.93])
 
         path = self.output_dir / "comparison_scatter_dnn_vs_linear.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "comparison_scatter_dnn_vs_linear",
+                "dpi": self.dpi,
+                "targets": list(targets),
+                "colormap": "viridis",
+                "subsample_cap": 50000,
+                "random_state": 42,
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved comparison scatter: {path}")
@@ -736,7 +784,18 @@ class DNNProbeVisualizer(LinearProbeVisualizer):
 
         plt.tight_layout()
         path = self.output_dir / f"spatial_improvement_{target_col}.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "spatial_improvement",
+                "target_col": target_col,
+                "n_hexagons": int(n_hexagons),
+                "dpi": self.dpi,
+                "colormap": "RdBu",
+                "crs": "EPSG:28992",
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved spatial improvement map: {path}")

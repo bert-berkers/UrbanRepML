@@ -49,6 +49,7 @@ from stage3_analysis.linear_probe import (
 from stage3_analysis.dnn_probe import MLPProbeModel
 from utils import StudyAreaPaths
 from utils.paths import write_run_info
+from utils.provenance import SidecarWriter
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,9 @@ class DNNClassificationProber:
         self.training_curves: Dict[str, Dict[int, List[float]]] = {}
         self.data_gdf: Optional[gpd.GeoDataFrame] = None
         self.feature_names: List[str] = []
+        # Tracks which embedding parquet was actually loaded; used by
+        # save_results() for the SidecarWriter input_paths field.
+        self._loaded_embedding_path: Optional[Path] = None
 
     # ------------------------------------------------------------------
     # Data loading (mirrors DNNProbeRegressor)
@@ -165,6 +169,7 @@ class DNNClassificationProber:
         """
         emb_path = self.project_root / self.config.embeddings_path
         target_path = self.project_root / self.config.target_path
+        self._loaded_embedding_path = emb_path
 
         logger.info(f"Loading embeddings from {emb_path}")
         emb_df = pd.read_parquet(emb_path)
@@ -694,51 +699,14 @@ class DNNClassificationProber:
         Produces:
             metrics_summary.csv, predictions_{target}.parquet, config.json,
             training_curves/{target}_fold{k}.json, and run_info.json.
+
+        Cluster-2 ledger-sidecars (W2a): writes
+        ``metrics_summary.csv.run.yaml`` + ``training_curves.run.yaml``
+        (directory-as-artifact) via :class:`utils.provenance.SidecarWriter`.
         """
         out_dir = output_dir or (self.project_root / self.config.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # ----- Metrics summary -----
-        metrics_rows = []
-        for target_col, result in self.results.items():
-            row: Dict[str, Any] = {
-                "target": target_col,
-                "target_name": result.target_name,
-                "task_type": "classification",
-                "overall_accuracy": result.overall_accuracy,
-                "overall_f1_macro": result.overall_f1_macro,
-                "n_classes": result.n_classes,
-                "overall_r2": 0.0,
-                "overall_rmse": 0.0,
-                "overall_mae": 0.0,
-                "best_alpha": 0.0,
-                "best_l1_ratio": 0.0,
-                "n_features": len(result.feature_names),
-            }
-            if result.fold_metrics:
-                for fm in result.fold_metrics:
-                    row[f"fold{fm.fold}_accuracy"] = fm.accuracy
-                    row[f"fold{fm.fold}_f1_macro"] = fm.f1_macro
-            metrics_rows.append(row)
-
-        metrics_df = pd.DataFrame(metrics_rows)
-        metrics_df.to_csv(out_dir / "metrics_summary.csv", index=False)
-        logger.info(f"Saved metrics summary to {out_dir / 'metrics_summary.csv'}")
-
-        # ----- Predictions per target -----
-        for target_col, result in self.results.items():
-            pred_dict = {
-                "region_id": result.region_ids,
-                "actual": result.actual_values,
-                "predicted": result.oof_predictions,
-            }
-            pred_df = pd.DataFrame(pred_dict).set_index("region_id")
-            pred_path = out_dir / f"predictions_{target_col}.parquet"
-            pred_df.to_parquet(pred_path)
-
-        logger.info(f"Saved predictions to {out_dir}")
-
-        # ----- Config + best hyperparameters -----
         config_dict: Dict[str, Any] = {
             "study_area": self.config.study_area,
             "year": self.config.year,
@@ -763,41 +731,148 @@ class DNNClassificationProber:
                 for k, v in hps.items()
             }
 
-        with open(out_dir / "config.json", "w") as f:
-            json.dump(config_dict, f, indent=2)
+        input_paths: List[Path] = []
+        if self._loaded_embedding_path is not None:
+            input_paths.append(self._loaded_embedding_path)
+        elif self.config.embeddings_path is not None:
+            input_paths.append(self.project_root / self.config.embeddings_path)
+        if self.config.target_path is not None:
+            input_paths.append(self.project_root / self.config.target_path)
 
-        logger.info(f"Saved config to {out_dir / 'config.json'}")
+        if self.results:
+            overall_acc_mean = float(np.mean([r.overall_accuracy for r in self.results.values()]))
+            overall_f1_mean = float(np.mean([r.overall_f1_macro for r in self.results.values()]))
+        else:
+            overall_acc_mean = overall_f1_mean = float("nan")
 
-        # Write run-level provenance when using a run directory
-        if self.config.run_id is not None:
-            _paths = StudyAreaPaths(self.config.study_area)
-            _latest = _paths.latest_run(_paths.stage1(self.config.modality))
-            _upstream_label = _latest.name if _latest else "flat"
-            write_run_info(
-                out_dir,
-                stage="stage3",
-                study_area=self.config.study_area,
-                config=config_dict,
-                upstream_runs={f"stage1/{self.config.modality}": _upstream_label},
-            )
-            logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
+        primary_artifact = out_dir / "metrics_summary.csv"
 
-        # ----- Training curves per target/fold -----
+        with SidecarWriter(
+            artifact_path=primary_artifact,
+            config=config_dict,
+            input_paths=input_paths,
+            producer_script="stage3_analysis/dnn_classification_probe.py",
+            study_area=self.config.study_area,
+            stage="stage3",
+            seed=self.config.random_state,
+            extra={
+                "probe_type": "dnn_classification",
+                "task_type": "classification",
+                "n_targets": len(self.results),
+                "target_cols": list(self.results.keys()),
+                "n_folds": self.config.n_folds,
+                "n_features": len(self.feature_names),
+                "device": self.config.device,
+                "max_epochs": self.config.max_epochs,
+                "overall_accuracy_mean": overall_acc_mean,
+                "overall_f1_macro_mean": overall_f1_mean,
+            },
+        ) as sc:
+            # ----- Metrics summary -----
+            metrics_rows = []
+            for target_col, result in self.results.items():
+                row: Dict[str, Any] = {
+                    "target": target_col,
+                    "target_name": result.target_name,
+                    "task_type": "classification",
+                    "overall_accuracy": result.overall_accuracy,
+                    "overall_f1_macro": result.overall_f1_macro,
+                    "n_classes": result.n_classes,
+                    "overall_r2": 0.0,
+                    "overall_rmse": 0.0,
+                    "overall_mae": 0.0,
+                    "best_alpha": 0.0,
+                    "best_l1_ratio": 0.0,
+                    "n_features": len(result.feature_names),
+                }
+                if result.fold_metrics:
+                    for fm in result.fold_metrics:
+                        row[f"fold{fm.fold}_accuracy"] = fm.accuracy
+                        row[f"fold{fm.fold}_f1_macro"] = fm.f1_macro
+                metrics_rows.append(row)
+
+            metrics_df = pd.DataFrame(metrics_rows)
+            metrics_df.to_csv(primary_artifact, index=False)
+            logger.info(f"Saved metrics summary to {primary_artifact}")
+
+            # ----- Predictions per target -----
+            pred_paths: List[Path] = []
+            for target_col, result in self.results.items():
+                pred_dict = {
+                    "region_id": result.region_ids,
+                    "actual": result.actual_values,
+                    "predicted": result.oof_predictions,
+                }
+                pred_df = pd.DataFrame(pred_dict).set_index("region_id")
+                pred_path = out_dir / f"predictions_{target_col}.parquet"
+                pred_df.to_parquet(pred_path)
+                pred_paths.append(pred_path)
+
+            logger.info(f"Saved predictions to {out_dir}")
+
+            # ----- Config + best hyperparameters -----
+            config_path = out_dir / "config.json"
+            with open(config_path, "w") as f:
+                json.dump(config_dict, f, indent=2)
+
+            logger.info(f"Saved config to {config_path}")
+
+            # Write run-level provenance when using a run directory
+            run_info_path: Optional[Path] = None
+            if self.config.run_id is not None:
+                _paths = StudyAreaPaths(self.config.study_area)
+                _latest = _paths.latest_run(_paths.stage1(self.config.modality))
+                _upstream_label = _latest.name if _latest else "flat"
+                write_run_info(
+                    out_dir,
+                    stage="stage3",
+                    study_area=self.config.study_area,
+                    config=config_dict,
+                    upstream_runs={f"stage1/{self.config.modality}": _upstream_label},
+                )
+                run_info_path = out_dir / "run_info.json"
+                logger.info(f"Saved run_info.json to {run_info_path}")
+
+            sc.output_paths = [primary_artifact, config_path] + pred_paths
+            if run_info_path is not None:
+                sc.output_paths.append(run_info_path)
+
+        # ----- Training curves per target/fold (directory-as-artifact) -----
         if self.training_curves:
             curves_dir = out_dir / "training_curves"
-            curves_dir.mkdir(parents=True, exist_ok=True)
-            for target_col, fold_curves in self.training_curves.items():
-                for fold_id, curve in fold_curves.items():
-                    curve_path = curves_dir / f"{target_col}_fold{fold_id}.json"
-                    with open(curve_path, "w") as f:
-                        json.dump(
-                            {"target": target_col, "fold": fold_id, "val_loss": curve},
-                            f,
-                        )
-            logger.info(
-                f"Saved training curves to {curves_dir} "
-                f"({sum(len(fc) for fc in self.training_curves.values())} files)"
-            )
+            n_curves = sum(len(fc) for fc in self.training_curves.values())
+            with SidecarWriter(
+                artifact_path=curves_dir,
+                config=config_dict,
+                input_paths=input_paths,
+                producer_script="stage3_analysis/dnn_classification_probe.py",
+                study_area=self.config.study_area,
+                stage="stage3",
+                seed=self.config.random_state,
+                extra={
+                    "probe_type": "dnn_classification",
+                    "artifact_kind": "training_curves_dir",
+                    "n_curves": n_curves,
+                    "n_targets": len(self.training_curves),
+                    "max_epochs": self.config.max_epochs,
+                    "patience": self.config.patience,
+                },
+            ) as sc_curves:
+                curves_dir.mkdir(parents=True, exist_ok=True)
+                curve_paths: List[Path] = []
+                for target_col, fold_curves in self.training_curves.items():
+                    for fold_id, curve in fold_curves.items():
+                        curve_path = curves_dir / f"{target_col}_fold{fold_id}.json"
+                        with open(curve_path, "w") as f:
+                            json.dump(
+                                {"target": target_col, "fold": fold_id, "val_loss": curve},
+                                f,
+                            )
+                        curve_paths.append(curve_path)
+                logger.info(
+                    f"Saved training curves to {curves_dir} ({n_curves} files)"
+                )
+                sc_curves.output_paths = [curves_dir] + curve_paths
 
         return out_dir
 

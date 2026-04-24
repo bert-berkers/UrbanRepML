@@ -37,6 +37,7 @@ from .linear_probe import (
     TAXONOMY_TARGET_NAMES,
     TargetResult,
 )
+from .save_figure import save_figure
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class ClassificationVisualizer:
         figsize_base: Tuple[float, float] = (10, 6),
         dpi: int = 150,
         h3_resolution: int = 10,
+        source_run_ids: Optional[List[str]] = None,
     ):
         self.results = results
         self.output_dir = Path(output_dir)
@@ -65,6 +67,9 @@ class ClassificationVisualizer:
         self.figsize_base = figsize_base
         self.dpi = dpi
         self.h3_resolution = h3_resolution
+        # Upstream probe run_ids — each saved figure's *.provenance.yaml
+        # points back at the run(s) whose data it depicts.
+        self.source_run_ids: List[str] = list(source_run_ids) if source_run_ids else []
 
         # Set style
         sns.set_style("whitegrid")
@@ -143,7 +148,18 @@ class ClassificationVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / f"confusion_matrix_{target_col}.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "confusion_matrix",
+                "target_col": target_col,
+                "n_classes": int(n),
+                "dpi": self.dpi,
+                "colormap": "Blues",
+                "normalization": "row",
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved confusion matrix: {path}")
@@ -361,7 +377,18 @@ class ClassificationVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / f"spatial_class_map_{target_col}.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "spatial_class_map",
+                "target_col": target_col,
+                "n_hexagons": int(n_hexagons),
+                "n_classes": int(n_classes),
+                "dpi": self.dpi,
+                "crs": "EPSG:28992",
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved spatial class map: {path}")
@@ -441,7 +468,15 @@ class ClassificationVisualizer:
         plt.tight_layout(rect=[0, 0, 1, 0.92])
 
         path = self.output_dir / "classification_metrics_comparison.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "classification_metrics_comparison",
+                "dpi": self.dpi,
+                "targets": list(targets),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved classification metrics comparison: {path}")
@@ -537,7 +572,15 @@ class ClassificationVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / "fold_metrics.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "fold_metrics",
+                "dpi": self.dpi,
+                "n_rows": len(rows),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved fold metrics plot: {path}")
@@ -693,7 +736,15 @@ class ClassificationVisualizer:
 
         plt.tight_layout()
         path = self.output_dir / "hierarchical_accuracy.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "hierarchical_accuracy",
+                "dpi": self.dpi,
+                "n_levels": len(levels),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved hierarchical accuracy plot: {path}")

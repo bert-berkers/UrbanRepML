@@ -33,6 +33,7 @@ from sklearn.preprocessing import StandardScaler
 
 from utils import StudyAreaPaths
 from utils.paths import write_run_info
+from utils.provenance import SidecarWriter
 
 from .linear_probe import (
     TAXONOMY_TARGET_COLS,
@@ -111,6 +112,9 @@ class ClassificationProber:
         self.results: Dict[str, TargetResult] = {}
         self.data_gdf: Optional[gpd.GeoDataFrame] = None
         self.feature_names: List[str] = []
+        # Tracks which embedding parquet was actually loaded; used by
+        # save_results() for the SidecarWriter input_paths field.
+        self._loaded_embedding_path: Optional[Path] = None
 
     def load_and_join_data(self) -> gpd.GeoDataFrame:
         """
@@ -121,6 +125,7 @@ class ClassificationProber:
         """
         emb_path = self.project_root / self.config.embeddings_path
         target_path = self.project_root / self.config.target_path
+        self._loaded_embedding_path = emb_path
 
         logger.info(f"Loading embeddings from {emb_path}")
         emb_df = pd.read_parquet(emb_path)
@@ -421,45 +426,15 @@ class ClassificationProber:
         return self.results
 
     def save_results(self, output_dir: Optional[Path] = None) -> Path:
-        """Save all results to disk."""
+        """Save all results to disk.
+
+        Writes a per-artifact ``metrics_summary.csv.run.yaml`` sidecar +
+        ledger row via :class:`utils.provenance.SidecarWriter`
+        (cluster-2 ledger-sidecars W2a).
+        """
         out_dir = output_dir or (self.project_root / self.config.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save metrics summary
-        metrics_rows = []
-        for target_col, result in self.results.items():
-            row = {
-                "target": target_col,
-                "target_name": result.target_name,
-                "task_type": "classification",
-                "overall_accuracy": result.overall_accuracy,
-                "overall_f1_macro": result.overall_f1_macro,
-                "n_classes": result.n_classes,
-                "n_features": len(result.feature_names),
-            }
-            for fm in result.fold_metrics:
-                row[f"fold{fm.fold}_accuracy"] = fm.accuracy
-                row[f"fold{fm.fold}_f1_macro"] = fm.f1_macro
-            metrics_rows.append(row)
-
-        metrics_df = pd.DataFrame(metrics_rows)
-        metrics_df.to_csv(out_dir / "metrics_summary.csv", index=False)
-        logger.info(f"Saved metrics summary to {out_dir / 'metrics_summary.csv'}")
-
-        # Save out-of-fold predictions per target
-        for target_col, result in self.results.items():
-            pred_dict = {
-                "region_id": result.region_ids,
-                "actual": result.actual_values,
-                "predicted": result.oof_predictions,
-            }
-            pred_df = pd.DataFrame(pred_dict).set_index("region_id")
-            pred_path = out_dir / f"predictions_{target_col}.parquet"
-            pred_df.to_parquet(pred_path)
-
-        logger.info(f"Saved predictions to {out_dir}")
-
-        # Save config
         config_dict = {
             "study_area": self.config.study_area,
             "year": self.config.year,
@@ -473,22 +448,102 @@ class ClassificationProber:
             "n_features": len(self.feature_names),
             "feature_names": self.feature_names,
         }
-        with open(out_dir / "config.json", "w") as f:
-            json.dump(config_dict, f, indent=2)
 
-        # Write run-level provenance
-        if self.config.run_id is not None:
-            _paths = StudyAreaPaths(self.config.study_area)
-            _latest = _paths.latest_run(_paths.stage1(self.config.modality))
-            _upstream_label = _latest.name if _latest else "flat"
-            write_run_info(
-                out_dir,
-                stage="stage3",
-                study_area=self.config.study_area,
-                config=config_dict,
-                upstream_runs={f"stage1/{self.config.modality}": _upstream_label},
-            )
-            logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
+        input_paths: List[Path] = []
+        if self._loaded_embedding_path is not None:
+            input_paths.append(self._loaded_embedding_path)
+        elif self.config.embeddings_path is not None:
+            input_paths.append(self.project_root / self.config.embeddings_path)
+        if self.config.target_path is not None:
+            input_paths.append(self.project_root / self.config.target_path)
+
+        if self.results:
+            overall_acc_mean = float(np.mean([r.overall_accuracy for r in self.results.values()]))
+            overall_f1_mean = float(np.mean([r.overall_f1_macro for r in self.results.values()]))
+        else:
+            overall_acc_mean = overall_f1_mean = float("nan")
+
+        primary_artifact = out_dir / "metrics_summary.csv"
+
+        with SidecarWriter(
+            artifact_path=primary_artifact,
+            config=config_dict,
+            input_paths=input_paths,
+            producer_script="stage3_analysis/classification_probe.py",
+            study_area=self.config.study_area,
+            stage="stage3",
+            seed=self.config.random_state,
+            extra={
+                "probe_type": "logistic_classification",
+                "task_type": "classification",
+                "n_targets": len(self.results),
+                "target_cols": list(self.results.keys()),
+                "n_folds": self.config.n_folds,
+                "n_features": len(self.feature_names),
+                "overall_accuracy_mean": overall_acc_mean,
+                "overall_f1_macro_mean": overall_f1_mean,
+            },
+        ) as sc:
+            # Save metrics summary
+            metrics_rows = []
+            for target_col, result in self.results.items():
+                row = {
+                    "target": target_col,
+                    "target_name": result.target_name,
+                    "task_type": "classification",
+                    "overall_accuracy": result.overall_accuracy,
+                    "overall_f1_macro": result.overall_f1_macro,
+                    "n_classes": result.n_classes,
+                    "n_features": len(result.feature_names),
+                }
+                for fm in result.fold_metrics:
+                    row[f"fold{fm.fold}_accuracy"] = fm.accuracy
+                    row[f"fold{fm.fold}_f1_macro"] = fm.f1_macro
+                metrics_rows.append(row)
+
+            metrics_df = pd.DataFrame(metrics_rows)
+            metrics_df.to_csv(primary_artifact, index=False)
+            logger.info(f"Saved metrics summary to {primary_artifact}")
+
+            # Save out-of-fold predictions per target
+            pred_paths: List[Path] = []
+            for target_col, result in self.results.items():
+                pred_dict = {
+                    "region_id": result.region_ids,
+                    "actual": result.actual_values,
+                    "predicted": result.oof_predictions,
+                }
+                pred_df = pd.DataFrame(pred_dict).set_index("region_id")
+                pred_path = out_dir / f"predictions_{target_col}.parquet"
+                pred_df.to_parquet(pred_path)
+                pred_paths.append(pred_path)
+
+            logger.info(f"Saved predictions to {out_dir}")
+
+            # Save config
+            config_path = out_dir / "config.json"
+            with open(config_path, "w") as f:
+                json.dump(config_dict, f, indent=2)
+
+            # Write run-level provenance
+            run_info_path: Optional[Path] = None
+            if self.config.run_id is not None:
+                _paths = StudyAreaPaths(self.config.study_area)
+                _latest = _paths.latest_run(_paths.stage1(self.config.modality))
+                _upstream_label = _latest.name if _latest else "flat"
+                write_run_info(
+                    out_dir,
+                    stage="stage3",
+                    study_area=self.config.study_area,
+                    config=config_dict,
+                    upstream_runs={f"stage1/{self.config.modality}": _upstream_label},
+                )
+                run_info_path = out_dir / "run_info.json"
+                logger.info(f"Saved run_info.json to {run_info_path}")
+
+            sc.output_paths = [primary_artifact, config_path] + pred_paths
+            if run_info_path is not None:
+                sc.output_paths.append(run_info_path)
 
         return out_dir
 

@@ -25,6 +25,7 @@ import seaborn as sns
 
 from .linear_probe import TargetResult, TARGET_NAMES, TAXONOMY_TARGET_NAMES
 from .classification_viz import ClassificationVisualizer
+from .save_figure import save_figure
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class DNNClassificationVisualizer(ClassificationVisualizer):
         study_area: str = "netherlands",
         figsize_base: Tuple[float, float] = (10, 6),
         dpi: int = 150,
+        source_run_ids: Optional[List[str]] = None,
     ):
         """
         Args:
@@ -61,8 +63,13 @@ class DNNClassificationVisualizer(ClassificationVisualizer):
             study_area: Study area name for resolving data paths.
             figsize_base: Base figure size (width, height).
             dpi: Dots per inch for saved figures.
+            source_run_ids: Upstream probe run_ids written into each figure's
+                ``*.provenance.yaml`` sibling (see ``save_figure``).
         """
-        super().__init__(results, output_dir, study_area, figsize_base, dpi)
+        super().__init__(
+            results, output_dir, study_area, figsize_base, dpi,
+            source_run_ids=source_run_ids,
+        )
         self.training_curves = training_curves or {}
 
     # ------------------------------------------------------------------
@@ -128,7 +135,19 @@ class DNNClassificationVisualizer(ClassificationVisualizer):
         plt.tight_layout(rect=[0, 0, 1, 0.95])
 
         path = self.output_dir / "training_curves_all.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "dnn_cls_training_curves_all",
+                "dpi": self.dpi,
+                "targets": list(targets),
+                "n_folds_max": max(
+                    (len(self.training_curves.get(t, {})) for t in targets),
+                    default=0,
+                ),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved training curves (all targets): {path}")
@@ -148,7 +167,16 @@ class DNNClassificationVisualizer(ClassificationVisualizer):
 
         plt.tight_layout()
         path = self.output_dir / f"training_curves_{target_col}.png"
-        fig.savefig(path, dpi=self.dpi, bbox_inches="tight")
+        save_figure(
+            fig, path,
+            sources=self.source_run_ids,
+            plot_config={
+                "plot": "dnn_cls_training_curves_single",
+                "target_col": target_col,
+                "dpi": self.dpi,
+                "n_folds": len(self.training_curves.get(target_col, {})),
+            },
+        )
         plt.close(fig)
 
         logger.info(f"Saved training curves: {path}")

@@ -33,6 +33,7 @@ from sklearn.preprocessing import StandardScaler
 
 from utils import StudyAreaPaths
 from utils.paths import write_run_info
+from utils.provenance import SidecarWriter
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,9 @@ class LinearProbeRegressor:
         self.results: Dict[str, TargetResult] = {}
         self.data_gdf: Optional[gpd.GeoDataFrame] = None
         self.feature_names: List[str] = []
+        # Tracks which embedding parquet was actually loaded (full vs PCA-16);
+        # used by save_results() for the SidecarWriter input_paths field.
+        self._loaded_embedding_path: Optional[Path] = None
 
     def load_and_join_data(self, use_pca: bool = False) -> gpd.GeoDataFrame:
         """
@@ -183,6 +187,7 @@ class LinearProbeRegressor:
                         else self.config.embeddings_path)
         emb_path = self.project_root / emb_path_str
         target_path = self.project_root / self.config.target_path
+        self._loaded_embedding_path = emb_path
 
         logger.info(f"Loading embeddings from {emb_path}")
         emb_df = pd.read_parquet(emb_path)
@@ -546,61 +551,17 @@ class LinearProbeRegressor:
         return self.results
 
     def save_results(self, output_dir: Optional[Path] = None) -> Path:
-        """Save all results to disk."""
+        """Save all results to disk.
+
+        In addition to the existing CSV/parquet/config outputs, this method
+        writes a per-artifact ``metrics_summary.csv.run.yaml`` sidecar and
+        appends a row to ``data/ledger/runs.jsonl`` via
+        :class:`utils.provenance.SidecarWriter` (cluster-2 ledger-sidecars W2a).
+        """
         out_dir = output_dir or (self.project_root / self.config.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save metrics summary
-        metrics_rows = []
-        for target_col, result in self.results.items():
-            row = {
-                "target": target_col,
-                "target_name": result.target_name,
-                "best_alpha": result.best_alpha,
-                "best_l1_ratio": result.best_l1_ratio,
-                "overall_r2": result.overall_r2,
-                "overall_rmse": result.overall_rmse,
-                "overall_mae": result.overall_mae,
-                "n_features": len(result.feature_names),
-            }
-            # Only add fold metrics if they exist (CV mode has them, simple mode doesn't)
-            if result.fold_metrics:
-                for fm in result.fold_metrics:
-                    row[f"fold{fm.fold}_r2"] = fm.r2
-                    row[f"fold{fm.fold}_rmse"] = fm.rmse
-            metrics_rows.append(row)
-
-        metrics_df = pd.DataFrame(metrics_rows)
-        metrics_df.to_csv(out_dir / "metrics_summary.csv", index=False)
-        logger.info(f"Saved metrics summary to {out_dir / 'metrics_summary.csv'}")
-
-        # Save coefficients per target
-        coef_rows = []
-        for target_col, result in self.results.items():
-            for feat_name, coef_val in zip(result.feature_names, result.coefficients):
-                coef_rows.append({
-                    "target": target_col,
-                    "feature": feat_name,
-                    "coefficient": coef_val,
-                })
-        coef_df = pd.DataFrame(coef_rows)
-        coef_df.to_csv(out_dir / "coefficients.csv", index=False)
-        logger.info(f"Saved coefficients to {out_dir / 'coefficients.csv'}")
-
-        # Save out-of-fold predictions per target
-        for target_col, result in self.results.items():
-            pred_df = pd.DataFrame({
-                "region_id": result.region_ids,
-                "actual": result.actual_values,
-                "predicted": result.oof_predictions,
-                "residual": result.actual_values - result.oof_predictions,
-            }).set_index("region_id")
-            pred_path = out_dir / f"predictions_{target_col}.parquet"
-            pred_df.to_parquet(pred_path)
-
-        logger.info(f"Saved predictions to {out_dir}")
-
-        # Save config
+        # Build config dict up front so we can hand it to SidecarWriter.
         config_dict = {
             "study_area": self.config.study_area,
             "year": self.config.year,
@@ -614,23 +575,122 @@ class LinearProbeRegressor:
             "n_features": len(self.feature_names),
             "feature_names": self.feature_names,
         }
-        with open(out_dir / "config.json", "w") as f:
-            json.dump(config_dict, f, indent=2)
 
-        # Write run-level provenance when using a run directory
-        if self.config.run_id is not None:
-            # Auto-detect upstream run
-            _paths = StudyAreaPaths(self.config.study_area)
-            _latest = _paths.latest_run(_paths.stage1(self.config.modality))
-            _upstream_label = _latest.name if _latest else "flat"
-            write_run_info(
-                out_dir,
-                stage="stage3",
-                study_area=self.config.study_area,
-                config=config_dict,
-                upstream_runs={f"stage1/{self.config.modality}": _upstream_label},
-            )
-            logger.info(f"Saved run_info.json to {out_dir / 'run_info.json'}")
+        # Sidecar inputs: the embedding parquet actually loaded + target parquet.
+        input_paths: List[Path] = []
+        if self._loaded_embedding_path is not None:
+            input_paths.append(self._loaded_embedding_path)
+        elif self.config.embeddings_path is not None:
+            input_paths.append(self.project_root / self.config.embeddings_path)
+        if self.config.target_path is not None:
+            input_paths.append(self.project_root / self.config.target_path)
+
+        # Summarise overall metrics for extra{} — cross-target means.
+        if self.results:
+            overall_r2_mean = float(np.mean([r.overall_r2 for r in self.results.values()]))
+            overall_rmse_mean = float(np.mean([r.overall_rmse for r in self.results.values()]))
+        else:
+            overall_r2_mean = overall_rmse_mean = float("nan")
+
+        primary_artifact = out_dir / "metrics_summary.csv"
+
+        with SidecarWriter(
+            artifact_path=primary_artifact,
+            config=config_dict,
+            input_paths=input_paths,
+            producer_script="stage3_analysis/linear_probe.py",
+            study_area=self.config.study_area,
+            stage="stage3",
+            seed=self.config.random_state,
+            extra={
+                "probe_type": "linear",
+                "n_targets": len(self.results),
+                "target_cols": list(self.results.keys()),
+                "n_folds": self.config.n_folds,
+                "n_features": len(self.feature_names),
+                "overall_r2_mean": overall_r2_mean,
+                "overall_rmse_mean": overall_rmse_mean,
+            },
+        ) as sc:
+            # Save metrics summary
+            metrics_rows = []
+            for target_col, result in self.results.items():
+                row = {
+                    "target": target_col,
+                    "target_name": result.target_name,
+                    "best_alpha": result.best_alpha,
+                    "best_l1_ratio": result.best_l1_ratio,
+                    "overall_r2": result.overall_r2,
+                    "overall_rmse": result.overall_rmse,
+                    "overall_mae": result.overall_mae,
+                    "n_features": len(result.feature_names),
+                }
+                # Only add fold metrics if they exist (CV mode has them, simple mode doesn't)
+                if result.fold_metrics:
+                    for fm in result.fold_metrics:
+                        row[f"fold{fm.fold}_r2"] = fm.r2
+                        row[f"fold{fm.fold}_rmse"] = fm.rmse
+                metrics_rows.append(row)
+
+            metrics_df = pd.DataFrame(metrics_rows)
+            metrics_df.to_csv(primary_artifact, index=False)
+            logger.info(f"Saved metrics summary to {primary_artifact}")
+
+            # Save coefficients per target
+            coef_rows = []
+            for target_col, result in self.results.items():
+                for feat_name, coef_val in zip(result.feature_names, result.coefficients):
+                    coef_rows.append({
+                        "target": target_col,
+                        "feature": feat_name,
+                        "coefficient": coef_val,
+                    })
+            coef_df = pd.DataFrame(coef_rows)
+            coef_path = out_dir / "coefficients.csv"
+            coef_df.to_csv(coef_path, index=False)
+            logger.info(f"Saved coefficients to {coef_path}")
+
+            # Save out-of-fold predictions per target
+            pred_paths: List[Path] = []
+            for target_col, result in self.results.items():
+                pred_df = pd.DataFrame({
+                    "region_id": result.region_ids,
+                    "actual": result.actual_values,
+                    "predicted": result.oof_predictions,
+                    "residual": result.actual_values - result.oof_predictions,
+                }).set_index("region_id")
+                pred_path = out_dir / f"predictions_{target_col}.parquet"
+                pred_df.to_parquet(pred_path)
+                pred_paths.append(pred_path)
+
+            logger.info(f"Saved predictions to {out_dir}")
+
+            # Save config
+            config_path = out_dir / "config.json"
+            with open(config_path, "w") as f:
+                json.dump(config_dict, f, indent=2)
+
+            # Write run-level provenance when using a run directory
+            run_info_path: Optional[Path] = None
+            if self.config.run_id is not None:
+                # Auto-detect upstream run
+                _paths = StudyAreaPaths(self.config.study_area)
+                _latest = _paths.latest_run(_paths.stage1(self.config.modality))
+                _upstream_label = _latest.name if _latest else "flat"
+                write_run_info(
+                    out_dir,
+                    stage="stage3",
+                    study_area=self.config.study_area,
+                    config=config_dict,
+                    upstream_runs={f"stage1/{self.config.modality}": _upstream_label},
+                )
+                run_info_path = out_dir / "run_info.json"
+                logger.info(f"Saved run_info.json to {run_info_path}")
+
+            # Populate output_paths for the sidecar (primary first by convention).
+            sc.output_paths = [primary_artifact, coef_path, config_path] + pred_paths
+            if run_info_path is not None:
+                sc.output_paths.append(run_info_path)
 
         return out_dir
 
