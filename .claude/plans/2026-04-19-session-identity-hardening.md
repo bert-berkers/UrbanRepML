@@ -2,12 +2,14 @@
 
 | Field | Value |
 |---|---|
-| **Status** | READY — for next available terminal (any) |
+| **Status** | PARTIALLY SHIPPED — W3 absorbed into cluster-2 commit [pending]; W1/W2 remain OPEN |
 | **Cluster** | governance / hooks-architecture |
 | **Trigger** | 2026-04-19 collision: Terminals B and D both wrote under `session_id=calm-glowing-rock` for ~2h before the human spotted it. Root cause: `/valuate` ran as a forked subagent whose PID-walk could not resolve the real terminal. |
 | **Root-cause fix already shipped** | commit `d077c25 fix(skills/valuate): run inline like /niche` — removes `context: fork` from valuate's frontmatter so it executes in the coordinator's main context. |
 | **Failure-mode log** | `.claude/scratchpad/coordinator/notes.md` §"2026-04-19 — Failure Mode: Identity Tagging Drift" |
 | **Est** | 2–3h (W1+W2 are small; W3 is the meaty one) |
+
+**2026-04-24**: W3a additions to `coordinator-coordination.md` absorbed into `.claude/plans/2026-04-18-cluster2-ledger-sidecars.md` W3 wave, shipped at commit [pending]. W1 (runtime identity check in `/niche`) and W2 (subagent guard on identity-bearing writes) still require fresh context with hook-testing focus.
 
 ## Why this plan exists
 

@@ -29,6 +29,16 @@ Coordinator-to-coordinator messages are "bioelectric signals" between cells. The
 - **Actionable**: include what changed and what the recipient should do about it
 - **Gradient-like**: signal strength (info < warning < request) indicates priority
 
+## Identity: SessionStart Is Canonical
+
+Three components compose a coordinator's identity. Priority order (highest wins on mismatch):
+
+1. **SessionStart session_id** — the cognitive identity issued when the hook first fires. Source of truth.
+2. **`coordinators/terminals/{pid}.yaml`** — PID-keyed file linking the shell to `session_id` + `supra_session_id`. Session rotates on `/clear`; supra persists.
+3. **`supra/sessions/{supra_session_id}.yaml`** — valuation state; its lifecycle is the *supra session*, which outlives `/clear` within a terminal.
+
+If any two disagree (e.g. terminals.yaml points at a `session_id` that SessionStart never issued), SessionStart wins — rewrite the terminals file, don't rewrite SessionStart. See `scratchpad/coordinator/notes.md` §"2026-04-19 — Failure Mode: Identity Tagging Drift" and the fix at commit `d077c25` (skills run inline, not as forked subagent context).
+
 ## Protocol Obligations
 
 ### On Session Start
@@ -74,6 +84,20 @@ Keep messages sparse. Routine status belongs in your scratchpad, not the message
 - **Inferential imperialism**: Writing specs or assertions about paths outside your claimed_paths.
   If you need cross-domain information, read the code (read-only) or leave a `request` message.
 - **Message spam**: Writing more than one message per state transition per OODA cycle.
+- **Skills writing identity-bearing files from a forked subagent context**: `/valuate` and `/niche` must run inline in the coordinator's context, not as dispatched subagents. A forked context has the wrong PID parentage and writes identity to the wrong terminal file, producing supra-ghosts (coordinators that have valuation but no session, or vice versa).
+
+## Supra-Ghost Recovery Protocol
+
+Supra-ghost = valuation/session identity mismatch between `coordinators/terminals/{pid}.yaml` and the SessionStart-issued `session_id`. Symptoms: `/valuate` targets a supra that no live terminal claims; two terminals share a supra file; `supra_reader` returns an empty state despite an active session.
+
+**Recovery steps (fix-forward, never rewrite history):**
+
+1. **Write the correct supra yaml directly** at `supra/sessions/{correct_supra_session_id}.yaml`, inferring values from SessionStart + the most recent valuate invocation. Do NOT delete joint files; they are historical record.
+2. **Note the pivot in the coordinator close-out** as a prior-entries line — e.g. `HH:MM — supra-ghost pivot: {wrong_supra_id} → {correct_supra_id}`. The pivot is Markov-completeness-relevant.
+3. **Do NOT rewrite existing files with the wrong id**. They belong to the timeline that produced them. Fix forward; preserve as evidence.
+4. **If the skill ran as a forked subagent** (root cause of the 2026-04-19 incident), fix the skill's invocation path first (`.claude/skills/{name}/SKILL.md` should specify inline execution) — otherwise the ghost will recur next session.
+
+Cross-reference: commit `d077c25` (skills inline fix), `scratchpad/coordinator/notes.md` §"Failure Mode: Identity Tagging Drift", `specs/session-identity-architecture.md`.
 
 ## Staleness Thresholds
 

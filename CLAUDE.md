@@ -92,6 +92,7 @@ uv sync --extra dev  # Include dev tools
 
 - **`utils/paths.py`** — `StudyAreaPaths`: single source of truth for all data path construction
 - **`utils/spatial_db.py`** — `SpatialDB`: SedonaDB spatial engine with GeoPandas fallback for bulk H3 geometry queries (centroids, geometry, extent). Preferred over raw `h3_to_geoseries` for all visualization and analysis code.
+- **`utils/provenance.py`** — `SidecarWriter` context manager + `ledger_append` + `compute_config_hash` + `read_ledger`. Single source of truth for per-artifact `*.run.yaml` sidecars + `data/ledger/runs.jsonl` append-only ledger + `*.provenance.yaml` figure provenance. See `specs/artifact_provenance.md` (complements `specs/run_provenance.md`'s coarser `run_info.json` per-run-dir layer).
 
 ### Study Area Data Layout
 
