@@ -160,7 +160,9 @@ If the wrapped block raises, `__exit__` catches (via normal context-manager `exc
 - `extra.exception_class: exc_type.__name__`,
 - `extra.exception_message: str(exc_val)[:500]` (truncated to keep sidecars small),
 
-then returns `False` to propagate the exception. The ledger-append also fires with `stage` unchanged; the row's `wall_time_seconds` reflects the time-to-failure.
+then returns `False` to propagate the exception.
+
+**Errata (2026-05-02)**: ledger-append does **NOT** fire on failed runs — the sidecar is written but the JSONL row is suppressed. The detectable signal is therefore *sidecar-without-row*, surfaced by the W4 audit script `scripts/one_off/audit_sidecar_coverage.py`. (Earlier draft language said "the ledger-append also fires" — that was incorrect; the implementation in `utils/provenance.py:SidecarWriter.__exit__` skips `ledger_append` when `exc_type is not None`. A failed run leaves a sidecar with `extra.status: "failed"` on disk but does not pollute the cross-run JSONL index.)
 
 *Rationale*: A failed run is also a run whose provenance is worth capturing. Failed runs are the most interesting cases for outer-loop adjustment (rate-enablement of "figure out why this keeps crashing" is exactly the loop this plan enables). The alternative (skip sidecar on failure) loses the signal that a run was attempted; later analyses can't distinguish "never tried" from "tried and crashed". The small cost (one sidecar write during exception unwinding) is worth the completeness.
 
@@ -183,8 +185,10 @@ def compute_config_hash(cfg: dict) -> str:
 ```
 
 `_coerce` handles non-JSON-serialisable leaves (`np.ndarray`, `Path`, `datetime`, custom dataclasses). The caller chooses between two strategies:
-- **Stringify + warn** (default): call `str(value)` on unknown types, log a stderr warning once per type seen. Pragmatic but non-deterministic across Python versions that change `repr()`.
+- **Stringify + warn** (default): call `repr(value)` on unknown types (NOT `str(value)` — see implementation note below), emit a `UserWarning` once per type seen. Pragmatic but non-deterministic across Python versions that change `repr()`.
 - **Raise** (strict): raise `TypeError("config_hash: non-serialisable leaf")`. Recommended for production probes where determinism matters. W2 implementation should default to **raise** for the stage3 probes — a config that includes a non-serialisable leaf is a bug.
+
+**Implementation note (2026-05-02 errata)**: `utils/provenance.py:_stringify_with_warn` uses `repr(value)`, not `str(value)`. This is the deliberate choice: `repr()` preserves type information and quote-marks-around-strings in the canonical JSON, so `'1'` (string) and `1` (int) hash differently even after coercion. `str()` would have collapsed them. The brittleness across Python versions that change `repr()` for a given type is accepted; if it bites, the strict-mode raise path is the correct response, not silently re-mapping to `str()`. `UserWarning` (not `print` to stderr) so callers can filter it via `warnings.filterwarnings`.
 
 The 16-hex-char truncation is a brevity choice — collision probability is ~1 in 2⁶⁴, sufficient for a single-project research ledger. Callers that need a longer hash can re-compute the full 64-char SHA-256 from the same canonical form.
 
