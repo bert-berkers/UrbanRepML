@@ -33,7 +33,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from utils.paths import StudyAreaPaths
 from utils.spatial_db import SpatialDB
-from utils.visualization import load_boundary
+from utils.visualization import (
+    load_boundary,
+    rasterize_rgb_voronoi,
+    voronoi_params_for_resolution,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +95,13 @@ def rasterize_centroids(
     height: int = 2400,
 ) -> np.ndarray:
     """
-    Rasterize H3 centroids to an RGBA image via SpatialDB.
+    Rasterize H3 centroids to an RGBA image via SpatialDB + KDTree-Voronoi.
 
-    Each centroid is stamped with a filled disk whose radius is derived
-    from the H3 cell size at the given resolution, preventing single-pixel
-    gaps between adjacent hexagons.
+    Migrated 2026-05-02 (W3a) from the legacy disk-stamp impl to the
+    standard Voronoi rasterizer (``utils.visualization.rasterize_rgb_voronoi``).
+    The ``width``/``height`` kwargs are now ignored -- output dims are
+    derived from ``extent`` + ``pixel_m``. Kept for backwards-compatible
+    call sites; will be removed in a follow-up cleanup.
 
     Args:
         hex_ids: Index of H3 hex ID strings.
@@ -103,63 +109,19 @@ def rasterize_centroids(
         extent: (minx, miny, maxx, maxy) in EPSG:28992.
         study_area: Study area name for SpatialDB lookup.
         resolution: H3 resolution level.
-        width: Output image width in pixels.
-        height: Output image height in pixels.
+        width: Legacy; ignored. Output dims derived from extent + pixel_m.
+        height: Legacy; ignored.
 
     Returns:
-        (height, width, 4) RGBA float32 array with white background.
+        (H, W, 4) RGBA float32 array (alpha=1 inside Voronoi cutoff).
     """
     db = SpatialDB.for_study_area(study_area)
-    all_cx, all_cy = db.centroids(hex_ids, resolution=resolution, crs=28992)
-
-    minx, miny, maxx, maxy = extent
-    mask = (
-        (all_cx >= minx) & (all_cx <= maxx)
-        & (all_cy >= miny) & (all_cy <= maxy)
+    cx, cy = db.centroids(hex_ids, resolution=resolution, crs=28992)
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
+    image, _ = rasterize_rgb_voronoi(
+        cx, cy, rgb_array.astype(np.float32), extent,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
     )
-
-    cx = all_cx[mask]
-    cy = all_cy[mask]
-    rgb_masked = rgb_array[mask]
-
-    px = ((cx - minx) / (maxx - minx) * (width - 1)).astype(int)
-    py = ((cy - miny) / (maxy - miny) * (height - 1)).astype(int)
-
-    np.clip(px, 0, width - 1, out=px)
-    np.clip(py, 0, height - 1, out=py)
-
-    image = np.ones((height, width, 4), dtype=np.float32)
-
-    # Compute disk stamp from H3 cell size
-    stamp_radius = _compute_stamp_radius(resolution, extent, width)
-    disk_mask = _build_disk_mask(stamp_radius)
-    disk_size = 2 * stamp_radius + 1
-
-    # Stamp each centroid with a filled disk
-    for i in range(len(px)):
-        x0 = px[i] - stamp_radius
-        y0 = py[i] - stamp_radius
-        x1 = x0 + disk_size
-        y1 = y0 + disk_size
-
-        # Clamp to image bounds
-        sx0 = max(0, -x0)
-        sy0 = max(0, -y0)
-        sx1 = disk_size - max(0, x1 - width)
-        sy1 = disk_size - max(0, y1 - height)
-
-        ix0 = max(0, x0)
-        iy0 = max(0, y0)
-        ix1 = min(width, x1)
-        iy1 = min(height, y1)
-
-        if ix0 >= ix1 or iy0 >= iy1:
-            continue
-
-        stamp_slice = disk_mask[sy0:sy1, sx0:sx1]
-        image[iy0:iy1, ix0:ix1, :3][stamp_slice] = rgb_masked[i]
-        image[iy0:iy1, ix0:ix1, 3][stamp_slice] = 1.0
-
     return image
 
 

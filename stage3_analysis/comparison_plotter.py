@@ -29,6 +29,8 @@ from utils.spatial_db import SpatialDB
 from utils.visualization import (
     load_boundary,
     plot_spatial_map,
+    rasterize_rgb_voronoi,
+    voronoi_params_for_resolution,
     RASTER_W,
     RASTER_H,
 )
@@ -66,7 +68,9 @@ class ProbeComparisonPlotter:
         self.h3_resolution = h3_resolution
         self.dpi = dpi
         self.output_dir = output_dir or (self.paths.probe_results_root() / "comparison")
-        self._stamp = max(1, 11 - self.h3_resolution)
+        self._pixel_m, self._max_dist_m = voronoi_params_for_resolution(
+            self.h3_resolution,
+        )
 
     # ------------------------------------------------------------------
     # Data loading
@@ -388,34 +392,19 @@ class ProbeComparisonPlotter:
             # Get centroids via SpatialDB
             cx, cy = self.db.centroids(hex_ids, self.h3_resolution, crs=28992)
 
-            # Map residuals through colormap manually for rasterization
-            rgba = cmap(norm(residuals))
+            # Map residuals through colormap; non-finite residuals fall back
+            # to mid-grey so the Voronoi cell still paints something.
+            finite = np.isfinite(residuals)
+            safe_residuals = np.where(finite, residuals, 0.0)
+            rgba = cmap(norm(safe_residuals))
             rgb = rgba[:, :3].astype(np.float32)
+            rgb[~finite] = (0.5, 0.5, 0.5)
 
-            # Rasterize via stamping (same pattern as linear_probe_viz)
-            image = np.zeros((panel_h, panel_w, 4), dtype=np.float32)
-            rx0, ry0, rx1, ry1 = render_extent
-            mask = (
-                (cx >= rx0) & (cx <= rx1) & (cy >= ry0) & (cy <= ry1)
-                & np.isfinite(residuals)
+            # Rasterize via KDTree-Voronoi (replaces legacy centroid-stamp).
+            image, _ = rasterize_rgb_voronoi(
+                cx, cy, rgb, render_extent,
+                pixel_m=self._pixel_m, max_dist_m=self._max_dist_m,
             )
-            cx_m, cy_m, rgb_m = cx[mask], cy[mask], rgb[mask]
-            px = ((cx_m - rx0) / (rx1 - rx0) * (panel_w - 1)).astype(int)
-            py = ((cy_m - ry0) / (ry1 - ry0) * (panel_h - 1)).astype(int)
-            np.clip(px, 0, panel_w - 1, out=px)
-            np.clip(py, 0, panel_h - 1, out=py)
-
-            stamp = self._stamp
-            if stamp <= 1:
-                image[py, px, :3] = rgb_m
-                image[py, px, 3] = 1.0
-            else:
-                for dy in range(-stamp + 1, stamp):
-                    for dx in range(-stamp + 1, stamp):
-                        sy = np.clip(py + dy, 0, panel_h - 1)
-                        sx = np.clip(px + dx, 0, panel_w - 1)
-                        image[sy, sx, :3] = rgb_m
-                        image[sy, sx, 3] = 1.0
 
             plot_spatial_map(
                 ax,

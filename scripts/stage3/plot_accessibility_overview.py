@@ -24,8 +24,9 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from utils.visualization import (
-    rasterize_continuous,
-    rasterize_binary,
+    rasterize_continuous_voronoi,
+    rasterize_binary_voronoi,
+    voronoi_params_for_resolution,
     plot_spatial_map,
     load_boundary,
     _add_colorbar,
@@ -79,10 +80,13 @@ def render_overview_map(
     vmax: float | None = None,
 ) -> None:
     """Render a single overview map with grey background + colored foreground."""
-    stamp = max(1, 11 - resolution)
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
 
     # Grey background: all hexes
-    bg_img = rasterize_binary(all_cx, all_cy, extent, color=(0.85, 0.85, 0.85), stamp=stamp)
+    bg_img, _ = rasterize_binary_voronoi(
+        all_cx, all_cy, extent, color=(0.85, 0.85, 0.85),
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
 
     # Foreground: hexes with data
     hex_ids = list(metric_series.index)
@@ -94,8 +98,9 @@ def render_overview_map(
     if vmax is None:
         vmax = float(np.nanpercentile(values, 98))
 
-    fg_img = rasterize_continuous(
-        fg_cx, fg_cy, values, extent, cmap=cmap, stamp=stamp, vmin=vmin, vmax=vmax,
+    fg_img, _ = rasterize_continuous_voronoi(
+        fg_cx, fg_cy, values, extent, cmap=cmap, vmin=vmin, vmax=vmax,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
     )
 
     fig, ax = plt.subplots(figsize=(12, 14))

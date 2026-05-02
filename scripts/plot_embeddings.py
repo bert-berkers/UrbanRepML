@@ -59,14 +59,14 @@ from utils.visualization import (
     _add_colorbar,
     _add_rd_grid,
     _clean_map_axes,
-    _stamp_pixels,
     detect_embedding_columns,
     filter_empty_hexagons,
     load_boundary,
-    rasterize_binary,
-    rasterize_categorical,
-    rasterize_continuous,
-    rasterize_rgb,
+    rasterize_binary_voronoi,
+    rasterize_categorical_voronoi,
+    rasterize_continuous_voronoi,
+    rasterize_rgb_voronoi,
+    voronoi_params_for_resolution,
     plot_spatial_map,
 )
 from stage3_analysis.visualization.clustering_utils import (
@@ -181,7 +181,6 @@ def plot_dim_grid(
     out_dir: Path,
     display_name: str,
     resolution: int,
-    stamp: int = 1,
 ):
     """4x3 grid showing the first 12 embedding dimensions as spatial maps."""
     cols = list(emb_df.columns)
@@ -191,12 +190,16 @@ def plot_dim_grid(
     fig, axes = plt.subplots(nrows, ncols, figsize=(18, 24), dpi=DPI)
     fig.set_facecolor("white")
 
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
     for i in range(nrows * ncols):
         ax = axes[i // ncols, i % ncols]
         if i < n_show:
             col = cols[i]
             vals = emb_df[col].values.astype(np.float32)
-            image = rasterize_continuous(cx, cy, vals, extent, cmap="viridis", stamp=stamp)
+            image, _ = rasterize_continuous_voronoi(
+                cx, cy, vals, extent, cmap="viridis",
+                pixel_m=pixel_m, max_dist_m=max_dist_m,
+            )
             plot_spatial_map(ax, image, extent, boundary_gdf, title=col)
         else:
             ax.set_visible(False)
@@ -227,7 +230,6 @@ def plot_summary_stats(
     out_dir: Path,
     display_name: str,
     resolution: int,
-    stamp: int = 1,
 ):
     """Two-panel map: per-hex mean and std across all embedding dims."""
     vals = emb_df.values.astype(np.float32)
@@ -237,14 +239,21 @@ def plot_summary_stats(
     fig, axes = plt.subplots(1, 2, figsize=(20, 12), dpi=DPI)
     fig.set_facecolor("white")
 
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
     # Mean map
-    img_mean = rasterize_continuous(cx, cy, hex_mean, extent, cmap="viridis", stamp=stamp)
+    img_mean, _ = rasterize_continuous_voronoi(
+        cx, cy, hex_mean, extent, cmap="viridis",
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
     plot_spatial_map(axes[0], img_mean, extent, boundary_gdf, title="Mean across dims")
     v2, v98 = np.nanpercentile(hex_mean, [2, 98])
     _add_colorbar(fig, axes[0], "viridis", v2, v98, label="Mean")
 
     # Std map
-    img_std = rasterize_continuous(cx, cy, hex_std, extent, cmap="inferno", stamp=stamp)
+    img_std, _ = rasterize_continuous_voronoi(
+        cx, cy, hex_std, extent, cmap="inferno",
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
     plot_spatial_map(axes[1], img_std, extent, boundary_gdf, title="Std across dims")
     v2, v98 = np.nanpercentile(hex_std, [2, 98])
     _add_colorbar(fig, axes[1], "inferno", v2, v98, label="Std dev")
@@ -275,7 +284,6 @@ def plot_pca_top3(
     out_dir: Path,
     display_name: str,
     resolution: int,
-    stamp: int = 1,
 ):
     """3-panel spatial map of PC1, PC2, PC3."""
     n_components = min(3, emb_df.shape[1])
@@ -285,10 +293,14 @@ def plot_pca_top3(
     fig, axes = plt.subplots(1, 3, figsize=(24, 10), dpi=DPI)
     fig.set_facecolor("white")
 
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
     for i in range(3):
         if i < n_components:
             vals = reduced[:, i]
-            image = rasterize_continuous(cx, cy, vals, extent, cmap="RdBu_r", stamp=stamp)
+            image, _ = rasterize_continuous_voronoi(
+                cx, cy, vals, extent, cmap="RdBu_r",
+                pixel_m=pixel_m, max_dist_m=max_dist_m,
+            )
             var_pct = pca.explained_variance_ratio_[i] * 100
             plot_spatial_map(
                 axes[i], image, extent, boundary_gdf,
@@ -329,7 +341,6 @@ def plot_pca_rgb(
     out_dir: Path,
     display_name: str,
     resolution: int,
-    stamp: int = 1,
     pca_result: tuple | None = None,
 ):
     """RGB composite map: PC1->R, PC2->G, PC3->B with p2/p98 normalization.
@@ -359,7 +370,11 @@ def plot_pca_rgb(
         rgb_array[:, ch] = normalized
 
     # Rasterize RGB
-    image = rasterize_rgb(cx, cy, rgb_array.astype(np.float32), extent, stamp=stamp)
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
+    image, _ = rasterize_rgb_voronoi(
+        cx, cy, rgb_array.astype(np.float32), extent,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
 
     fig, ax = plt.subplots(figsize=(12, 14), dpi=DPI)
     fig.set_facecolor("white")
@@ -428,7 +443,6 @@ def plot_clusters(
     out_dir: Path,
     display_name: str,
     resolution: int,
-    stamp: int = 1,
 ):
     """Cluster maps for k=8, 12, 16 using rasterized centroid rendering."""
     k_list = [8, 12, 16]
@@ -445,11 +459,15 @@ def plot_clusters(
         reduced, k_list, standardize=True,
     )
 
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
     for k, labels in cluster_results.items():
         fig, ax = plt.subplots(figsize=(12, 14), dpi=DPI)
         fig.set_facecolor("white")
 
-        image = rasterize_categorical(cx, cy, labels, extent, n_clusters=k, cmap="tab20", stamp=stamp)
+        image, _ = rasterize_categorical_voronoi(
+            cx, cy, labels, extent, n_clusters=k, cmap="tab20",
+            pixel_m=pixel_m, max_dist_m=max_dist_m,
+        )
         plot_spatial_map(ax, image, extent, boundary_gdf)
 
         ax.set_title(
@@ -548,13 +566,16 @@ def plot_coverage(
     out_dir: Path,
     display_name: str,
     resolution: int,
-    stamp: int = 1,
 ):
     """Binary map showing which hexagons have embedding data."""
     fig, ax = plt.subplots(figsize=(12, 14), dpi=DPI)
     fig.set_facecolor("white")
 
-    image = rasterize_binary(cx, cy, extent, color=(0.2, 0.5, 0.8), stamp=stamp)
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
+    image, _ = rasterize_binary_voronoi(
+        cx, cy, extent, color=(0.2, 0.5, 0.8),
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
     plot_spatial_map(ax, image, extent, boundary_gdf)
 
     ax.set_title(
@@ -712,27 +733,26 @@ def process_modality(
     pad = (maxx - minx) * 0.03
     extent = (minx - pad, miny - pad, maxx + pad, maxy + pad)
 
-    # Stamp size: at coarser resolutions, each centroid paints more pixels to fill gaps
-    stamp = max(1, 11 - resolution)  # res10=1, res9=2, res8=3
+    # Voronoi pixel_m / max_dist_m derived per-resolution inside each plot fn.
 
     # Plot 1: Dimension grid
     logger.info("[1/7] Dimension grid...")
-    plot_dim_grid(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
+    plot_dim_grid(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution)
 
     # Plot 2: Summary stats
     logger.info("[2/7] Summary stats...")
-    plot_summary_stats(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
+    plot_summary_stats(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution)
 
     # Plot 3 & 4: PCA (share computation)
     logger.info("[3/7] PCA top-3 components...")
-    pca_result = plot_pca_top3(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
+    pca_result = plot_pca_top3(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution)
 
     logger.info("[4/7] PCA RGB composite...")
-    plot_pca_rgb(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp, pca_result=pca_result)
+    plot_pca_rgb(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, pca_result=pca_result)
 
     # Plot 5: Clusters
     logger.info("[5/7] MiniBatchKMeans clusters...")
-    plot_clusters(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
+    plot_clusters(emb_df, cx, cy, extent, boundary_gdf, out_dir, display_name, resolution)
 
     # Plot 6: Correlation heatmap
     logger.info("[6/7] Correlation heatmap...")
@@ -740,7 +760,7 @@ def process_modality(
 
     # Plot 7: Coverage map (uses FULL unfiltered data)
     logger.info("[7/7] Coverage map...")
-    plot_coverage(emb_df_full, cx_full, cy_full, extent, boundary_gdf, out_dir, display_name, resolution, stamp)
+    plot_coverage(emb_df_full, cx_full, cy_full, extent, boundary_gdf, out_dir, display_name, resolution)
 
     logger.info("Completed %s: 7 plots saved to %s", display_name, out_dir)
 

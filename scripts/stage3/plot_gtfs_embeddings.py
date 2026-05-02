@@ -55,8 +55,9 @@ from utils.visualization import (
     detect_embedding_columns,
     load_boundary,
     plot_spatial_map,
-    rasterize_binary,
-    rasterize_continuous,
+    rasterize_binary_voronoi,
+    rasterize_continuous_voronoi,
+    voronoi_params_for_resolution,
 )
 
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -233,7 +234,6 @@ def plot_pca_spatial(
     out_dir: Path,
     display_name: str,
     resolution: int,
-    stamp: int = 2,
     transit_mask: np.ndarray | None = None,
 ):
     """3-panel spatial map of PC1, PC2, PC3 for transit hexagons."""
@@ -263,10 +263,14 @@ def plot_pca_spatial(
     fig, axes = plt.subplots(1, 3, figsize=(24, 10), dpi=DPI)
     fig.set_facecolor("white")
 
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
     for i in range(3):
         if i < n_components:
             vals = reduced[:, i]
-            image = rasterize_continuous(cx_t, cy_t, vals, extent, cmap="RdBu_r", stamp=stamp)
+            image, _ = rasterize_continuous_voronoi(
+                cx_t, cy_t, vals, extent, cmap="RdBu_r",
+                pixel_m=pixel_m, max_dist_m=max_dist_m,
+            )
             var_pct = pca.explained_variance_ratio_[i] * 100
             plot_spatial_map(
                 axes[i], image, extent, boundary_gdf,
@@ -311,17 +315,21 @@ def plot_coverage_map(
     resolution: int,
     n_total: int,
     n_transit: int,
-    stamp: int = 2,
 ):
     """Two-panel map: all hexagons (gray) vs transit hexagons (blue)."""
     fig, axes = plt.subplots(1, 2, figsize=(20, 12), dpi=DPI)
     fig.set_facecolor("white")
 
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
     # Panel 1: All hexagons
-    img_all = rasterize_binary(cx_all, cy_all, extent, color=(0.7, 0.7, 0.7), stamp=stamp)
+    img_all, _ = rasterize_binary_voronoi(
+        cx_all, cy_all, extent, color=(0.7, 0.7, 0.7),
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
     # Overlay transit hexagons in blue
-    img_transit_on_all = rasterize_binary(
-        cx_transit, cy_transit, extent, color=(0.15, 0.45, 0.80), stamp=stamp,
+    img_transit_on_all, _ = rasterize_binary_voronoi(
+        cx_transit, cy_transit, extent, color=(0.15, 0.45, 0.80),
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
     )
     # Composite: all gray, transit blue on top
     composite = img_all.copy()
@@ -334,8 +342,9 @@ def plot_coverage_map(
     )
 
     # Panel 2: Transit hexagons only (zoomed to coverage area)
-    img_transit = rasterize_binary(
-        cx_transit, cy_transit, extent, color=(0.15, 0.45, 0.80), stamp=stamp,
+    img_transit, _ = rasterize_binary_voronoi(
+        cx_transit, cy_transit, extent, color=(0.15, 0.45, 0.80),
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
     )
     plot_spatial_map(axes[1], img_transit, extent, boundary_gdf, title="Transit hexagons only")
 
@@ -511,8 +520,6 @@ def main():
     pad = (maxx - minx) * 0.03
     extent = (minx - pad, miny - pad, maxx + pad, maxy + pad)
 
-    stamp = max(1, 11 - resolution)  # res9 -> stamp=2
-
     # Plot 1: PCA variance explained
     logger.info("[1/4] PCA variance explained...")
     pca, n_90 = plot_pca_variance(
@@ -524,7 +531,7 @@ def main():
     logger.info("[2/4] PCA top-3 spatial maps...")
     plot_pca_spatial(
         df, emb_cols, cx_all, cy_all, extent, boundary_gdf,
-        out_dir, display_name, resolution, stamp=stamp,
+        out_dir, display_name, resolution,
         transit_mask=transit_mask,
     )
 
@@ -533,7 +540,7 @@ def main():
     plot_coverage_map(
         cx_all, cy_all, cx_transit, cy_transit,
         extent, boundary_gdf, out_dir, display_name, resolution,
-        n_total, n_transit, stamp=stamp,
+        n_total, n_transit,
     )
 
     # Plot 4: UMAP clusters

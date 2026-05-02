@@ -34,7 +34,8 @@ from utils.spatial_db import SpatialDB
 from utils.visualization import (
     load_boundary,
     plot_spatial_map,
-    rasterize_categorical,
+    rasterize_categorical_voronoi,
+    voronoi_params_for_resolution,
     RASTER_W,
     RASTER_H,
 )
@@ -71,7 +72,9 @@ class ClusterComparisonPlotter:
         self.output_dir = output_dir or (
             self.paths.cluster_results_root() / "comparison"
         )
-        self._stamp = max(1, 11 - self.h3_resolution)
+        self._pixel_m, self._max_dist_m = voronoi_params_for_resolution(
+            self.h3_resolution,
+        )
 
     # ------------------------------------------------------------------
     # Data loading
@@ -321,16 +324,14 @@ class ClusterComparisonPlotter:
             )
 
             # Rasterize with viridis (sequential: dark=low, bright=high)
-            image = rasterize_categorical(
+            image, _ = rasterize_categorical_voronoi(
                 cx,
                 cy,
                 sorted_labels,
                 render_extent,
                 n_clusters=k,
-                width=panel_w,
-                height=panel_h,
                 cmap="viridis",
-                stamp=self._stamp,
+                pixel_m=self._pixel_m, max_dist_m=self._max_dist_m,
             )
 
             plot_spatial_map(

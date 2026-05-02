@@ -34,7 +34,8 @@ from utils.spatial_db import SpatialDB
 from utils.visualization import (
     load_boundary,
     plot_spatial_map,
-    rasterize_categorical,
+    rasterize_categorical_voronoi,
+    voronoi_params_for_resolution,
     RASTER_W,
     RASTER_H,
 )
@@ -82,14 +83,16 @@ def plot_side_by_side(
     output_path: Path,
     h3_resolution: int = 9,
     dpi: int = 300,
-    stamp: int = 2,
 ) -> Path:
     """Render side-by-side cluster maps with full raster resolution per panel.
 
     Each panel is RASTER_W x RASTER_H (2000x2400) -- total figure width
-    scales with the number of panels.
+    scales with the number of panels. ``pixel_m`` and ``max_dist_m`` for
+    the Voronoi rasterizer are derived from ``h3_resolution`` per
+    ``specs/rasterize_voronoi.md``.
     """
     sns.set_style("white")
+    pixel_m, max_dist_m = voronoi_params_for_resolution(h3_resolution)
 
     df = assignments_df[assignments_df["k"] == k].copy()
     if df.empty:
@@ -132,14 +135,12 @@ def plot_side_by_side(
         cx, cy = db.centroids(hex_ids, h3_resolution, crs=28992)
 
         # Rasterize at full resolution
-        image = rasterize_categorical(
+        image, _ = rasterize_categorical_voronoi(
             cx, cy, sorted_labels,
             render_extent,
             n_clusters=k,
-            width=RASTER_W,
-            height=RASTER_H,
             cmap="viridis",
-            stamp=stamp,
+            pixel_m=pixel_m, max_dist_m=max_dist_m,
         )
 
         plot_spatial_map(
@@ -284,10 +285,6 @@ def main():
     parser.add_argument(
         "--dpi", type=int, default=300,
     )
-    parser.add_argument(
-        "--stamp", type=int, default=2,
-        help="Pixel stamp radius (default: 2 for res9).",
-    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -357,7 +354,6 @@ def main():
             db, boundary_gdf, render_extent, out_path,
             h3_resolution=args.resolution,
             dpi=args.dpi,
-            stamp=args.stamp,
         ))
 
     # Metrics comparison bar chart

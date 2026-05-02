@@ -36,7 +36,8 @@ from utils.spatial_db import SpatialDB
 from utils.visualization import (
     load_boundary,
     plot_spatial_map,
-    rasterize_rgb,
+    rasterize_rgb_voronoi,
+    voronoi_params_for_resolution,
     RASTER_W,
     RASTER_H,
 )
@@ -221,7 +222,7 @@ def plot_residual_comparison(
     # Load boundary and SpatialDB for centroids
     boundary_gdf = load_boundary(paths, crs=28992)
     db = SpatialDB.for_study_area(paths.study_area)
-    stamp = max(1, 11 - h3_resolution)
+    pixel_m, max_dist_m = voronoi_params_for_resolution(h3_resolution)
 
     # Compute shared symmetric vmax across all approaches for this target
     vmax_res = float(df["residual"].abs().quantile(0.98))
@@ -277,8 +278,10 @@ def plot_residual_comparison(
         rgb = rgba[:, :3].astype(np.float32)
 
         # Rasterize using the shared utility
-        image = rasterize_rgb(cx, cy, rgb, render_extent,
-                              width=panel_w, height=panel_h, stamp=stamp)
+        image, _ = rasterize_rgb_voronoi(
+            cx, cy, rgb, render_extent,
+            pixel_m=pixel_m, max_dist_m=max_dist_m,
+        )
 
         label = approach.replace("_", " ")
         # Compute R2 for the subtitle

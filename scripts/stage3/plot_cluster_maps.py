@@ -56,7 +56,8 @@ from utils.visualization import (
     filter_empty_hexagons,
     load_boundary,
     plot_spatial_map,
-    rasterize_categorical,
+    rasterize_categorical_voronoi,
+    voronoi_params_for_resolution,
 )
 from stage3_analysis.cluster_results_writer import ClusterResultsWriter
 from stage3_analysis.save_figure import save_figure
@@ -210,7 +211,7 @@ def main():
 
     title_prefix = args.label or embedding_path.stem
     resolution = args.resolution
-    stamp = max(1, 11 - resolution)  # res9=2, res10=1, res8=3
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
 
     print(f"\n{'=' * 60}")
     print(f"Rasterized Cluster Maps: {title_prefix}")
@@ -299,14 +300,17 @@ def main():
 
     # 7. Render maps
     cmap = "tab20"
-    print(f"\nRendering {len(cluster_results)} cluster maps (stamp={stamp})...")
+    print(f"\nRendering {len(cluster_results)} cluster maps "
+          f"(pixel_m={pixel_m}, max_dist_m={max_dist_m})...")
 
     for k, labels in sorted(cluster_results.items()):
         fig, ax = plt.subplots(figsize=(12, 14), dpi=DPI)
         fig.set_facecolor("white")
 
-        image = rasterize_categorical(
-            cx, cy, labels, extent, n_clusters=k, cmap=cmap, stamp=stamp,
+        image, _ = rasterize_categorical_voronoi(
+            cx, cy, labels, extent,
+            n_clusters=k, cmap=cmap,
+            pixel_m=pixel_m, max_dist_m=max_dist_m,
         )
         plot_spatial_map(ax, image, extent, boundary_gdf)
 

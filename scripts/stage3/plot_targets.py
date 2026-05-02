@@ -27,10 +27,13 @@ from scipy import stats as sp_stats
 from utils.paths import StudyAreaPaths
 from utils.spatial_db import SpatialDB
 from utils.visualization import (
+    _add_colorbar as _add_colorbar_base,
     _clean_map_axes,
     load_boundary,
     plot_spatial_map as _plot_spatial_map_base,
-    _add_colorbar as _add_colorbar_base,
+    rasterize_categorical_voronoi,
+    rasterize_continuous_voronoi,
+    rasterize_labels,
 )
 
 # ---------------------------------------------------------------------------
@@ -48,9 +51,16 @@ LBM_DIM_NAMES = {
     "won": "Housing",
 }
 
-# Image resolution for rasterized maps (pixels)
+# Image resolution for rasterized maps (pixels) -- preserved for plot_a8's
+# custom path that bypasses the Voronoi API. The Voronoi rasterizers derive
+# H/W from extent_m + pixel_m and don't use these constants.
 RASTER_W = 2000
 RASTER_H = 2400
+
+# H3 res10 Voronoi parameters (per ``specs/rasterize_voronoi.md`` table).
+# All callers below operate on res10 centroids loaded with crs=28992.
+PIXEL_M = 100.0
+MAX_DIST_M = 120.0
 
 
 def _shorten_l3(name: str) -> str:
@@ -59,133 +69,59 @@ def _shorten_l3(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Rasterization
+# Local rasterization wrappers
+#
+# W3a (2026-05-02) eliminated 5 shadow definitions that previously lived
+# here (lines 66-204 pre-migration): rasterize_continuous,
+# rasterize_categorical, rasterize_labels_to_grid, plot_spatial_map,
+# _add_colorbar. The shadows' distinguishing kwargs (white bg,
+# str/int color_map, disable_rd_grid, fontsize overrides) are now
+# absorbed into the utils versions and called via two thin wrappers below.
 # ---------------------------------------------------------------------------
 
 
-def rasterize_continuous(
-    cx: np.ndarray,
-    cy: np.ndarray,
-    values: np.ndarray,
-    extent: tuple,
-    width: int = RASTER_W,
-    height: int = RASTER_H,
-    cmap: str = "viridis",
-    vmin: float | None = None,
-    vmax: float | None = None,
-) -> np.ndarray:
-    """Rasterize continuous values to an RGBA image.
+def rasterize_continuous(cx, cy, values, extent, cmap="viridis",
+                        vmin=None, vmax=None):
+    """White-bg continuous Voronoi raster (thin wrapper).
 
-    Args:
-        cx, cy: centroid coordinates in EPSG:28992.
-        values: float array of same length as cx/cy.
-        extent: (minx, miny, maxx, maxy) in EPSG:28992.
-        width, height: output image dimensions.
-        cmap: matplotlib colormap name.
-        vmin, vmax: value range for colormap normalization.
-
-    Returns:
-        (height, width, 4) RGBA float32 array with white background.
+    Drops the legacy ``width``/``height`` kwargs (Voronoi API derives
+    output dims from ``extent`` + ``pixel_m``). Returns the RGBA image
+    only (matches the shadow's signature) -- callers pass the original
+    ``extent`` (minx, miny, maxx, maxy) to ``plot_spatial_map``.
     """
-    minx, miny, maxx, maxy = extent
-    mask = (
-        (cx >= minx) & (cx <= maxx) & (cy >= miny) & (cy <= maxy)
-        & np.isfinite(values)
+    img, _ = rasterize_continuous_voronoi(
+        cx, cy, values, extent,
+        cmap=cmap, vmin=vmin, vmax=vmax,
+        pixel_m=PIXEL_M, max_dist_m=MAX_DIST_M,
+        bg_color=(1.0, 1.0, 1.0),
     )
-    cx_m, cy_m, val_m = cx[mask], cy[mask], values[mask]
-
-    px = ((cx_m - minx) / (maxx - minx) * (width - 1)).astype(int)
-    py = ((cy_m - miny) / (maxy - miny) * (height - 1)).astype(int)
-    np.clip(px, 0, width - 1, out=px)
-    np.clip(py, 0, height - 1, out=py)
-
-    if vmin is None:
-        vmin = float(np.nanpercentile(val_m, 2))
-    if vmax is None:
-        vmax = float(np.nanpercentile(val_m, 98))
-
-    norm = plt.Normalize(vmin=vmin, vmax=vmax)
-    colormap = plt.get_cmap(cmap)
-    rgb = colormap(norm(val_m))[:, :3].astype(np.float32)
-
-    image = np.ones((height, width, 4), dtype=np.float32)  # white bg
-    image[py, px, :3] = rgb
-    image[py, px, 3] = 1.0
-    return image
+    return img
 
 
-def rasterize_categorical(
-    cx: np.ndarray,
-    cy: np.ndarray,
-    labels: np.ndarray,
-    extent: tuple,
-    color_map: dict,
-    width: int = RASTER_W,
-    height: int = RASTER_H,
-) -> np.ndarray:
-    """Rasterize categorical labels to an RGBA image.
+def rasterize_categorical(cx, cy, labels, extent, color_map):
+    """White-bg categorical Voronoi raster with explicit color dict.
 
-    Args:
-        cx, cy: centroid coordinates in EPSG:28992.
-        labels: integer or string array of class labels.
-        extent: (minx, miny, maxx, maxy) in EPSG:28992.
-        color_map: dict mapping label -> (r, g, b) tuple in [0, 1].
-        width, height: output image dimensions.
-
-    Returns:
-        (height, width, 4) RGBA float32 array with white background.
+    Supports both string and integer labels via the utils
+    ``color_map`` path (no ``n_clusters`` needed).
     """
-    minx, miny, maxx, maxy = extent
-    mask = (cx >= minx) & (cx <= maxx) & (cy >= miny) & (cy <= maxy)
-    cx_m, cy_m, lab_m = cx[mask], cy[mask], labels[mask]
-
-    px = ((cx_m - minx) / (maxx - minx) * (width - 1)).astype(int)
-    py = ((cy_m - miny) / (maxy - miny) * (height - 1)).astype(int)
-    np.clip(px, 0, width - 1, out=px)
-    np.clip(py, 0, height - 1, out=py)
-
-    # Build RGB for each pixel
-    rgb = np.ones((len(lab_m), 3), dtype=np.float32) * 0.8  # fallback gray
-    for label, color in color_map.items():
-        idx = lab_m == label
-        rgb[idx] = color[:3]
-
-    image = np.ones((height, width, 4), dtype=np.float32)
-    image[py, px, :3] = rgb
-    image[py, px, 3] = 1.0
-    return image
+    img, _ = rasterize_categorical_voronoi(
+        cx, cy, labels, extent,
+        color_map=color_map,
+        fallback_color=(0.8, 0.8, 0.8),
+        pixel_m=PIXEL_M, max_dist_m=MAX_DIST_M,
+        bg_color=(1.0, 1.0, 1.0),
+    )
+    return img
 
 
-def rasterize_labels_to_grid(
-    cx: np.ndarray,
-    cy: np.ndarray,
-    labels: np.ndarray,
-    extent: tuple,
-    width: int = RASTER_W,
-    height: int = RASTER_H,
-) -> np.ndarray:
-    """Rasterize integer labels to a 2D int array (for edge detection).
-
-    Returns:
-        (height, width) int array; -1 means no data.
-    """
-    minx, miny, maxx, maxy = extent
-    mask = (cx >= minx) & (cx <= maxx) & (cy >= miny) & (cy <= maxy)
-    cx_m, cy_m, lab_m = cx[mask], cy[mask], labels[mask]
-
-    px = ((cx_m - minx) / (maxx - minx) * (width - 1)).astype(int)
-    py = ((cy_m - miny) / (maxy - miny) * (height - 1)).astype(int)
-    np.clip(px, 0, width - 1, out=px)
-    np.clip(py, 0, height - 1, out=py)
-
-    grid = np.full((height, width), -1, dtype=np.int32)
-    grid[py, px] = lab_m.astype(np.int32)
+def rasterize_labels_to_grid(cx, cy, labels, extent):
+    """Integer label grid for edge detection (thin wrapper)."""
+    grid, _ = rasterize_labels(
+        cx, cy, labels, extent,
+        pixel_m=PIXEL_M, max_dist_m=MAX_DIST_M,
+        fill_value=-1,
+    )
     return grid
-
-
-# ---------------------------------------------------------------------------
-# Shared plot helpers (wrappers around utils.visualization with local defaults)
-# ---------------------------------------------------------------------------
 
 
 def plot_spatial_map(ax, image, extent, boundary_gdf, title=""):
@@ -193,6 +129,7 @@ def plot_spatial_map(ax, image, extent, boundary_gdf, title=""):
     _plot_spatial_map_base(
         ax, image, extent, boundary_gdf, title,
         show_rd_grid=False, title_fontsize=14,
+        disable_rd_grid=True,
     )
 
 

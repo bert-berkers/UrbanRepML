@@ -804,6 +804,112 @@ def rasterize_voronoi(
     return gather_rgba(nearest_idx, inside, rgb_per_hex), extent_xy
 
 
+def voronoi_params_for_resolution(
+    resolution: int,
+) -> tuple[float, float]:
+    """Suggested ``(pixel_m, max_dist_m)`` for an H3 resolution.
+
+    Per ``specs/rasterize_voronoi.md`` §"Defaults" guidance table. Used
+    by W3-migrated callers that previously derived a pixel-radius
+    ``stamp`` from ``max(1, 11 - resolution)``; this is the metric-CRS
+    equivalent for the Voronoi rasterizer.
+
+    Args:
+        resolution: H3 resolution (5..11).
+
+    Returns:
+        ``(pixel_m, max_dist_m)`` in metres. Falls back to res9 baseline
+        for unknown resolutions.
+    """
+    table = {
+        7: (1500.0, 2000.0),
+        8: (600.0, 800.0),
+        9: (250.0, 300.0),
+        10: (100.0, 120.0),
+        11: (40.0, 50.0),
+    }
+    return table.get(resolution, (250.0, 300.0))
+
+
+def _apply_bg_color(
+    image: np.ndarray,
+    bg_color: tuple[float, float, float, float] | tuple[float, float, float],
+) -> np.ndarray:
+    """Paint outside-cutoff pixels (alpha=0) with ``bg_color`` (alpha=1).
+
+    Used by per-mode wrappers when ``bg_color`` kwarg is set, to absorb
+    the ``plot_targets.py`` shadow's white-background semantics. A 3-tuple
+    is treated as opaque (alpha=1); a 4-tuple uses its alpha component.
+
+    Args:
+        image: ``(H, W, 4)`` float32 RGBA from :func:`rasterize_voronoi`.
+        bg_color: RGB (3-tuple) or RGBA (4-tuple) in ``[0, 1]``.
+
+    Returns:
+        New ``(H, W, 4)`` float32 RGBA with outside-cutoff pixels painted.
+    """
+    if len(bg_color) not in (3, 4):
+        raise ValueError(
+            f"bg_color must be RGB or RGBA tuple; got length {len(bg_color)}"
+        )
+    out = image.copy()
+    outside = out[..., 3] <= 0.0
+    rgb = np.array(bg_color[:3], dtype=np.float32)
+    alpha = float(bg_color[3]) if len(bg_color) == 4 else 1.0
+    out[outside, :3] = rgb
+    out[outside, 3] = alpha
+    return out
+
+
+def rasterize_labels(
+    cx_m: np.ndarray,
+    cy_m: np.ndarray,
+    labels: np.ndarray,
+    extent_m: tuple[float, float, float, float],
+    *,
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+    fill_value: int = -1,
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    """Integer labels -> int64 label grid (peer to Voronoi RGBA API).
+
+    Returns the *integer label* of the nearest hex per pixel (or
+    ``fill_value`` outside ``max_dist_m``). Used downstream by edge
+    detection and label-boundary visualisation; an RGBA gather would
+    erase the integer-label structure those algorithms need.
+
+    Internally a thin wrapper over :func:`voronoi_indices` +
+    ``np.where(inside, labels[nearest_idx], fill_value)``. Lifted from
+    ``scripts/stage3/plot_targets.py:rasterize_labels_to_grid`` per
+    ``specs/rasterize_voronoi.md`` §"Peer function: rasterize_labels"
+    (W3 case 2).
+
+    Args:
+        cx_m, cy_m: Hex centroid coordinates in a metric CRS.
+        labels: Integer label array of length N.
+        extent_m: ``(minx, miny, maxx, maxy)`` in the same metric CRS.
+        pixel_m: Output pixel size (metres). Keyword-only.
+        max_dist_m: Voronoi cutoff (metres). Keyword-only.
+        fill_value: Value for pixels outside the cutoff. Default -1.
+            Keyword-only.
+
+    Returns:
+        ``(label_grid, extent_xy)`` where:
+            * ``label_grid``: ``(H, W)`` int64; integer labels inside,
+              ``fill_value`` outside.
+            * ``extent_xy``: ``(minx, maxx, miny, maxy)`` -- matplotlib
+              ``imshow`` order (Y swapped from input).
+    """
+    labels = np.asarray(labels)
+    nearest_idx, inside, extent_xy = voronoi_indices(
+        cx_m, cy_m, extent_m, pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
+    # int64 throughout; fill_value cast to int64 for type stability.
+    gathered = labels[nearest_idx].astype(np.int64, copy=False)
+    label_grid = np.where(inside, gathered, np.int64(fill_value))
+    return label_grid, extent_xy
+
+
 # ---------------------------------------------------------------------------
 # Per-mode wrappers: replace the four deprecated `rasterize_*` functions.
 # `stamp` is GONE -- the new API uses `max_dist_m` (geometric meaning).
@@ -821,6 +927,7 @@ def rasterize_continuous_voronoi(
     vmax: float | None = None,
     pixel_m: float = 250.0,
     max_dist_m: float = 300.0,
+    bg_color: tuple[float, float, float, float] | tuple[float, float, float] | None = None,
 ) -> tuple[np.ndarray, tuple[float, float, float, float]]:
     """Continuous scalar values -> colormap -> RGBA Voronoi raster.
 
@@ -834,6 +941,12 @@ def rasterize_continuous_voronoi(
             ``rasterize_continuous`` behaviour).
         pixel_m: Output pixel size (metres). Keyword-only.
         max_dist_m: Voronoi cutoff (metres). Keyword-only.
+        bg_color: Optional RGB or RGBA tuple in [0, 1] for outside-cutoff
+            pixels. When ``None`` (default), outside-cutoff pixels are
+            transparent (alpha=0). When set, outside-cutoff pixels are
+            painted with ``bg_color`` and alpha=1 (3-tuple is treated as
+            opaque). Absorbs the ``plot_targets.py`` shadow's
+            white-background semantics (W3 case 1). Keyword-only.
 
     Returns:
         ``(image, extent_xy)``. See :func:`rasterize_voronoi`.
@@ -858,10 +971,13 @@ def rasterize_continuous_voronoi(
         bad_rgb = colormap_obj(0.0)[:3]
         rgb_per_hex[~finite] = np.array(bad_rgb, dtype=np.float32)
 
-    return rasterize_voronoi(
+    image, extent_xy = rasterize_voronoi(
         cx_m, cy_m, rgb_per_hex, extent_m,
         pixel_m=pixel_m, max_dist_m=max_dist_m,
     )
+    if bg_color is not None:
+        image = _apply_bg_color(image, bg_color)
+    return image, extent_xy
 
 
 def rasterize_categorical_voronoi(
@@ -870,27 +986,40 @@ def rasterize_categorical_voronoi(
     labels: np.ndarray,
     extent_m: tuple[float, float, float, float],
     *,
-    n_clusters: int,
+    n_clusters: int | None = None,
     cmap: str = "tab20",
-    color_map: dict[int, tuple[float, float, float]] | None = None,
+    color_map: dict | None = None,
+    fallback_color: tuple[float, float, float] = (0.8, 0.8, 0.8),
     pixel_m: float = 250.0,
     max_dist_m: float = 300.0,
+    bg_color: tuple[float, float, float, float] | tuple[float, float, float] | None = None,
 ) -> tuple[np.ndarray, tuple[float, float, float, float]]:
-    """Integer cluster labels -> categorical RGBA Voronoi raster.
+    """Integer or string cluster labels -> categorical RGBA Voronoi raster.
 
     Args:
         cx_m, cy_m: Hex centroid coordinates in a metric CRS.
-        labels: Integer cluster assignment array (length N).
+        labels: Cluster assignment array (length N). Integer or string.
         extent_m: ``(minx, miny, maxx, maxy)`` in the same metric CRS.
-        n_clusters: Total number of clusters (for colormap scaling).
-            Keyword-only.
-        cmap: Matplotlib colormap name. Used when ``color_map`` is None.
-        color_map: Optional ``dict[label -> (r, g, b)]`` override. When
-            provided, takes precedence over ``cmap``. Absorbs the
-            ``plot_targets.py`` shadow's distinguishing parameter (W3
-            case 1). Labels not in ``color_map`` fall back to ``cmap``.
+        n_clusters: Total number of integer clusters (for colormap
+            scaling). Required for the ``cmap`` path; ignored when
+            ``color_map`` provides full coverage. Keyword-only.
+        cmap: Matplotlib colormap name. Used when ``color_map`` is None
+            (integer labels only).
+        color_map: Optional ``dict[label -> (r, g, b)]`` mapping. When
+            provided, takes precedence over ``cmap`` for labels present
+            in the dict. Supports both integer and string labels.
+            Absorbs the ``plot_targets.py`` shadow's distinguishing
+            parameter (W3 case 1).
+        fallback_color: RGB used for labels not in ``color_map`` when
+            no ``cmap`` path applies (e.g. string labels missing from
+            the dict). Default ``(0.8, 0.8, 0.8)`` matches the
+            ``plot_targets.py`` shadow's gray fallback.
         pixel_m: Output pixel size (metres). Keyword-only.
         max_dist_m: Voronoi cutoff (metres). Keyword-only.
+        bg_color: Optional RGB or RGBA tuple in [0, 1] for outside-cutoff
+            pixels. When ``None`` (default), outside-cutoff pixels are
+            transparent. When set, painted with ``bg_color`` (alpha=1).
+            Keyword-only.
 
     Returns:
         ``(image, extent_xy)``. See :func:`rasterize_voronoi`.
@@ -904,22 +1033,34 @@ def rasterize_categorical_voronoi(
     labels = np.asarray(labels)
     n = len(labels)
 
-    # Build per-hex RGB. color_map overrides cmap for the listed labels.
-    colormap_obj = plt.get_cmap(cmap)
-    norm_vals = labels.astype(float) / max(n_clusters - 1, 1)
-    rgb_per_hex = colormap_obj(norm_vals)[:, :3].astype(np.float32)
+    # Detect whether we can take the cmap-scaling path: requires integer
+    # labels and an n_clusters value. Strings or n_clusters=None mean
+    # color_map must cover every label (fallback_color for missing keys).
+    is_integer = np.issubdtype(labels.dtype, np.integer)
+
+    if is_integer and n_clusters is not None:
+        colormap_obj = plt.get_cmap(cmap)
+        norm_vals = labels.astype(float) / max(n_clusters - 1, 1)
+        rgb_per_hex = colormap_obj(norm_vals)[:, :3].astype(np.float32)
+    else:
+        rgb_per_hex = np.broadcast_to(
+            np.array(fallback_color, dtype=np.float32), (n, 3),
+        ).copy()
 
     if color_map is not None:
         # Apply explicit overrides for labels present in the dict.
         for lbl, rgb in color_map.items():
             mask = labels == lbl
             if mask.any():
-                rgb_per_hex[mask] = np.array(rgb, dtype=np.float32)
+                rgb_per_hex[mask] = np.array(rgb[:3], dtype=np.float32)
 
-    return rasterize_voronoi(
+    image, extent_xy = rasterize_voronoi(
         cx_m, cy_m, rgb_per_hex, extent_m,
         pixel_m=pixel_m, max_dist_m=max_dist_m,
     )
+    if bg_color is not None:
+        image = _apply_bg_color(image, bg_color)
+    return image, extent_xy
 
 
 def rasterize_binary_voronoi(
@@ -1090,6 +1231,7 @@ def rasterize_continuous_voronoi_gdf(
     vmax: float | None = None,
     pixel_m: float = 250.0,
     max_dist_m: float = 300.0,
+    bg_color: tuple[float, float, float, float] | tuple[float, float, float] | None = None,
 ) -> tuple[np.ndarray, tuple[float, float, float, float]]:
     """GDF overload of :func:`rasterize_continuous_voronoi`.
 
@@ -1100,7 +1242,7 @@ def rasterize_continuous_voronoi_gdf(
         target_crs: Metric CRS to reproject to. Default 28992 (RD New).
         extent_m: Override total_bounds; defaults to ``gdf.total_bounds``
             in the target CRS.
-        cmap, vmin, vmax, pixel_m, max_dist_m: See
+        cmap, vmin, vmax, pixel_m, max_dist_m, bg_color: See
             :func:`rasterize_continuous_voronoi`.
     """
     cx_m, cy_m, ext = _gdf_to_metric_centroids(gdf, target_crs=target_crs)
@@ -1110,6 +1252,7 @@ def rasterize_continuous_voronoi_gdf(
         cx_m, cy_m, values, extent_m,
         cmap=cmap, vmin=vmin, vmax=vmax,
         pixel_m=pixel_m, max_dist_m=max_dist_m,
+        bg_color=bg_color,
     )
 
 
@@ -1117,13 +1260,15 @@ def rasterize_categorical_voronoi_gdf(
     gdf: gpd.GeoDataFrame,
     label_col: str,
     *,
-    n_clusters: int,
+    n_clusters: int | None = None,
     target_crs: int = 28992,
     extent_m: tuple[float, float, float, float] | None = None,
     cmap: str = "tab20",
-    color_map: dict[int, tuple[float, float, float]] | None = None,
+    color_map: dict | None = None,
+    fallback_color: tuple[float, float, float] = (0.8, 0.8, 0.8),
     pixel_m: float = 250.0,
     max_dist_m: float = 300.0,
+    bg_color: tuple[float, float, float, float] | tuple[float, float, float] | None = None,
 ) -> tuple[np.ndarray, tuple[float, float, float, float]]:
     """GDF overload of :func:`rasterize_categorical_voronoi`."""
     cx_m, cy_m, ext = _gdf_to_metric_centroids(gdf, target_crs=target_crs)
@@ -1132,7 +1277,9 @@ def rasterize_categorical_voronoi_gdf(
     return rasterize_categorical_voronoi(
         cx_m, cy_m, labels, extent_m,
         n_clusters=n_clusters, cmap=cmap, color_map=color_map,
+        fallback_color=fallback_color,
         pixel_m=pixel_m, max_dist_m=max_dist_m,
+        bg_color=bg_color,
     )
 
 

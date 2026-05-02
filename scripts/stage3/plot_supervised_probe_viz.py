@@ -29,8 +29,8 @@ from utils.visualization import (
     RASTER_W,
     RASTER_H,
     load_boundary,
-    rasterize_continuous,
-    rasterize_rgb,
+    rasterize_continuous_voronoi,
+    voronoi_params_for_resolution,
     plot_spatial_map,
     _add_colorbar,
 )
@@ -222,11 +222,11 @@ def make_spatial_maps(
     vmin_pred = float(np.nanpercentile(predicted, 2))
     vmax_pred = float(np.nanpercentile(predicted, 98))
 
-    img_pred = rasterize_continuous(
+    pixel_m, max_dist_m = voronoi_params_for_resolution(H3_RES)
+    img_pred, _ = rasterize_continuous_voronoi(
         cx, cy, predicted, extent,
-        width=RASTER_W, height=RASTER_H,
         cmap="viridis", vmin=vmin_pred, vmax=vmax_pred,
-        stamp=2,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
     )
 
     fig, ax = plt.subplots(figsize=(10, 12))
@@ -247,11 +247,10 @@ def make_spatial_maps(
     if vmax_res == 0:
         vmax_res = 1.0
 
-    img_res = rasterize_continuous(
+    img_res, _ = rasterize_continuous_voronoi(
         cx, cy, residual, extent,
-        width=RASTER_W, height=RASTER_H,
         cmap="RdBu_r", vmin=-vmax_res, vmax=vmax_res,
-        stamp=2,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
     )
 
     fig, ax = plt.subplots(figsize=(10, 12))

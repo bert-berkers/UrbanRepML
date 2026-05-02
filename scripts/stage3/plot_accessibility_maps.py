@@ -30,7 +30,8 @@ from utils.visualization import (
     _add_colorbar,
     load_boundary,
     plot_spatial_map,
-    rasterize_continuous,
+    rasterize_continuous_voronoi,
+    voronoi_params_for_resolution,
 )
 
 STUDY_AREA = "netherlands"
@@ -73,11 +74,16 @@ def compute_extent(cx: np.ndarray, cy: np.ndarray, pad_frac: float = 0.02):
 def make_single_map(
     cx, cy, values, extent, boundary,
     cmap, title, cb_label, filepath,
-    vmin=None, vmax=None, stamp=1,
+    vmin=None, vmax=None, resolution=9,
 ):
     """Render and save a single full-NL map."""
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
     fig, ax = plt.subplots(figsize=(12, 14))
-    img = rasterize_continuous(cx, cy, values, extent, cmap=cmap, vmin=vmin, vmax=vmax, stamp=stamp)
+    img, _ = rasterize_continuous_voronoi(
+        cx, cy, values, extent,
+        cmap=cmap, vmin=vmin, vmax=vmax,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
     plot_spatial_map(ax, img, extent, boundary, title=title)
 
     v0 = vmin if vmin is not None else float(np.nanpercentile(values[np.isfinite(values)], 2))
@@ -99,14 +105,14 @@ def plot_overview_maps():
 
     # NOTE: bike_res8 and drive_res7 both contain res7 hex IDs.
     # The file name refers to the coarsening strategy, not the hex resolution.
-    # (name, actual_h3_resolution, stamp_size)
+    # (name, actual_h3_resolution)
     configs = [
-        ("walk_res9", 9, 1),
-        ("bike_res8", 7, 7),
-        ("drive_res7", 7, 7),
+        ("walk_res9", 9),
+        ("bike_res8", 7),
+        ("drive_res7", 7),
     ]
 
-    for name, res, stamp in configs:
+    for name, res in configs:
         print(f"\n--- {name} ---")
         df = load_edges(name)
         hex_ids = get_all_hex_ids(df)
@@ -128,7 +134,7 @@ def plot_overview_maps():
             title=f"{name} — Edge Degree per Hex",
             cb_label="Edges (count)",
             filepath=FIG_DIR / f"{name}_degree.png",
-            stamp=stamp,
+            resolution=res,
         )
 
         # Gravity map
@@ -143,7 +149,7 @@ def plot_overview_maps():
             title=f"{name} — Mean Incoming Gravity Weight",
             cb_label="Mean gravity weight",
             filepath=FIG_DIR / f"{name}_gravity.png",
-            stamp=stamp,
+            resolution=res,
         )
 
     # Walk degree vs lattice divergence
@@ -167,7 +173,7 @@ def plot_overview_maps():
         cb_label="Edges above/below 6",
         filepath=FIG_DIR / "walk_res9_vs_lattice.png",
         vmin=-6, vmax=20,
-        stamp=1,
+        resolution=9,
     )
 
 
@@ -258,14 +264,16 @@ def plot_isochrones_combined():
             local_extent = (ox - window, oy - window, ox + window, oy + window)
 
         ax = axes_flat[i]
-        # Compute stamp size based on zoom level: at ~2km window, hex spacing
-        # is ~175m (res9), canvas is 2000px, so pixels per hex ~ 2000/(window_m/175)
+        # Voronoi at res9 baseline: pixel_m chosen so the canvas is ~2000px
+        # wide at this zoom (matches the legacy iso_stamp heuristic). The
+        # max_dist_m stays at the res9 cell-size (~300 m) so the silhouette
+        # is geometrically truthful regardless of zoom.
         window_x = local_extent[2] - local_extent[0]
-        iso_stamp = max(1, int(2000 / (window_x / 175) * 0.6))
-        iso_stamp = min(iso_stamp, 12)  # cap
-        img = rasterize_continuous(
+        iso_pixel_m = max(2.0, window_x / 1500.0)
+        img, _ = rasterize_continuous_voronoi(
             reach_cx, reach_cy, reach_times, local_extent,
-            cmap="plasma", vmin=0, vmax=CUTOFF_S, stamp=iso_stamp,
+            cmap="plasma", vmin=0, vmax=CUTOFF_S,
+            pixel_m=iso_pixel_m, max_dist_m=300.0,
         )
         plot_spatial_map(
             ax, img, local_extent, boundary,
@@ -310,13 +318,13 @@ def plot_isochrones_combined():
             local_extent = (ox - 2000, oy - 2000, ox + 2000, oy + 2000)
 
         window_x = local_extent[2] - local_extent[0]
-        ind_stamp = max(1, int(2000 / (window_x / 175) * 0.6))
-        ind_stamp = min(ind_stamp, 12)
+        ind_pixel_m = max(2.0, window_x / 1500.0)
 
         fig, ax = plt.subplots(figsize=(12, 14))
-        img = rasterize_continuous(
+        img, _ = rasterize_continuous_voronoi(
             reach_cx, reach_cy, reach_times, local_extent,
-            cmap="plasma", vmin=0, vmax=CUTOFF_S, stamp=ind_stamp,
+            cmap="plasma", vmin=0, vmax=CUTOFF_S,
+            pixel_m=ind_pixel_m, max_dist_m=300.0,
         )
         plot_spatial_map(
             ax, img, local_extent, boundary,

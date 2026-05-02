@@ -42,8 +42,9 @@ from utils import StudyAreaPaths
 from utils.spatial_db import SpatialDB
 from utils.visualization import (
     load_boundary,
-    rasterize_continuous,
+    rasterize_continuous_voronoi,
     plot_spatial_map,
+    voronoi_params_for_resolution,
     _add_colorbar,
 )
 
@@ -185,7 +186,6 @@ def plot_pca_spatial(
     out_dir: Path,
     resolution: int,
     groups: dict[str, list[str]],
-    stamp: int = 2,
 ):
     """3-panel spatial map of PC1, PC2, PC3 on full concatenated embeddings.
 
@@ -210,12 +210,13 @@ def plot_pca_spatial(
     fig, axes = plt.subplots(1, 3, figsize=(24, 10), dpi=DPI)
     fig.set_facecolor("white")
 
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
     for i in range(3):
         vals = reduced[:, i]
-        image = rasterize_continuous(
+        image, _ = rasterize_continuous_voronoi(
             cx, cy, vals, extent,
-            width=RASTER_W, height=RASTER_H,
-            cmap="RdBu_r", stamp=stamp,
+            cmap="RdBu_r",
+            pixel_m=pixel_m, max_dist_m=max_dist_m,
         )
         var_pct = pca.explained_variance_ratio_[i] * 100
         plot_spatial_map(
@@ -313,7 +314,6 @@ def plot_modality_coverage(
     boundary_gdf,
     out_dir: Path,
     resolution: int,
-    stamp: int = 2,
 ):
     """Spatial map showing how many modality blocks have non-zero signal per hexagon.
 
@@ -340,13 +340,13 @@ def plot_modality_coverage(
     fig, axes = plt.subplots(1, 2, figsize=(20, 10), dpi=DPI)
     fig.set_facecolor("white")
 
+    pixel_m, max_dist_m = voronoi_params_for_resolution(resolution)
     # Left: count map
-    image = rasterize_continuous(
+    image, _ = rasterize_continuous_voronoi(
         cx, cy, n_present.astype(np.float32), extent,
-        width=RASTER_W, height=RASTER_H,
         cmap="YlOrRd",
         vmin=0, vmax=n_modalities,
-        stamp=stamp,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
     )
     plot_spatial_map(axes[0], image, extent, boundary_gdf, title="Modalities Present")
     _add_colorbar(fig, axes[0], "YlOrRd", 0, n_modalities, label="Count")
@@ -453,8 +453,6 @@ def main():
     pad = (maxx - minx) * 0.03
     extent = (minx - pad, miny - pad, maxx + pad, maxy + pad)
 
-    stamp = max(1, 11 - args.resolution)  # res10=1, res9=2, res8=3
-
     # Plot 1: Variance contribution
     logger.info("[1/4] Per-modality variance contribution...")
     plot_variance_contribution(emb_df, groups, out_dir, args.resolution)
@@ -463,7 +461,7 @@ def main():
     logger.info("[2/4] PCA top-3 spatial maps...")
     plot_pca_spatial(
         emb_df, cx, cy, extent, boundary_gdf,
-        out_dir, args.resolution, groups, stamp,
+        out_dir, args.resolution, groups,
     )
 
     # Plot 3: Modality correlation matrix
@@ -474,7 +472,7 @@ def main():
     logger.info("[4/4] Coverage / density map...")
     plot_modality_coverage(
         emb_df, groups, cx, cy, extent, boundary_gdf,
-        out_dir, args.resolution, stamp,
+        out_dir, args.resolution,
     )
 
     logger.info("All 4 plots saved to: %s", out_dir)
