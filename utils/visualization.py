@@ -141,6 +141,14 @@ def rasterize_continuous(
 ) -> np.ndarray:
     """Rasterize continuous values to an RGBA image.
 
+    .. deprecated:: 2026-05-02
+       Centroid-splat with degree-units ``stamp`` carries directional bleed,
+       speckle holes, and lat-lon aspect distortion. Migrate to
+       :func:`rasterize_continuous_voronoi` (KDTree-Voronoi in metric CRS,
+       ``max_dist_m`` in metres). See ``specs/rasterize_voronoi.md`` and
+       ``.claude/plans/2026-05-02-rasterize-voronoi-toolkit.md`` (W3).
+       Removed in W6 of the toolkit migration.
+
     Args:
         cx, cy: Centroid coordinates in EPSG:28992.
         values: Float array of same length as *cx*/*cy*.
@@ -192,6 +200,10 @@ def rasterize_rgb(
 ) -> np.ndarray:
     """Rasterize pre-computed RGB values to an RGBA image.
 
+    .. deprecated:: 2026-05-02
+       Migrate to :func:`rasterize_rgb_voronoi` (KDTree-Voronoi, metric CRS,
+       ``max_dist_m`` cutoff). Removed in W6 of the toolkit migration.
+
     Args:
         cx, cy: Centroid coordinates in EPSG:28992.
         rgb_array: ``(N, 3)`` float array with R, G, B in ``[0, 1]``.
@@ -232,6 +244,10 @@ def rasterize_binary(
 ) -> np.ndarray:
     """Rasterize binary presence to an RGBA image.
 
+    .. deprecated:: 2026-05-02
+       Migrate to :func:`rasterize_binary_voronoi` (KDTree-Voronoi, metric
+       CRS, ``max_dist_m`` cutoff). Removed in W6.
+
     Args:
         cx, cy: Centroid coordinates in EPSG:28992.
         extent: ``(minx, miny, maxx, maxy)`` in EPSG:28992.
@@ -270,6 +286,11 @@ def rasterize_categorical(
     stamp: int = 1,
 ) -> np.ndarray:
     """Rasterize integer cluster labels to an RGBA image.
+
+    .. deprecated:: 2026-05-02
+       Migrate to :func:`rasterize_categorical_voronoi` (KDTree-Voronoi,
+       metric CRS, ``max_dist_m`` cutoff; supports ``color_map`` dict
+       override). Removed in W6.
 
     Args:
         cx, cy: Centroid coordinates in EPSG:28992.
@@ -372,17 +393,27 @@ def plot_spatial_map(
     *,
     show_rd_grid: bool = True,
     title_fontsize: int = 11,
+    disable_rd_grid: bool = False,
 ) -> None:
     """Render a rasterized image on axes with boundary underlay and RD grid.
 
     Args:
         ax: Matplotlib axes.
         image: RGBA raster from one of the ``rasterize_*`` functions.
-        extent: ``(minx, miny, maxx, maxy)`` in EPSG:28992.
+        extent: ``(minx, miny, maxx, maxy)`` in EPSG:28992 (legacy
+            centroid-splat form). The new Voronoi rasterizers return
+            ``(minx, maxx, miny, maxy)``; callers using them must
+            re-order before passing here, or set ``disable_rd_grid=True``
+            and pass the matplotlib-order tuple verbatim (the imshow path
+            doesn't care about Y order).
         boundary_gdf: Study area boundary for underlay, or ``None`` to skip.
         title: Axes title string.
         show_rd_grid: Whether to overlay the 50-km RD grid.
         title_fontsize: Font size for the title.
+        disable_rd_grid: Hard suppress the RD grid overlay. Takes precedence
+            over ``show_rd_grid``. Absorbs the ``plot_targets.py`` shadow
+            override (W3 case 3) — used by callers that don't want the RD
+            grid even when other panels in the same figure do.
     """
     if boundary_gdf is not None:
         boundary_gdf.plot(
@@ -398,7 +429,7 @@ def plot_spatial_map(
         interpolation="nearest",
         zorder=2,
     )
-    if show_rd_grid:
+    if show_rd_grid and not disable_rd_grid:
         _add_rd_grid(ax, extent)
     ax.set_xlim(minx, maxx)
     ax.set_ylim(miny, maxy)
@@ -609,3 +640,544 @@ def detect_embedding_columns(df) -> list[str]:
         if c not in exclude and pd.api.types.is_numeric_dtype(df[c])
     ]
     return cols
+
+
+# ---------------------------------------------------------------------------
+# KDTree-Voronoi rasterization (new standard; replaces centroid-splat above).
+#
+# Contract: ``specs/rasterize_voronoi.md`` (frozen 2026-05-02 by W1).
+# Lifted from: ``scripts/one_off/viz_ring_agg_res9_grid.py:74-167`` (visually
+# validated by the human across the three-embeddings study + LBM probe overlay).
+# Plan: ``.claude/plans/2026-05-02-rasterize-voronoi-toolkit.md`` (W2a).
+#
+# Three structural wins over centroid-splat:
+#   1. No directional south-east bleed (was caused by asymmetric splat offsets).
+#   2. No density-dependent speckle holes (was hexagonal-vs-rectangular packing).
+#   3. No lat-lon aspect distortion (1 deg lon != 1 deg lat at 52 N -- handled
+#      by working in metric CRS, default EPSG:28992 for NL).
+#
+# One operational win: gallery reuse. The KDTree query is the dominant cost
+# (~5s for NL res9 at 250 m/px). Splitting it from the colour-mapping step
+# lets a gallery render 8 panels for the price of one Voronoi by re-using
+# ``nearest_idx``. Per-panel cost is trivial fancy-indexing.
+# ---------------------------------------------------------------------------
+
+
+def voronoi_indices(
+    cx_m: np.ndarray,
+    cy_m: np.ndarray,
+    extent_m: tuple[float, float, float, float],
+    *,
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+) -> tuple[np.ndarray, np.ndarray, tuple[float, float, float, float]]:
+    """Build the per-pixel nearest-hex index array + alpha mask once.
+
+    The KDTree query is the dominant cost; this function isolates it so a
+    gallery of N panels can re-use ``nearest_idx`` via N cheap
+    :func:`gather_rgba` calls instead of N full Voronoi queries.
+
+    Args:
+        cx_m: Hex centroid x-coords (1-D float, length N) in a metric CRS.
+        cy_m: Hex centroid y-coords (1-D float, length N) in the same CRS.
+        extent_m: ``(minx, miny, maxx, maxy)`` bounding box in the same
+            metric CRS. Note the input order matches
+            ``geopandas.total_bounds`` and shapely conventions.
+        pixel_m: Output pixel size (metres). Keyword-only.
+        max_dist_m: Voronoi cutoff (metres). Pixels farther than this from
+            their nearest centroid are masked out. Keyword-only.
+
+    Returns:
+        ``(nearest_idx, inside, extent_xy)`` where:
+            * ``nearest_idx``: ``(H, W)`` int64, index into the centroid
+              array. Dtype is load-bearing -- :func:`gather_rgba` assumes
+              int64 indexing into ``(N, 3)`` colour arrays.
+            * ``inside``: ``(H, W)`` bool, True where pixel is within
+              ``max_dist_m`` of its nearest centroid (alpha mask).
+            * ``extent_xy``: ``(minx, maxx, miny, maxy)`` -- the **Y order
+              is swapped from input** because matplotlib
+              ``imshow(..., extent=...)`` expects ``(left, right, bottom,
+              top)``. This is intentional, not a bug.
+
+    Notes:
+        Pixel-centre convention: pixel ``(0, 0)`` covers
+        ``[minx, minx+pixel_m] x [miny, miny+pixel_m]`` and is queried at
+        its centre. Matches ``imshow(origin='lower')``.
+
+        Determinism: ``cKDTree.query(k=1, eps=0)`` is deterministic. Same
+        inputs + same ``pixel_m`` + same ``max_dist_m`` produce byte-
+        identical ``nearest_idx`` and ``inside``. Ties are broken by input
+        order.
+    """
+    from scipy.spatial import cKDTree  # local import: optional dep at module top
+
+    cx_m = np.asarray(cx_m, dtype=np.float64)
+    cy_m = np.asarray(cy_m, dtype=np.float64)
+    if cx_m.ndim != 1 or cy_m.ndim != 1 or cx_m.shape != cy_m.shape:
+        raise ValueError(
+            f"cx_m and cy_m must be 1-D arrays of identical length; got "
+            f"shapes {cx_m.shape} and {cy_m.shape}"
+        )
+
+    minx, miny, maxx, maxy = extent_m
+    width = max(1, int(np.ceil((maxx - minx) / pixel_m)))
+    height = max(1, int(np.ceil((maxy - miny) / pixel_m)))
+
+    # Pixel-centre coordinates in metric CRS (origin='lower' convention).
+    xs = minx + (np.arange(width) + 0.5) * pixel_m
+    ys = miny + (np.arange(height) + 0.5) * pixel_m
+    xx, yy = np.meshgrid(xs, ys)
+    pts = np.column_stack([xx.ravel(), yy.ravel()])
+
+    tree = cKDTree(np.column_stack([cx_m, cy_m]))
+    dist, idx = tree.query(pts, k=1)
+
+    nearest_idx = idx.reshape(height, width).astype(np.int64)
+    inside = (dist <= max_dist_m).reshape(height, width)
+    return nearest_idx, inside, (minx, maxx, miny, maxy)
+
+
+def gather_rgba(
+    nearest_idx: np.ndarray,
+    inside: np.ndarray,
+    rgb_per_hex: np.ndarray,
+) -> np.ndarray:
+    """Project a per-hex colour table onto the precomputed index grid.
+
+    Cheap fancy-index gather. Use this for gallery panels after a single
+    :func:`voronoi_indices` call.
+
+    Args:
+        nearest_idx: ``(H, W)`` int from :func:`voronoi_indices`.
+        inside: ``(H, W)`` bool from :func:`voronoi_indices`.
+        rgb_per_hex: ``(N, 3)`` float in ``[0, 1]``. ``N`` must match the
+            centroid array length passed to :func:`voronoi_indices`.
+
+    Returns:
+        ``(H, W, 4)`` float32 RGBA. RGB is ``rgb_per_hex[nearest_idx]``;
+        alpha is hard-edged (1.0 inside, 0.0 outside) by design.
+    """
+    rgb_per_hex = np.asarray(rgb_per_hex)
+    if rgb_per_hex.ndim != 2 or rgb_per_hex.shape[1] != 3:
+        raise ValueError(
+            f"rgb_per_hex must be (N, 3); got shape {rgb_per_hex.shape}"
+        )
+    h, w = nearest_idx.shape
+    img = np.zeros((h, w, 4), dtype=np.float32)
+    img[..., :3] = rgb_per_hex[nearest_idx]
+    img[..., 3] = inside.astype(np.float32)
+    return img
+
+
+def rasterize_voronoi(
+    cx_m: np.ndarray,
+    cy_m: np.ndarray,
+    rgb_per_hex: np.ndarray,
+    extent_m: tuple[float, float, float, float],
+    *,
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    """One-shot KDTree-Voronoi rasterization in a metric CRS.
+
+    Thin wrapper around :func:`voronoi_indices` + :func:`gather_rgba` for
+    callers that only need a single colour mapping. For galleries, call
+    :func:`voronoi_indices` once and :func:`gather_rgba` per panel.
+
+    Args:
+        cx_m: Hex centroid x-coords in a metric CRS.
+        cy_m: Hex centroid y-coords in the same CRS.
+        rgb_per_hex: ``(N, 3)`` float in ``[0, 1]``.
+        extent_m: ``(minx, miny, maxx, maxy)`` in the same metric CRS.
+        pixel_m: Output pixel size (metres). Keyword-only.
+        max_dist_m: Voronoi cutoff (metres). Keyword-only.
+
+    Returns:
+        ``(image, extent_xy)``. ``image`` is ``(H, W, 4)`` float32 RGBA.
+        ``extent_xy`` is ``(minx, maxx, miny, maxy)`` -- directly usable as
+        ``imshow(image, extent=extent_xy, origin='lower',
+        interpolation='nearest', aspect='equal')``.
+    """
+    nearest_idx, inside, extent_xy = voronoi_indices(
+        cx_m, cy_m, extent_m, pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
+    return gather_rgba(nearest_idx, inside, rgb_per_hex), extent_xy
+
+
+# ---------------------------------------------------------------------------
+# Per-mode wrappers: replace the four deprecated `rasterize_*` functions.
+# `stamp` is GONE -- the new API uses `max_dist_m` (geometric meaning).
+# ---------------------------------------------------------------------------
+
+
+def rasterize_continuous_voronoi(
+    cx_m: np.ndarray,
+    cy_m: np.ndarray,
+    values: np.ndarray,
+    extent_m: tuple[float, float, float, float],
+    *,
+    cmap: str = "viridis",
+    vmin: float | None = None,
+    vmax: float | None = None,
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    """Continuous scalar values -> colormap -> RGBA Voronoi raster.
+
+    Args:
+        cx_m, cy_m: Hex centroid coordinates in a metric CRS.
+        values: Float array of same length as cx_m/cy_m.
+        extent_m: ``(minx, miny, maxx, maxy)`` in the same metric CRS.
+        cmap: Matplotlib colormap name. Keyword-only.
+        vmin, vmax: Value range for colormap normalization. When ``None``,
+            the 2nd/98th percentiles of ``values`` are used (preserves
+            ``rasterize_continuous`` behaviour).
+        pixel_m: Output pixel size (metres). Keyword-only.
+        max_dist_m: Voronoi cutoff (metres). Keyword-only.
+
+    Returns:
+        ``(image, extent_xy)``. See :func:`rasterize_voronoi`.
+    """
+    values = np.asarray(values)
+    finite = np.isfinite(values)
+    # Compute percentiles over finite values only; preserves legacy behaviour.
+    if vmin is None:
+        vmin = float(np.nanpercentile(values[finite], 2)) if finite.any() else 0.0
+    if vmax is None:
+        vmax = float(np.nanpercentile(values[finite], 98)) if finite.any() else 1.0
+
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    colormap_obj = plt.get_cmap(cmap)
+    rgb_per_hex = colormap_obj(norm(values))[:, :3].astype(np.float32)
+    # NaN values would propagate as colormap's "bad" colour (often transparent
+    # in newer matplotlib); force them to the colormap's vmin colour for
+    # parity with the deprecated centroid-splat behaviour where they were
+    # silently dropped by the finite-mask filter. Hex remains in the centroid
+    # array, so the Voronoi cell still paints.
+    if (~finite).any():
+        bad_rgb = colormap_obj(0.0)[:3]
+        rgb_per_hex[~finite] = np.array(bad_rgb, dtype=np.float32)
+
+    return rasterize_voronoi(
+        cx_m, cy_m, rgb_per_hex, extent_m,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
+
+
+def rasterize_categorical_voronoi(
+    cx_m: np.ndarray,
+    cy_m: np.ndarray,
+    labels: np.ndarray,
+    extent_m: tuple[float, float, float, float],
+    *,
+    n_clusters: int,
+    cmap: str = "tab20",
+    color_map: dict[int, tuple[float, float, float]] | None = None,
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    """Integer cluster labels -> categorical RGBA Voronoi raster.
+
+    Args:
+        cx_m, cy_m: Hex centroid coordinates in a metric CRS.
+        labels: Integer cluster assignment array (length N).
+        extent_m: ``(minx, miny, maxx, maxy)`` in the same metric CRS.
+        n_clusters: Total number of clusters (for colormap scaling).
+            Keyword-only.
+        cmap: Matplotlib colormap name. Used when ``color_map`` is None.
+        color_map: Optional ``dict[label -> (r, g, b)]`` override. When
+            provided, takes precedence over ``cmap``. Absorbs the
+            ``plot_targets.py`` shadow's distinguishing parameter (W3
+            case 1). Labels not in ``color_map`` fall back to ``cmap``.
+        pixel_m: Output pixel size (metres). Keyword-only.
+        max_dist_m: Voronoi cutoff (metres). Keyword-only.
+
+    Returns:
+        ``(image, extent_xy)``. See :func:`rasterize_voronoi`.
+
+    Notes:
+        Does NOT validate ``labels.max() < n_clusters``. ``n_clusters``
+        is used only for ``cmap`` scaling; out-of-range labels are
+        gracefully mod-wrapped by matplotlib's colormap-clip semantics.
+        See W2 scratchpad for the validation-vs-defensive choice.
+    """
+    labels = np.asarray(labels)
+    n = len(labels)
+
+    # Build per-hex RGB. color_map overrides cmap for the listed labels.
+    colormap_obj = plt.get_cmap(cmap)
+    norm_vals = labels.astype(float) / max(n_clusters - 1, 1)
+    rgb_per_hex = colormap_obj(norm_vals)[:, :3].astype(np.float32)
+
+    if color_map is not None:
+        # Apply explicit overrides for labels present in the dict.
+        for lbl, rgb in color_map.items():
+            mask = labels == lbl
+            if mask.any():
+                rgb_per_hex[mask] = np.array(rgb, dtype=np.float32)
+
+    return rasterize_voronoi(
+        cx_m, cy_m, rgb_per_hex, extent_m,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
+
+
+def rasterize_binary_voronoi(
+    cx_m: np.ndarray,
+    cy_m: np.ndarray,
+    extent_m: tuple[float, float, float, float],
+    *,
+    color: tuple[float, float, float] = (0.2, 0.5, 0.8),
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    """Presence-only Voronoi raster -- all hexes painted in ``color``.
+
+    Args:
+        cx_m, cy_m: Hex centroid coordinates in a metric CRS.
+        extent_m: ``(minx, miny, maxx, maxy)`` in the same metric CRS.
+        color: RGB tuple for presence pixels. Keyword-only.
+        pixel_m: Output pixel size (metres). Keyword-only.
+        max_dist_m: Voronoi cutoff (metres). Keyword-only.
+
+    Returns:
+        ``(image, extent_xy)``. See :func:`rasterize_voronoi`.
+    """
+    cx_m = np.asarray(cx_m, dtype=np.float64)
+    n = cx_m.shape[0]
+    rgb_per_hex = np.broadcast_to(
+        np.array(color, dtype=np.float32), (n, 3),
+    ).copy()
+    return rasterize_voronoi(
+        cx_m, cy_m, rgb_per_hex, extent_m,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
+
+
+def rasterize_rgb_voronoi(
+    cx_m: np.ndarray,
+    cy_m: np.ndarray,
+    rgb_array: np.ndarray,
+    extent_m: tuple[float, float, float, float],
+    *,
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    """Pre-computed (N, 3) RGB -> RGBA Voronoi raster.
+
+    Identity wrapper around :func:`rasterize_voronoi` -- kept for naming
+    parity with the deprecated :func:`rasterize_rgb`.
+
+    Args:
+        cx_m, cy_m: Hex centroid coordinates in a metric CRS.
+        rgb_array: ``(N, 3)`` float in ``[0, 1]``.
+        extent_m: ``(minx, miny, maxx, maxy)`` in the same metric CRS.
+        pixel_m: Output pixel size (metres). Keyword-only.
+        max_dist_m: Voronoi cutoff (metres). Keyword-only.
+
+    Returns:
+        ``(image, extent_xy)``. See :func:`rasterize_voronoi`.
+    """
+    return rasterize_voronoi(
+        cx_m, cy_m, rgb_array, extent_m,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
+
+
+# ---------------------------------------------------------------------------
+# CRS adapter: lat/lon -> metric.
+# ---------------------------------------------------------------------------
+
+
+def latlon_to_metric(
+    lats: np.ndarray,
+    lons: np.ndarray,
+    target_crs: int = 28992,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Reproject lat/lon (EPSG:4326) arrays to a metric CRS.
+
+    Required for callers whose centroid arrays are in EPSG:4326 (e.g. SRAI
+    defaults). Uses ``pyproj.Transformer`` with ``always_xy=True``. Note
+    the argument order: lat (Y) first to match the SRAI / GeoPandas
+    convention of returning ``(latitude, longitude)`` from many APIs;
+    internally swapped to ``(lon, lat)`` for ``always_xy=True`` semantics.
+
+    Args:
+        lats: Latitude array (degrees, EPSG:4326).
+        lons: Longitude array (degrees, EPSG:4326).
+        target_crs: Target metric CRS as EPSG code. Defaults to 28992
+            (RD New) for NL.
+
+    Returns:
+        ``(cx_m, cy_m)``: x and y arrays in the target CRS, same shape
+        as the inputs.
+    """
+    import pyproj
+
+    lats = np.asarray(lats, dtype=np.float64)
+    lons = np.asarray(lons, dtype=np.float64)
+    transformer = pyproj.Transformer.from_crs(
+        4326, target_crs, always_xy=True,
+    )
+    cx_m, cy_m = transformer.transform(lons, lats)
+    return np.asarray(cx_m), np.asarray(cy_m)
+
+
+# ---------------------------------------------------------------------------
+# GeoDataFrame overload wrappers: SRAI-indexed (region_id) GDF -> rasterizer.
+#
+# Pattern choice (see W2 scratchpad): separate `*_gdf` functions, NOT
+# @singledispatch. Rationale: explicit dispatch is more discoverable,
+# matches SRAI conventions where overloading is rare, and avoids hiding
+# the (cx_m, cy_m) -> GDF conversion behind a single name. W3 callers
+# can pick the form that matches their data plumbing.
+# ---------------------------------------------------------------------------
+
+
+def _gdf_to_metric_centroids(
+    gdf: gpd.GeoDataFrame,
+    target_crs: int = 28992,
+) -> tuple[np.ndarray, np.ndarray, tuple[float, float, float, float]]:
+    """Extract metric-CRS centroids + total_bounds from a SRAI-indexed GDF.
+
+    Args:
+        gdf: GeoDataFrame indexed by ``region_id`` (SRAI convention; NOT
+            ``h3_index``). Must have a ``geometry`` column. CRS metadata
+            must be set; if ``gdf.crs is None`` we assume EPSG:4326 as
+            the SRAI H3Regionalizer default.
+        target_crs: Target metric CRS as EPSG code.
+
+    Returns:
+        ``(cx_m, cy_m, extent_m)`` -- x, y arrays + ``(minx, miny, maxx,
+        maxy)`` total_bounds in the target CRS.
+
+    Raises:
+        ValueError: if the GDF is empty or has no geometry column.
+    """
+    if "geometry" not in gdf.columns:
+        raise ValueError("GeoDataFrame has no 'geometry' column")
+    if len(gdf) == 0:
+        raise ValueError("GeoDataFrame is empty")
+
+    if gdf.index.name not in ("region_id", None):
+        # Soft warning: project standard is `region_id`. Not enforced
+        # because some callers may legitimately pass nameless indices.
+        logger.warning(
+            "GDF index name is %r; project standard is 'region_id'",
+            gdf.index.name,
+        )
+
+    if gdf.crs is None:
+        gdf = gdf.set_crs(4326)
+    if gdf.crs.to_epsg() != target_crs:
+        gdf = gdf.to_crs(target_crs)
+
+    centroids = gdf.geometry.centroid
+    cx_m = np.asarray(centroids.x.to_numpy(), dtype=np.float64)
+    cy_m = np.asarray(centroids.y.to_numpy(), dtype=np.float64)
+    minx, miny, maxx, maxy = gdf.total_bounds
+    return cx_m, cy_m, (float(minx), float(miny), float(maxx), float(maxy))
+
+
+def rasterize_continuous_voronoi_gdf(
+    gdf: gpd.GeoDataFrame,
+    value_col: str,
+    *,
+    target_crs: int = 28992,
+    extent_m: tuple[float, float, float, float] | None = None,
+    cmap: str = "viridis",
+    vmin: float | None = None,
+    vmax: float | None = None,
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    """GDF overload of :func:`rasterize_continuous_voronoi`.
+
+    Args:
+        gdf: SRAI-indexed (``region_id``) GeoDataFrame with a ``value_col``
+            column carrying the continuous values.
+        value_col: Column name holding the scalar values.
+        target_crs: Metric CRS to reproject to. Default 28992 (RD New).
+        extent_m: Override total_bounds; defaults to ``gdf.total_bounds``
+            in the target CRS.
+        cmap, vmin, vmax, pixel_m, max_dist_m: See
+            :func:`rasterize_continuous_voronoi`.
+    """
+    cx_m, cy_m, ext = _gdf_to_metric_centroids(gdf, target_crs=target_crs)
+    extent_m = extent_m or ext
+    values = gdf[value_col].to_numpy()
+    return rasterize_continuous_voronoi(
+        cx_m, cy_m, values, extent_m,
+        cmap=cmap, vmin=vmin, vmax=vmax,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
+
+
+def rasterize_categorical_voronoi_gdf(
+    gdf: gpd.GeoDataFrame,
+    label_col: str,
+    *,
+    n_clusters: int,
+    target_crs: int = 28992,
+    extent_m: tuple[float, float, float, float] | None = None,
+    cmap: str = "tab20",
+    color_map: dict[int, tuple[float, float, float]] | None = None,
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    """GDF overload of :func:`rasterize_categorical_voronoi`."""
+    cx_m, cy_m, ext = _gdf_to_metric_centroids(gdf, target_crs=target_crs)
+    extent_m = extent_m or ext
+    labels = gdf[label_col].to_numpy()
+    return rasterize_categorical_voronoi(
+        cx_m, cy_m, labels, extent_m,
+        n_clusters=n_clusters, cmap=cmap, color_map=color_map,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
+
+
+def rasterize_binary_voronoi_gdf(
+    gdf: gpd.GeoDataFrame,
+    *,
+    target_crs: int = 28992,
+    extent_m: tuple[float, float, float, float] | None = None,
+    color: tuple[float, float, float] = (0.2, 0.5, 0.8),
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    """GDF overload of :func:`rasterize_binary_voronoi`."""
+    cx_m, cy_m, ext = _gdf_to_metric_centroids(gdf, target_crs=target_crs)
+    extent_m = extent_m or ext
+    return rasterize_binary_voronoi(
+        cx_m, cy_m, extent_m,
+        color=color, pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
+
+
+def rasterize_rgb_voronoi_gdf(
+    gdf: gpd.GeoDataFrame,
+    rgb_cols: tuple[str, str, str] | list[str],
+    *,
+    target_crs: int = 28992,
+    extent_m: tuple[float, float, float, float] | None = None,
+    pixel_m: float = 250.0,
+    max_dist_m: float = 300.0,
+) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+    """GDF overload of :func:`rasterize_rgb_voronoi`.
+
+    Args:
+        gdf: SRAI-indexed GeoDataFrame.
+        rgb_cols: Three column names holding R, G, B in [0, 1].
+        Other args: See :func:`rasterize_rgb_voronoi`.
+    """
+    if len(rgb_cols) != 3:
+        raise ValueError(
+            f"rgb_cols must be 3 column names; got {len(rgb_cols)}"
+        )
+    cx_m, cy_m, ext = _gdf_to_metric_centroids(gdf, target_crs=target_crs)
+    extent_m = extent_m or ext
+    rgb_array = gdf[list(rgb_cols)].to_numpy().astype(np.float32)
+    return rasterize_rgb_voronoi(
+        cx_m, cy_m, rgb_array, extent_m,
+        pixel_m=pixel_m, max_dist_m=max_dist_m,
+    )
