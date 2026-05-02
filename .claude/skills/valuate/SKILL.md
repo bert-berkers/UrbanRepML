@@ -286,6 +286,50 @@ If the file already exists (another terminal valuated today), **append** your en
 
 Keep entries compact. The reader only needs: what is this terminal doing, and what should I avoid stepping on?
 
+### Step 5.6: Write Plan Kapstok
+
+After the valuate scratchpad is written, scaffold a plan kapstok for the next `/niche` invocation. A kapstok (Dutch: coatrack) is a structural framework with hooks to hang work on — it crystallizes today's characteristic state into a markdown plan that `/niche` reads as Wave-0 input. See `specs/valuate_plan_kapstok.md` for the full spec.
+
+**Skip if any of:**
+- Intent is empty or null (no strategic mission to scaffold)
+- The user passed `no-kapstok`, `skip-plan`, or `no-plan` shorthand in this `/valuate` invocation (silent opt-out, applies only to this call)
+
+**Otherwise call the helper:**
+
+```python
+import sys
+from pathlib import Path
+from datetime import date as _date
+
+sys.path.insert(0, str(Path(".claude/skills/valuate").resolve()))
+from plan_kapstok import write_kapstok
+
+today = _date.today().isoformat()
+kapstok_path = write_kapstok(
+    supra_session_yaml=Path(f".claude/supra/sessions/{supra_session_id}.yaml"),
+    valuate_scratchpad=Path(f".claude/scratchpad/valuate/{today}.md"),
+    plans_dir=Path(".claude/plans"),
+    date=today,
+)
+
+if kapstok_path:
+    print(f"📐 Kapstok written to {kapstok_path}")
+    print(f"   /niche Wave-0 will read it as the primary blueprint.")
+```
+
+**Behavior:**
+- Returns the written `Path` on success → print the path so the user sees what was scaffolded.
+- Returns `None` if the kapstok was not written (intent empty, file already exists for today's intent-slug, or write error). Silent — do not print anything for the `None` case.
+- Fails open: if the helper raises unexpectedly, /valuate continues to Step 6 (the kapstok is bonus scaffolding, not load-bearing).
+
+**What the helper produces:**
+- Multi-thread kapstok (when `explore >= 4 AND mode in {creative, exploratory}`): 3–6 candidate threads with TODO-marked content, decision rule for `/niche` W0, full mandatory sections (status table, reference frame, anti-scope, peer pointer, gist).
+- Single-thread kapstok (otherwise): one wave structure with W0 audit + W1+ TODO + Final Wave skeleton.
+
+The helper does NOT generate thread *content* — that is coordinator-direct fill-in expected before W0 surfaces the menu to the user. The helper guarantees structural format-fidelity; thread substance is the human's contribution.
+
+**Important**: kapstok plans are *seeds*, not contracts. /niche may deviate per the existing Wave-deviation policy. Re-/valuate with the same intent skips (idempotent); re-/valuate with a different intent writes a new kapstok alongside the old one.
+
 ### Step 6: Print Summary
 
 Show a before/after comparison. Keep it compact:

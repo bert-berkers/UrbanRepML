@@ -80,6 +80,20 @@ Agents use structured tags in scratchpads. The SessionStart, SubagentStart, and 
 | `[done\|YYYY-MM-DD]` | Resolved. Date records when, not who. |
 | `[wontfix:reason]` | Explicit abandonment with rationale. Not silence. |
 
+### Frequency-escalation rule
+
+The day-age thresholds above (14d → `[stale]`, 21d → `[escalated]`) capture *elapsed time* but not *confirmation density*. An item that 5+ agents independently flag in a single session, or 3+ agents flag across 2+ sessions, warrants attention even at N=5d. Codified rule:
+
+| Confirmation pattern | Promotion |
+|---|---|
+| 3+ agents × 2+ sessions | `[open\|Nd]` → `[stale\|Nd]` regardless of N |
+| 5+ agents × 1 session | `[open\|Nd]` → `[stale\|Nd]` regardless of N |
+| 6+ agents × 3+ sessions | promote to `[escalated\|Nd]` regardless of N |
+
+**Mechanics:** the day-age N is preserved (don't reset); only the bucket changes. The promoting coordinator MUST cite the confirmation evidence in the scratchpad close-out (e.g. "frequency-escalated: 5 agents across qaqc-W1, devops-W1, stage3-W2a, stage3-W2b, ego-2026-04-19"). Coordinator judgment had been making this call correctly by hand (2026-04-24 hook-filename-drift case); this rule makes it enforceable across sessions.
+
+**Why this exists:** the strict day-age model implicitly assumes confirmation is uniform-in-time. In practice, multiple specialists touching the same area in the same week generate dense confirmation that should be acted on, not aged through. Without this rule, frequency-escalated items wait 9d for promotion past their natural attention threshold.
+
 ### Block reasons
 
 | Tag | Meaning |

@@ -285,6 +285,21 @@ As ego demonstrates reliable attention — catching issues, verifying signals, f
 1. **Wave 0 is non-negotiable** — every session starts by committing or stashing dirty state. No exceptions.
 2. **Final Wave is non-negotiable** — every session ends with coordinator scratchpad + `/librarian-update` + `/ego-check`. No exceptions.
 3. **Coordinator does NOT do specialist work** — if the task requires reading code, understanding architecture, or modifying logic, delegate it. The only acceptable direct edits are trivial cross-cutting infrastructure (typos, path fixes, config, agent definition updates). Ego flagged coordinator-as-implementer in 4/6 assessments.
+
+   **Coordinator-direct scope (enumerated; everything else MUST delegate):**
+   - `.gitignore`, `.gitattributes`, root config dotfiles
+   - `.claude/plans/*.md` — plan files as living documents during execution
+   - `.claude/rules/*.md` — process rules (this file's siblings)
+   - `.claude/agents/*.md` — agent definition updates (this file)
+   - `.claude/skills/**/*.md` and `.claude/skills/**/*.py` — skill content + helpers
+   - `.claude/hooks/*.py` only for ≤10-line edits; larger hook changes → `[→devops]`
+   - `.claude/scratchpad/coordinator/*.md` — coordinator's own scratchpad
+   - `.claude/coordinators/messages/{date}/*.yaml` — coordinator-to-coordinator messages
+   - `.claude/supra/sessions/*.yaml` — own supra session yaml only
+
+   **Out-of-scope (ALWAYS delegate):** anything in `stage*/`, `utils/`, `scripts/`, `tests/`, `specs/`, `reports/`, `data/`, or production code. Even small edits there must go through a specialist so the change is captured in their scratchpad.
+
+   This enumeration is the at-a-glance pre-edit gate. If the file you're about to edit isn't in the in-scope list, delegate.
 4. **Filesystem grep for audits** — use `rg` (ripgrep on filesystem), never `git grep`, when auditing must cover untracked files
 5. **Delegate dependency additions** — even "small" uv add/remove goes to devops to preserve package knowledge
 6. **__init__.py ownership** — in multi-file creation waves, assign ONE agent to handle all __init__.py wiring after all files exist

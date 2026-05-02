@@ -117,15 +117,22 @@ def main() -> None:
             return
 
         today = date.today().isoformat()
-        scratchpad_path = SCRATCHPAD_ROOT / agent_type / f"{today}.md"
+        sp_dir = SCRATCHPAD_ROOT / agent_type
+        date_only_path = sp_dir / f"{today}.md"
+        session_keyed_paths = sorted(sp_dir.glob(f"{today}-*.md")) if sp_dir.is_dir() else []
 
-        # Check existence
-        if not scratchpad_path.exists():
+        # Accept date-only OR session-keyed scratchpad (per multi-agent-protocol.md).
+        # Prefer session-keyed when available — that is the canonical form.
+        if session_keyed_paths:
+            scratchpad_path = session_keyed_paths[-1]
+        elif date_only_path.exists():
+            scratchpad_path = date_only_path
+        else:
             json.dump({
                 "decision": "block",
                 "reason": (
                     f"Subagent {agent_type} did not write scratchpad at "
-                    f".claude/scratchpad/{agent_type}/{today}.md"
+                    f".claude/scratchpad/{agent_type}/{today}.md or {today}-*.md"
                 ),
             }, sys.stdout)
             return
@@ -171,16 +178,10 @@ def main() -> None:
             print(f"SubagentStop: timer death failed: {exc}", file=sys.stderr)
 
         # Markov-completeness check (Contract 1, specialist tier, fail-OPEN)
-        # Resolve the actual scratchpad path: prefer session-keyed file if it exists.
-        actual_scratchpad = scratchpad_path
-        sp_dir = SCRATCHPAD_ROOT / agent_type
-        if sp_dir.is_dir():
-            session_keyed = sorted(sp_dir.glob(f"{today}-*.md"))
-            if session_keyed:
-                actual_scratchpad = session_keyed[-1]
+        # scratchpad_path is already session-keyed when available (resolved above).
         try:
             if _MARKOV_CHECK_AVAILABLE:
-                missing = _markov_check.check_completeness(actual_scratchpad, agent_type="specialist")
+                missing = _markov_check.check_completeness(scratchpad_path, agent_type="specialist")
                 if missing:
                     print(
                         f"[markov_check WARN] {agent_type} scratchpad missing: {', '.join(missing)}",

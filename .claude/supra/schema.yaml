@@ -194,3 +194,17 @@ compound_states:
       spatial_correctness: 2
     mode: focused
     tension_warning: null
+
+  harness-creative:
+    description: "Weekend-evening exploration of the .claude/ harness — skills, hooks, rules, supra system. High openness, low pressure. Self-referential improvements (skills that improve skills)."
+    dimensions:
+      exploration_vs_exploitation: 5
+      execution_speed: 3
+      code_quality: 3
+      test_coverage: 2
+      spatial_correctness: 2
+      model_architecture: 2
+      urgency: 3
+      data_engineering_diligence: 3
+    mode: creative
+    tension_warning: null
