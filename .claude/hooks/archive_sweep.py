@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Daily archive sweep: stale supra sessions and old message directories.
+"""Daily archive sweep: stale supra sessions, old message directories, drifted forward-looks.
 
 Gated by .claude/coordinators/.last_archive_sweep (plain ISO-8601 timestamp).
 If missing, treats as epoch zero (always runs). Rewrites the gate file after
@@ -11,6 +11,11 @@ Sweep rules (preserve-don't-delete per feedback_no_delete_data.md):
      - Skip if last_attuned missing or malformed (don't guess)
   2. Message dirs: coordinators/messages/YYYY-MM-DD/ older than 7 days
      → move to coordinators/messages/archive/YYYY-MM-DD/
+  3. Drifted forward-looks: scratchpad/coordinator/YYYY-MM-DD.md (no suffix) →
+     rename in place to YYYY-MM-DD-forward-look.md to match the documented
+     convention (`/valuate` Step 3.5 + `path_conventions.forward_look_path`).
+     If the suffixed target already exists, skip with a warning rather than
+     overwrite — manual reconciliation needed for that case.
 
 Fail mode: any per-item error → log to stderr, continue. Never raises from run_sweep().
 """
@@ -28,6 +33,7 @@ HOOKS_DIR = Path(__file__).resolve().parent
 CLAUDE_DIR = HOOKS_DIR.parent
 SUPRA_SESSIONS_DIR = CLAUDE_DIR / "supra" / "sessions"
 COORDINATORS_DIR = CLAUDE_DIR / "coordinators"
+SCRATCHPAD_DIR = CLAUDE_DIR / "scratchpad"
 GATE_FILE = COORDINATORS_DIR / ".last_archive_sweep"
 
 
@@ -195,6 +201,75 @@ def _sweep_message_dirs() -> tuple[int, int]:
     return moved, skipped
 
 
+def _sweep_forward_look_drift() -> tuple[int, int, int]:
+    """Heal coordinator/YYYY-MM-DD.md (no suffix) → YYYY-MM-DD-forward-look.md.
+
+    The forward-look convention is `YYYY-MM-DD-forward-look.md` per
+    `path_conventions.forward_look_path()` and `/valuate` Step 3.5 morning
+    inread. Bare-date filenames in `scratchpad/coordinator/` have no other
+    legitimate meaning (session-keyed entries always carry a session-id
+    suffix), so any match is drift produced by an agent that read the stale
+    `.claude/agents/ego.md` Path field or hand-constructed the wrong filename.
+
+    Returns (renamed_count, collision_skipped_count, error_skipped_count).
+
+    Behavior:
+    - Detects via `path_conventions.is_drifted_forward_look()`.
+    - Renames in place (preserve content; rename is reversible by inspection).
+    - If the suffixed target already exists, skips and logs a warning. Manual
+      reconciliation needed because we can't safely auto-merge two distinct
+      forward-looks for the same date.
+    """
+    coord_scratchpad = SCRATCHPAD_DIR / "coordinator"
+    if not coord_scratchpad.is_dir():
+        return 0, 0, 0
+
+    try:
+        # Lazy import so the sweep doesn't hard-depend on path_conventions at
+        # module import time (helps if path_conventions is missing/broken).
+        from path_conventions import is_drifted_forward_look, FORWARD_LOOK_SUFFIX
+    except ImportError as exc:
+        print(
+            f"[archive-sweep] WARN: path_conventions unavailable, skipping forward-look sweep: {exc}",
+            file=sys.stderr,
+        )
+        return 0, 0, 0
+
+    renamed = 0
+    collisions = 0
+    errors = 0
+
+    for path in coord_scratchpad.glob("*.md"):
+        if not is_drifted_forward_look(path):
+            continue
+
+        target = path.with_name(f"{path.stem}{FORWARD_LOOK_SUFFIX}.md")
+        if target.exists():
+            print(
+                f"[archive-sweep] WARN: drifted forward-look {path.name} cannot be renamed -- "
+                f"target {target.name} already exists. Manual reconciliation needed.",
+                file=sys.stderr,
+            )
+            collisions += 1
+            continue
+
+        try:
+            path.rename(target)
+            renamed += 1
+            print(
+                f"[archive-sweep] healed forward-look drift: {path.name} -> {target.name}",
+                file=sys.stderr,
+            )
+        except OSError as exc:
+            print(
+                f"[archive-sweep] WARN: could not rename {path.name}: {exc}",
+                file=sys.stderr,
+            )
+            errors += 1
+
+    return renamed, collisions, errors
+
+
 def maybe_run_sweep() -> None:
     """Run archive sweep if 24+ hours have passed since last sweep.
 
@@ -209,11 +284,13 @@ def maybe_run_sweep() -> None:
 
         supra_moved, supra_skipped = _sweep_supra_sessions()
         msg_moved, msg_skipped = _sweep_message_dirs()
+        fl_renamed, fl_collisions, fl_errors = _sweep_forward_look_drift()
 
         print(
             f"[archive-sweep] sweep complete: "
             f"supra sessions moved={supra_moved} skipped={supra_skipped}, "
-            f"message dirs moved={msg_moved} skipped={msg_skipped}",
+            f"message dirs moved={msg_moved} skipped={msg_skipped}, "
+            f"forward-looks renamed={fl_renamed} collisions={fl_collisions} errors={fl_errors}",
             file=sys.stderr,
         )
 

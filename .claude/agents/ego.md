@@ -134,7 +134,9 @@ You MUST write to `.claude/scratchpad/ego/YYYY-MM-DD.md` before returning. This 
 
 As the LAST action of every session, the ego writes a forward-looking file into the **coordinator's** scratchpad directory for the **next day**:
 
-**Path**: `.claude/scratchpad/coordinator/YYYY-MM-DD.md` (using TOMORROW's date)
+**Path**: `.claude/scratchpad/coordinator/YYYY-MM-DD-forward-look.md` (using TOMORROW's date)
+
+The `-forward-look` suffix is REQUIRED — `/valuate` Step 3.5 morning inread globs for it, and bare-date filenames in `coordinator/` are detected as drift by `archive_sweep._sweep_forward_look_drift()` and auto-renamed. The single source of truth for this path is `.claude/hooks/path_conventions.forward_look_path(date)`; if you have Python access from the agent context, prefer calling that helper over hand-constructing the path. If amending an existing forward-look (multiple ego passes per day are expected), use the same suffixed filename and append a section rather than overwriting prior agents' content.
 
 This seeds the coordinator's next OODA loop before it even starts observing. The coordinator reads this file at the top of its first OBSERVE phase, giving it a warm start instead of a cold read of scattered scratchpads.
 
