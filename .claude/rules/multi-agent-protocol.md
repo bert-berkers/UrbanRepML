@@ -19,12 +19,12 @@ Every agent that does work MUST write a dated entry to `.claude/scratchpad/{agen
 - **Session-keyed files**: Scratchpads are `{agent_type}/{date}-{session_id}.md`. Each terminal writes its own file — no cross-terminal clobbering.
 - **Append, don't overwrite**: Each agent invocation APPENDS a new timestamped section (`## HH:MM — summary`). Never rewrite earlier entries — they belong to earlier agent invocations.
 - **Prior entries index**: Start each new entry with `**Prior entries**: 10:15 — built X | 10:45 — added Y`. This makes every entry a self-contained context packet — the hook injects the tail, so your entry must carry forward the gist of earlier work.
-- Each entry should be self-contained and under 30 lines. Multiple short entries > one bloated rewrite.
-- **`<!-- OVERRIDE: {rationale} -->` escape** (formal): the ≤30-line guideline is soft. Starting an entry with `<!-- OVERRIDE: {rationale} -->` on line 1 is a recognized escape from the line limit. The override is triggered when:
+- Each entry should carry the **salience density** a cold-start reader needs to act — typically 10–25 lines, override permitted with rationale. Length is not the cost; loss-of-state is. A short entry that prompts well beats a long entry that buries the signal, AND a long entry that preserves handoff state beats a short entry that leaks it forward. Salience density — what a future interpretive competency needs to act — is the operative concept, not word count. Multiple short prompt-quality entries are still better than one bloated rewrite, but only because each carries its own salience; not because shorter is virtuous on its own.
+- **`<!-- OVERRIDE: {rationale} -->` escape** (formal): the typical-range guideline is soft. Starting an entry with `<!-- OVERRIDE: {rationale} -->` on line 1 is a recognized acknowledgment that the entry's salience density required more lines than the typical range. The override is triggered when:
   - The entry must satisfy **Contract 1** (coordinator close-out with all 7 items — see Markov-Completeness Contract section below), OR
-  - Preserving handoff completeness for the next context window requires more than 30 lines (e.g. a Wave-final audit synthesis with aged `[open|Nd]` items, peer-terminal pointers, and a full reference frame block).
+  - Preserving handoff completeness for the next context window requires more lines than the typical range (e.g. a Wave-final audit synthesis with aged `[open|Nd]` items, peer-terminal pointers, and a full reference frame block).
 
-  **Length is not the cost; loss-of-state is.** A 60-line entry that a cold-start session can resume from is strictly better than a 25-line entry that leaks state forward. The override makes the cost explicit so reviewers can see "yes, this entry needed that length" rather than treating every long entry as discipline rot.
+  **Length is not the cost; loss-of-state is.** A 60-line entry that a cold-start session can resume from is strictly better than a 25-line entry that leaks state forward. The override makes the salience-density choice explicit so reviewers can see "yes, this entry needed that length to carry its prompt" rather than treating every long entry as discipline rot.
 - **Reconciliation-first**: Before writing new Unresolved items, check if earlier entries in the same file already flagged them. Don't duplicate — reference by time.
 - Items tagged `[stale]` for 2+ sessions should be removed or escalated to the coordinator.
 - **Output references**: Reference large outputs by path, don't paste inline. Scratchpads are index + reasoning, not data.
@@ -142,7 +142,9 @@ The final entry of each agent-type's session-keyed scratchpad must be a self-con
 
 ### The seven items (coordinator close-out)
 
-The final coordinator scratchpad entry of every session MUST contain all seven:
+The contract's load-bearing deliverable is **item 7** — the gist paragraph that a cold-start session reads to orient. Items 1–6 are scaffolding: they exist to ensure item 7 has the materials (state, decisions, peers, plan, aged tensions) it leans on, so that when a future agent reads it the references resolve into something actionable rather than gesturing at vapor. A regex-passing close-out with a weak item 7 is the failure mode this contract is designed to prevent — not an absent regex match. Future coordinators should write item 7 *first* with full attention, then verify items 1–6 carry the references item 7 leans on. The hook checks the scaffolding; the agent owns the prompt.
+
+The seven items required to make item 7 prompt-quality:
 
 1. **`SUMMARY` comment** — `<!-- SUMMARY: one-line ... -->` on the first line (machine-extractable).
 2. **Prior-entries index** — cumulative for the day across session files. One line per prior entry: `HH:MM — one-line summary`. Carries forward even across session-keyed file boundaries within the same calendar day.
@@ -150,7 +152,7 @@ The final coordinator scratchpad entry of every session MUST contain all seven:
 4. **Aged `[open|Nd]` / `[stale|Nd]` / `[escalated|Nd]` items** — every carried unresolved item, tagged with age in days. Do NOT re-open already-carried items; increment N across sessions. Escalate to `[stale|Nd]` at N ≥ 14 and `[escalated|Nd]` at N ≥ 21. The hook-enforceable marker is `\[(open|stale|escalated)\|\d+d\]` — any of the three forms satisfies the contract (see Signal Vocabulary section for rationale).
 5. **Active plan pointer** — `Plan: .claude/plans/{file}.md` if any. Plans function as frozen intent; their presence is load-bearing. If no plan, write `Plan: none (ad-hoc session)`.
 6. **Peer-terminal pointer** — read from `.claude/coordinators/terminals/*.yaml`: list other active or recently-ended terminals with their `supra_session_id`. `Peers: none` is an acceptable value but must be stated.
-7. **"If you only read this entry, here's the gist" paragraph** — single paragraph at the bottom, preceded by a heading matching `^## If you only read`. Must subsume items 1–6 in prose; must be sufficient to orient a cold-start session without reading anything else. **This paragraph is the Markov-complete summary.**
+7. **"If you only read this entry, here's the gist" paragraph** — single paragraph at the bottom, preceded by a heading matching `^## If you only read`. Must subsume items 1–6 in prose; must be sufficient to orient a cold-start session without reading anything else. **This paragraph is the Markov-complete summary — the prompt for whoever shows up next.** Items 1–6 are records the future agent can sample if it needs detail; item 7 is the message that tells it what to sample for. Write it as if to a stranger with your competencies but none of your context — because that is exactly what the next session is.
 
 ### Two enforcement tiers
 

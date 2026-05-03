@@ -483,16 +483,36 @@ def update_heartbeat(coordinators_dir: Path, session_id: str) -> None:
 TERMINALS_SUBDIR = "terminals"  # coordinators/terminals/
 
 
+# Claude Code marker process names. The walk stops at the first match and
+# returns the marker's parent PID (the terminal shell). Both names are needed:
+# `node`/`node.exe` is the bundled-runtime form; `claude`/`claude.exe` is the
+# packaged-binary form (current PyCharm + Windows install path:
+# `AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe`).
+# Add new names here when Claude Code's process name changes upstream.
+_CLAUDE_PROCESS_NAMES = ("node", "node.exe", "claude", "claude.exe")
+
+
 def get_terminal_pid() -> int:
     """Get the terminal shell PID — stable across /clear, unique per terminal tab.
 
-    Walks up the process tree via psutil to find node.exe (Claude Code),
-    then returns its parent's PID (the terminal shell, e.g. powershell.exe).
+    Walks up the process tree via psutil to find the Claude Code marker process
+    (`node.exe` or `claude.exe`), then returns its parent's PID — the terminal
+    shell, which is stable for the lifetime of the terminal tab.
 
-    Process tree on this machine:
-        pycharm64.exe -> powershell.exe (STABLE) -> node.exe (CHANGES) -> bash.exe -> python.exe (hook)
+    Process tree on Windows + PyCharm:
+        pycharm64.exe -> powershell.exe (STABLE) -> claude.exe (STABLE) -> bash.exe (CHANGES per Bash tool call) -> python.exe (hook)
 
-    Falls back to os.getppid() if psutil is unavailable or the tree walk fails.
+    Earlier docstring claimed `node.exe (CHANGES)` — that was wrong; the bundled
+    Claude binary, whatever its name, is stable for the lifetime of the Claude
+    Code session. The thing that changes is the per-tool-call bash subprocess.
+    The marker walk anchors on the stable Claude process and returns its parent.
+
+    Falls back to os.getppid() if psutil is unavailable or the tree walk fails —
+    note that this fallback path is unreliable when called from a tool-spawned
+    subprocess (it returns the ephemeral bash PID, not the terminal). Hooks that
+    call this directly are fine because they run in the Claude process; ad-hoc
+    `python -c "..."` invocations from Bash tool calls need the marker walk to
+    succeed to get a stable PID.
     """
     try:
         import psutil
@@ -505,7 +525,7 @@ def get_terminal_pid() -> int:
                 name = p.name().lower()
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 break
-            if name in ("node", "node.exe"):
+            if name in _CLAUDE_PROCESS_NAMES:
                 terminal = p.parent()
                 if terminal is not None:
                     try:
