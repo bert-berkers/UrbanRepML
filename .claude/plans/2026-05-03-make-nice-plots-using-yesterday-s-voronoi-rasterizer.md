@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | IN PROGRESS — pivoted to "The Book of Netherlands" coffee-table report |
+| **Status** | SHIPPED 2026-05-03 — single commit `2de38b6`, 41 PNGs, 2232-word THE_BOOK.md |
 | **Shard** | `russet-rolling-brook` |
 | **Mode** | book-builder: parallel chapter-makers → collator → review |
 | **Intent** | Make a fuckton of plots using yesterday's Voronoi rasterizer; collate into a cool book you can read on the sofa. So beautiful. |
