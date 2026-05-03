@@ -15,6 +15,7 @@ exhausting retries — per spec §Fail-mode 2, ledger integrity beats run
 completion.
 """
 
+import contextvars
 import hashlib
 import json
 import os
@@ -29,6 +30,35 @@ from typing import Optional, Union
 import pandas as pd
 import yaml
 from filelock import FileLock, Timeout
+
+# ---------------------------------------------------------------------------
+# Active SidecarWriter registry (read by save_voronoi_figure for parent_run_id)
+# ---------------------------------------------------------------------------
+#
+# When a ``SidecarWriter`` is active (``__enter__`` has fired but ``__exit__``
+# has not), figure-write helpers can read this contextvar to auto-populate
+# ``parent_run_id`` on emitted ``*.provenance.yaml`` siblings.  This makes the
+# parent->figure edge in ``data/ledger/runs.jsonl`` walkable without manually
+# threading ``run_id`` through every plot call.
+#
+# ContextVar (not threading.local) so async/await contexts behave correctly;
+# nested ``SidecarWriter`` blocks restore the outer writer on inner exit via
+# ``ContextVar.reset(token)``.
+_ACTIVE_SIDECAR: "contextvars.ContextVar[Optional['SidecarWriter']]" = (
+    contextvars.ContextVar("_ACTIVE_SIDECAR", default=None)
+)
+
+
+def get_active_sidecar() -> "Optional[SidecarWriter]":
+    """Return the innermost currently-active :class:`SidecarWriter`, or None.
+
+    Read by :func:`utils.visualization.save_voronoi_figure` to auto-populate
+    ``parent_run_id`` on figure-provenance yaml siblings.  Callers outside the
+    figure-provenance helper SHOULD NOT rely on this — pass ``run_id`` through
+    explicit kwargs instead.  This is a leak-prevention fence: the contextvar
+    is ``None`` whenever no writer is active.
+    """
+    return _ACTIVE_SIDECAR.get()
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -200,6 +230,8 @@ class SidecarWriter:
 
         self._state: Optional[dict] = None
         self._started_at: Optional[datetime] = None
+        # Token returned by ContextVar.set(); used to restore prior value on exit.
+        self._active_token: Optional[contextvars.Token] = None
 
     # read-only so callers can pass sw.run_id to figure provenance
     @property
@@ -241,6 +273,10 @@ class SidecarWriter:
             "study_area": self._study_area,
             "stage": self._stage,
         }
+        # Register self as active writer; nested writers stack via ContextVar
+        # tokens (inner exit restores the outer).  Read by helpers like
+        # :func:`utils.visualization.save_voronoi_figure`.
+        self._active_token = _ACTIVE_SIDECAR.set(self)
         return self
 
     def __exit__(
@@ -249,6 +285,18 @@ class SidecarWriter:
         exc_val: Optional[BaseException],
         tb: object,
     ) -> bool:
+        # Always restore the active-writer contextvar — even on failure.  Nested
+        # writers stack: this reset() pops *self* and exposes whatever writer
+        # (if any) was active when *self* entered.  Guard against double-exit
+        # or pre-enter exit (token is None).
+        if self._active_token is not None:
+            try:
+                _ACTIVE_SIDECAR.reset(self._active_token)
+            except (ValueError, LookupError):
+                # Token from a different context; fall back to clearing.
+                _ACTIVE_SIDECAR.set(None)
+            self._active_token = None
+
         ended_at = _now_utc()
         wall_time = (ended_at - self._started_at).total_seconds()
 

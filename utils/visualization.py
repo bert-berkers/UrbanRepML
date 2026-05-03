@@ -28,6 +28,7 @@ Typical usage::
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import geopandas as gpd
@@ -1328,3 +1329,213 @@ def rasterize_rgb_voronoi_gdf(
         cx_m, cy_m, rgb_array, extent_m,
         pixel_m=pixel_m, max_dist_m=max_dist_m,
     )
+
+
+# ---------------------------------------------------------------------------
+# Figure-provenance wrapper (W4 of rasterize-voronoi-toolkit plan)
+# ---------------------------------------------------------------------------
+#
+# ``save_voronoi_figure`` writes ``fig.savefig(path)`` and a sibling
+# ``{path}.provenance.yaml`` audit-trail file matching the schema in
+# ``specs/artifact_provenance.md`` §"Figure-provenance specialisation".
+#
+# Differs from the existing ``stage3_analysis/save_figure.py`` in three ways:
+#   1. Lives in ``utils/`` (broader scope — any caller, not just stage3 viz).
+#   2. Records ``plot_config_hash`` (SHA-256-truncated, via
+#      ``utils.provenance.compute_config_hash``) so two figures with identical
+#      config can be detected without a deep-equality walk.
+#   3. Auto-populates ``parent_run_id`` from the active ``SidecarWriter`` via
+#      ``utils.provenance.get_active_sidecar()`` — no manual threading.
+#
+# Failure semantics: if the provenance yaml emission fails (disk error, yaml
+# error, anything), the figure save still succeeds.  Provenance is best-effort,
+# not a blocker.  Matches the cluster-2 ``save_figure`` pattern.
+
+def save_voronoi_figure(
+    fig: "plt.Figure",
+    path: "Path | str",
+    *,
+    source_runs: list[str] | None = None,
+    source_artifacts: list[str] | list["Path"] | None = None,
+    plot_config: dict | None = None,
+    provenance: bool = True,
+    dpi: int = 300,
+    bbox_inches: str = "tight",
+    facecolor: str | None = None,
+    producer_script: str | None = None,
+):
+    """Save *fig* and (by default) emit a sibling ``*.provenance.yaml``.
+
+    Per the W4 contract in ``.claude/plans/2026-05-02-rasterize-voronoi-toolkit.md``
+    and ``specs/rasterize_voronoi.md`` §"Provenance integration hook".
+
+    Args:
+        fig: matplotlib Figure.
+        path: target file path (PNG/SVG/PDF).
+        source_runs: list of upstream ``run_id`` strings whose data backs this
+            figure.  Empty list is valid (logged but does not raise).
+        source_artifacts: list of input file paths that contributed to the
+            figure (parquet, csv, etc.).  Recorded relative to project root
+            in the provenance yaml.
+        plot_config: free-form dict of plot settings (pixel_m, max_dist_m,
+            cmap, dpi, ...).  Hashed via ``compute_config_hash`` so the
+            figure's plot-config can be deduped without a deep-equality walk.
+        provenance: if False, skip the provenance yaml entirely (escape hatch
+            for ad-hoc exploratory plotting).  Default True.
+        dpi/bbox_inches/facecolor: passed to ``fig.savefig``.
+        producer_script: override for the script path (default: caller's
+            ``sys.argv[0]`` relativized to project root).
+
+    Returns:
+        The resolved figure path (``Path`` instance).
+
+    Notes:
+        ``parent_run_id`` is auto-populated when ``save_voronoi_figure`` runs
+        inside an active :class:`utils.provenance.SidecarWriter` block.  This
+        is read via :func:`utils.provenance.get_active_sidecar` — a contextvar
+        registry that the writer manages on enter/exit.
+
+        Provenance emission failures are caught and logged to stderr; the
+        figure save itself is the load-bearing operation and never blocked
+        by audit-trail issues.
+    """
+    # Resolve and ensure parent dir.  This must succeed for the figure to save.
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Always-load-bearing: write the figure first.
+    savefig_kwargs = {"dpi": dpi, "bbox_inches": bbox_inches}
+    if facecolor is not None:
+        savefig_kwargs["facecolor"] = facecolor
+    fig.savefig(path, **savefig_kwargs)
+
+    if not provenance:
+        return path
+
+    # Provenance emission is best-effort.  Any failure here logs and returns
+    # the figure path unchanged — the figure save is the contract; the audit
+    # trail is a courtesy.
+    try:
+        _emit_voronoi_figure_provenance(
+            path=path,
+            source_runs=source_runs,
+            source_artifacts=source_artifacts,
+            plot_config=plot_config,
+            producer_script=producer_script,
+        )
+    except Exception as err:  # noqa: BLE001 — best-effort by design
+        import sys
+        print(
+            f"[save_voronoi_figure WARN] provenance yaml write failed for "
+            f"{path.name!r}: {type(err).__name__}: {err}",
+            file=sys.stderr,
+        )
+
+    return path
+
+
+def _emit_voronoi_figure_provenance(
+    *,
+    path: Path,
+    source_runs: list[str] | None,
+    source_artifacts: list[str] | list[Path] | None,
+    plot_config: dict | None,
+    producer_script: str | None,
+) -> Path:
+    """Write the ``{path}.provenance.yaml`` sibling.  Internal helper.
+
+    Schema matches ``specs/artifact_provenance.md`` §"Figure-provenance
+    specialisation" plus two extensions specified in W4 of the rasterize-
+    voronoi-toolkit plan: ``plot_config_hash`` and ``parent_run_id``.
+    """
+    import sys
+    from datetime import datetime, timezone
+
+    import yaml
+
+    from utils.provenance import (
+        _git_info,
+        _project_root,
+        _relativise,
+        compute_config_hash,
+        get_active_sidecar,
+    )
+
+    # --- normalize inputs --------------------------------------------------
+    source_runs = list(source_runs) if source_runs else []
+    source_artifacts_rel: list[str] = []
+    if source_artifacts:
+        source_artifacts_rel = [_relativise(p) for p in source_artifacts]
+
+    plot_config = dict(plot_config) if plot_config else {}
+    # Coerce non-JSON-serialisable plot_config values to repr() with a
+    # warning, matching ``compute_config_hash``'s behaviour for non-leaf types.
+    plot_config_safe: dict = {}
+    import json
+    for k, v in plot_config.items():
+        try:
+            json.dumps(v)
+            plot_config_safe[k] = v
+        except TypeError:
+            import warnings
+            warnings.warn(
+                f"save_voronoi_figure: plot_config[{k!r}] of type "
+                f"{type(v).__name__!r} is not JSON-serialisable; coercing "
+                f"via repr().",
+                UserWarning,
+                stacklevel=4,
+            )
+            plot_config_safe[k] = repr(v)
+
+    # Stable hash regardless of insertion order (compute_config_hash
+    # canonicalises with sort_keys=True).
+    plot_config_hash = compute_config_hash(plot_config_safe)
+
+    # --- producer_script -----------------------------------------------------
+    if producer_script is None:
+        try:
+            producer_script_rel = _relativise(sys.argv[0]) if sys.argv else None
+        except Exception:
+            producer_script_rel = sys.argv[0] if sys.argv else None
+    else:
+        producer_script_rel = producer_script
+
+    # --- parent_run_id (auto-populate from active SidecarWriter) -----------
+    active = get_active_sidecar()
+    parent_run_id: str | None = None
+    if active is not None:
+        try:
+            parent_run_id = active.run_id  # property; raises if pre-enter
+        except RuntimeError:
+            parent_run_id = None  # writer constructed but not entered
+
+    git_commit, git_dirty = _git_info()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    provenance_doc = {
+        "figure_path": path.name,
+        "created_at": now,
+        "source_runs": source_runs,
+        "source_artifacts": source_artifacts_rel,
+        "plot_config": plot_config_safe,
+        "plot_config_hash": plot_config_hash,
+        "parent_run_id": parent_run_id,
+        # 5 base figure-provenance fields from specs/artifact_provenance.md
+        "git_commit": git_commit,
+        "git_dirty": git_dirty,
+        "started_at": now,
+        "ended_at": now,
+        "producer_script": producer_script_rel,
+        "schema_version": "1.0",
+    }
+
+    sidecar_path = path.with_suffix(path.suffix + ".provenance.yaml")
+    with sidecar_path.open("w", encoding="utf-8") as fh:
+        yaml.safe_dump(
+            provenance_doc,
+            fh,
+            sort_keys=False,
+            default_flow_style=False,
+            allow_unicode=True,
+        )
+    return sidecar_path
