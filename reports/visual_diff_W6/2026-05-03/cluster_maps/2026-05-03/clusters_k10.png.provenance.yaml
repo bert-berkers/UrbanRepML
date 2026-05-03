@@ -1,0 +1,22 @@
+source_runs: []
+source_artifacts:
+- data/study_areas/netherlands/stage2_multimodal/concat/embeddings/netherlands_res9_20mix.parquet
+plot_config:
+  plot: cluster_map
+  k: 10
+  cmap: tab20
+  pixel_m: 250.0
+  max_dist_m: 300.0
+  resolution: 9
+  n_hexagons: 397757
+  pca_components: 16
+  sort_by_lbm: false
+  label: Concat 208D (W6 regen)
+  dpi: 300
+  crs: EPSG:28992
+git_commit: a45aa4a9b5761a97d1a18d884af4eb11fb4b62d4
+git_dirty: true
+started_at: '2026-05-03T07:42:46+00:00'
+ended_at: '2026-05-03T07:42:46+00:00'
+producer_script: scripts/stage3/plot_cluster_maps.py
+schema_version: '1.0'

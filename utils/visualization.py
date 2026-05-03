@@ -1,6 +1,6 @@
 """Shared rasterization and spatial visualization helpers.
 
-Provides centroid-based rasterization of H3-indexed data onto matplotlib
+Provides KDTree-Voronoi rasterization of H3-indexed data onto matplotlib
 axes. Originally developed in ``scripts/plot_embeddings.py``; extracted
 here so every stage-3 visualization script can import a single canonical
 copy instead of copy-pasting.
@@ -13,16 +13,16 @@ Typical usage::
     from utils.visualization import (
         filter_empty_hexagons,
         load_boundary,
-        rasterize_continuous,
-        rasterize_categorical,
+        rasterize_continuous_voronoi,
+        rasterize_categorical_voronoi,
         plot_spatial_map,
     )
 
     boundary = load_boundary(paths)
     emb_df = filter_empty_hexagons(emb_df, display_name="AlphaEarth")
-    img = rasterize_continuous(cx, cy, values, extent)
+    img, extent_xy = rasterize_continuous_voronoi(cx, cy, values, extent)
     fig, ax = plt.subplots()
-    plot_spatial_map(ax, img, extent, boundary, title="My Map")
+    plot_spatial_map(ax, img, extent_xy, boundary, title="My Map")
 """
 
 from __future__ import annotations
@@ -95,233 +95,6 @@ def load_boundary(
         )
 
     return boundary_gdf
-
-
-# ---------------------------------------------------------------------------
-# Rasterization helpers
-# ---------------------------------------------------------------------------
-
-
-def _stamp_pixels(
-    image: np.ndarray,
-    py: np.ndarray,
-    px: np.ndarray,
-    rgb: np.ndarray,
-    stamp: int,
-    height: int,
-    width: int,
-) -> None:
-    """Write RGB values to *image* with a square stamp of given radius.
-
-    When *stamp* is 1, each point is a single pixel.  Larger values fill a
-    square of side ``2*stamp - 1`` centred on each point.
-    """
-    if stamp <= 1:
-        image[py, px, :3] = rgb
-        image[py, px, 3] = 1.0
-    else:
-        for dy in range(-stamp + 1, stamp):
-            for dx in range(-stamp + 1, stamp):
-                sy = np.clip(py + dy, 0, height - 1)
-                sx = np.clip(px + dx, 0, width - 1)
-                image[sy, sx, :3] = rgb
-                image[sy, sx, 3] = 1.0
-
-
-def rasterize_continuous(
-    cx: np.ndarray,
-    cy: np.ndarray,
-    values: np.ndarray,
-    extent: tuple,
-    width: int = RASTER_W,
-    height: int = RASTER_H,
-    cmap: str = "viridis",
-    vmin: float | None = None,
-    vmax: float | None = None,
-    stamp: int = 1,
-) -> np.ndarray:
-    """Rasterize continuous values to an RGBA image.
-
-    .. deprecated:: 2026-05-02
-       Centroid-splat with degree-units ``stamp`` carries directional bleed,
-       speckle holes, and lat-lon aspect distortion. Migrate to
-       :func:`rasterize_continuous_voronoi` (KDTree-Voronoi in metric CRS,
-       ``max_dist_m`` in metres). See ``specs/rasterize_voronoi.md`` and
-       ``.claude/plans/2026-05-02-rasterize-voronoi-toolkit.md`` (W3).
-       Removed in W6 of the toolkit migration.
-
-    Args:
-        cx, cy: Centroid coordinates in EPSG:28992.
-        values: Float array of same length as *cx*/*cy*.
-        extent: ``(minx, miny, maxx, maxy)`` in EPSG:28992.
-        width, height: Output image dimensions in pixels.
-        cmap: Matplotlib colormap name.
-        vmin, vmax: Value range for colormap normalization.  When ``None``,
-            the 2nd/98th percentiles of the data are used.
-        stamp: Pixel radius per point (1 = single pixel, 2+ fills gaps at
-            coarser resolutions).
-
-    Returns:
-        ``(height, width, 4)`` RGBA float32 array with transparent background.
-    """
-    minx, miny, maxx, maxy = extent
-    mask = (
-        (cx >= minx) & (cx <= maxx) & (cy >= miny) & (cy <= maxy)
-        & np.isfinite(values)
-    )
-    cx_m, cy_m, val_m = cx[mask], cy[mask], values[mask]
-
-    px = ((cx_m - minx) / (maxx - minx) * (width - 1)).astype(int)
-    py = ((cy_m - miny) / (maxy - miny) * (height - 1)).astype(int)
-    np.clip(px, 0, width - 1, out=px)
-    np.clip(py, 0, height - 1, out=py)
-
-    if vmin is None:
-        vmin = float(np.nanpercentile(val_m, 2))
-    if vmax is None:
-        vmax = float(np.nanpercentile(val_m, 98))
-
-    norm = plt.Normalize(vmin=vmin, vmax=vmax)
-    colormap_obj = plt.get_cmap(cmap)
-    rgb = colormap_obj(norm(val_m))[:, :3].astype(np.float32)
-
-    image = np.zeros((height, width, 4), dtype=np.float32)
-    _stamp_pixels(image, py, px, rgb, stamp, height, width)
-    return image
-
-
-def rasterize_rgb(
-    cx: np.ndarray,
-    cy: np.ndarray,
-    rgb_array: np.ndarray,
-    extent: tuple,
-    width: int = RASTER_W,
-    height: int = RASTER_H,
-    stamp: int = 1,
-) -> np.ndarray:
-    """Rasterize pre-computed RGB values to an RGBA image.
-
-    .. deprecated:: 2026-05-02
-       Migrate to :func:`rasterize_rgb_voronoi` (KDTree-Voronoi, metric CRS,
-       ``max_dist_m`` cutoff). Removed in W6 of the toolkit migration.
-
-    Args:
-        cx, cy: Centroid coordinates in EPSG:28992.
-        rgb_array: ``(N, 3)`` float array with R, G, B in ``[0, 1]``.
-        extent: ``(minx, miny, maxx, maxy)`` in EPSG:28992.
-        width, height: Output image dimensions in pixels.
-        stamp: Pixel radius per point.
-
-    Returns:
-        ``(height, width, 4)`` RGBA float32 array with transparent background.
-    """
-    minx, miny, maxx, maxy = extent
-    mask = (
-        (cx >= minx) & (cx <= maxx) & (cy >= miny) & (cy <= maxy)
-    )
-
-    cx_m = cx[mask]
-    cy_m = cy[mask]
-    rgb_masked = rgb_array[mask]
-
-    px = ((cx_m - minx) / (maxx - minx) * (width - 1)).astype(int)
-    py = ((cy_m - miny) / (maxy - miny) * (height - 1)).astype(int)
-    np.clip(px, 0, width - 1, out=px)
-    np.clip(py, 0, height - 1, out=py)
-
-    image = np.zeros((height, width, 4), dtype=np.float32)
-    _stamp_pixels(image, py, px, rgb_masked, stamp, height, width)
-    return image
-
-
-def rasterize_binary(
-    cx: np.ndarray,
-    cy: np.ndarray,
-    extent: tuple,
-    width: int = RASTER_W,
-    height: int = RASTER_H,
-    color: tuple = (0.2, 0.5, 0.8),
-    stamp: int = 1,
-) -> np.ndarray:
-    """Rasterize binary presence to an RGBA image.
-
-    .. deprecated:: 2026-05-02
-       Migrate to :func:`rasterize_binary_voronoi` (KDTree-Voronoi, metric
-       CRS, ``max_dist_m`` cutoff). Removed in W6.
-
-    Args:
-        cx, cy: Centroid coordinates in EPSG:28992.
-        extent: ``(minx, miny, maxx, maxy)`` in EPSG:28992.
-        width, height: Output image dimensions in pixels.
-        color: RGB tuple for presence pixels.
-        stamp: Pixel radius per point.
-
-    Returns:
-        ``(height, width, 4)`` RGBA float32 array with transparent background.
-    """
-    minx, miny, maxx, maxy = extent
-    mask = (cx >= minx) & (cx <= maxx) & (cy >= miny) & (cy <= maxy)
-    cx_m, cy_m = cx[mask], cy[mask]
-
-    px = ((cx_m - minx) / (maxx - minx) * (width - 1)).astype(int)
-    py = ((cy_m - miny) / (maxy - miny) * (height - 1)).astype(int)
-    np.clip(px, 0, width - 1, out=px)
-    np.clip(py, 0, height - 1, out=py)
-
-    n = len(px)
-    rgb = np.broadcast_to(np.array(color, dtype=np.float32), (n, 3)).copy()
-    image = np.zeros((height, width, 4), dtype=np.float32)
-    _stamp_pixels(image, py, px, rgb, stamp, height, width)
-    return image
-
-
-def rasterize_categorical(
-    cx: np.ndarray,
-    cy: np.ndarray,
-    labels: np.ndarray,
-    extent: tuple,
-    n_clusters: int,
-    width: int = RASTER_W,
-    height: int = RASTER_H,
-    cmap: str = "tab20",
-    stamp: int = 1,
-) -> np.ndarray:
-    """Rasterize integer cluster labels to an RGBA image.
-
-    .. deprecated:: 2026-05-02
-       Migrate to :func:`rasterize_categorical_voronoi` (KDTree-Voronoi,
-       metric CRS, ``max_dist_m`` cutoff; supports ``color_map`` dict
-       override). Removed in W6.
-
-    Args:
-        cx, cy: Centroid coordinates in EPSG:28992.
-        labels: Integer cluster assignment array.
-        extent: ``(minx, miny, maxx, maxy)`` in EPSG:28992.
-        n_clusters: Total number of clusters (for colormap scaling).
-        width, height: Output image dimensions in pixels.
-        cmap: Matplotlib colormap name.
-        stamp: Pixel radius per point (1 = single pixel, 2+ fills gaps at
-            coarser resolutions).
-
-    Returns:
-        ``(height, width, 4)`` RGBA float32 array with transparent background.
-    """
-    minx, miny, maxx, maxy = extent
-    mask = (cx >= minx) & (cx <= maxx) & (cy >= miny) & (cy <= maxy)
-    cx_m, cy_m, lab_m = cx[mask], cy[mask], labels[mask]
-
-    px = ((cx_m - minx) / (maxx - minx) * (width - 1)).astype(int)
-    py = ((cy_m - miny) / (maxy - miny) * (height - 1)).astype(int)
-    np.clip(px, 0, width - 1, out=px)
-    np.clip(py, 0, height - 1, out=py)
-
-    colormap_obj = plt.get_cmap(cmap)
-    norm_vals = lab_m.astype(float) / max(n_clusters - 1, 1)
-    rgb = colormap_obj(norm_vals)[:, :3].astype(np.float32)
-
-    image = np.zeros((height, width, 4), dtype=np.float32)
-    _stamp_pixels(image, py, px, rgb, stamp, height, width)
-    return image
 
 
 # ---------------------------------------------------------------------------

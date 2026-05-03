@@ -45,46 +45,6 @@ STUDY_AREA = "netherlands"
 H3_RESOLUTION = 9
 
 
-# ------------------------------------------------------------------
-# Rasterization helpers (extracted from LinearProbeVisualizer)
-# ------------------------------------------------------------------
-
-def _compute_stamp_radius(
-    resolution: int, extent: tuple, width: int,
-) -> int:
-    """
-    Compute pixel radius for a disk stamp based on H3 cell size.
-
-    Derives a stamp size that approximates hexagon coverage on the
-    rasterized canvas, preventing single-pixel gaps between centroids.
-
-    Args:
-        resolution: H3 resolution level.
-        extent: (minx, miny, maxx, maxy) in projected CRS (meters).
-        width: Canvas width in pixels.
-
-    Returns:
-        Stamp radius in pixels (at least 1).
-    """
-    hex_edge_m = h3.average_hexagon_edge_length(resolution, unit='m')
-    minx, _, maxx, _ = extent
-    meters_per_pixel = (maxx - minx) / width
-    # 0.8 factor avoids excessive overlap while closing gaps
-    return max(1, int(hex_edge_m / meters_per_pixel * 0.8))
-
-
-def _build_disk_mask(radius: int) -> np.ndarray:
-    """
-    Build a boolean circular mask of the given radius.
-
-    Returns:
-        (2*radius+1, 2*radius+1) boolean array, True inside the disk.
-    """
-    size = 2 * radius + 1
-    yy, xx = np.ogrid[-radius:radius + 1, -radius:radius + 1]
-    return (xx * xx + yy * yy) <= radius * radius
-
-
 def rasterize_centroids(
     hex_ids: pd.Index,
     rgb_array: np.ndarray,

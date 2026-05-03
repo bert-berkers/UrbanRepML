@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | DRAFT — to be executed by `/niche` after `/clear` from terminal `muted-sliding-dune` |
+| **Status** | SHIPPED — W6 complete 2026-05-03; human visual sign-off pending on cluster map regression |
 | **Source** | Reference impl in `scripts/one_off/viz_ring_agg_res9_grid.py` (commits 703aa41, 511d808); forward-look 2026-04-24 P0; user request 2026-05-02 |
 | **Cluster** | Visualization infrastructure (touches `utils/visualization.py` + 17 callers + new `scripts/visualization/` README) |
 | **Depends on** | Cluster-2 ledger-sidecars SHIPPED (provenance API in `utils/provenance.py` is stable) |

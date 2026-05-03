@@ -54,13 +54,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from utils.paths import StudyAreaPaths
 from utils.spatial_db import SpatialDB
 
-# Re-use the canonical Voronoi helpers from the wave-3 gallery script.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from viz_ring_agg_res9_grid import (  # type: ignore[import-not-found]
-    gather_rgba,
-    rank_unit,
-    voronoi_indices,
-)
+# Voronoi primitives now canonical in utils.visualization (W6 of voronoi-toolkit).
+# rank_unit remains in the archived original.
+from utils.visualization import gather_rgba, voronoi_indices
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "archive" / "visualization"))
+from viz_ring_agg_res9_grid import rank_unit  # type: ignore[import-not-found]
 
 STUDY_AREA = "netherlands"
 RES = 9

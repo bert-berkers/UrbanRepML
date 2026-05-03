@@ -53,14 +53,15 @@ from utils.paths import StudyAreaPaths
 from utils.spatial_db import SpatialDB
 from utils.visualization import load_boundary
 
-# Re-use the canonical Voronoi helpers from the wave-3 gallery script.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Voronoi primitives now canonical in utils.visualization (W6 of voronoi-toolkit).
+# Ranking/HSV helpers remain in the archived original.
+from utils.visualization import gather_rgba, voronoi_indices
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "archive" / "visualization"))
 from viz_ring_agg_res9_grid import (  # type: ignore[import-not-found]
-    gather_rgba,
     hsv_pc_rgb,  # noqa: F401  (kept for parity if needed downstream)
     rank_rgb,
     rank_unit,
-    voronoi_indices,
 )
 
 STUDY_AREA = "netherlands"
