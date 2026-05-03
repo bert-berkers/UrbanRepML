@@ -1,0 +1,19 @@
+embedding,embedding_label,dim,f_stat,p_value,n_clusters,n_hex
+concat_zscore,Concat z-scored (208D),lbm,1778.9746340944844,0.0,8,81734
+concat_zscore,Concat z-scored (208D),fys,1612.2450746273348,0.0,8,81734
+concat_zscore,Concat z-scored (208D),onv,3058.594767852536,0.0,8,81734
+concat_zscore,Concat z-scored (208D),soc,6826.672124301985,0.0,8,81734
+concat_zscore,Concat z-scored (208D),vrz,5060.709303449129,0.0,8,81734
+concat_zscore,Concat z-scored (208D),won,4980.6747439746005,0.0,8,81734
+ring_agg_k10,Ring Aggregation (208D),lbm,1295.130870561273,0.0,8,80466
+ring_agg_k10,Ring Aggregation (208D),fys,1312.2650645690355,0.0,8,80466
+ring_agg_k10,Ring Aggregation (208D),onv,3231.455045429292,0.0,8,80466
+ring_agg_k10,Ring Aggregation (208D),soc,7900.057779831202,0.0,8,80466
+ring_agg_k10,Ring Aggregation (208D),vrz,5501.293183546822,0.0,8,80466
+ring_agg_k10,Ring Aggregation (208D),won,5512.277653580541,0.0,8,80466
+supervised_unet_kendall,Supervised UNet (128D),lbm,524.481225823378,0.0,8,130467
+supervised_unet_kendall,Supervised UNet (128D),fys,604.8009385746336,0.0,8,130467
+supervised_unet_kendall,Supervised UNet (128D),onv,2185.4617382490555,0.0,8,130467
+supervised_unet_kendall,Supervised UNet (128D),soc,4994.6952854850215,0.0,8,130467
+supervised_unet_kendall,Supervised UNet (128D),vrz,3084.509085492805,0.0,8,130467
+supervised_unet_kendall,Supervised UNet (128D),won,3143.535553169729,0.0,8,130467

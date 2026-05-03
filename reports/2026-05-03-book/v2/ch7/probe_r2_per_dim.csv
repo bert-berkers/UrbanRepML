@@ -1,0 +1,7 @@
+dim,r2,n_train,n_test,source
+lbm,0.2701996797972439,N/A (full),121368,existing_artifact:data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-07/2026-03-07_res9_stage2_fusion_ring_agg/predictions_lbm.parquet
+fys,0.35600996335668167,N/A (full),121368,existing_artifact:data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-07/2026-03-07_res9_stage2_fusion_ring_agg/predictions_fys.parquet
+onv,0.5137064559179538,N/A (full),121368,existing_artifact:data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-07/2026-03-07_res9_stage2_fusion_ring_agg/predictions_onv.parquet
+soc,0.6766241945143041,N/A (full),121368,existing_artifact:data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-07/2026-03-07_res9_stage2_fusion_ring_agg/predictions_soc.parquet
+vrz,0.695472923810301,N/A (full),121368,existing_artifact:data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-07/2026-03-07_res9_stage2_fusion_ring_agg/predictions_vrz.parquet
+won,0.49632330252144063,N/A (full),121368,existing_artifact:data/study_areas/netherlands/stage3_analysis/dnn_probe/2026-03-07/2026-03-07_res9_stage2_fusion_ring_agg/predictions_won.parquet
