@@ -1,0 +1,21 @@
+figure_path: lbm_prediction_res9.png
+created_at: '2026-05-03T08:59:01+00:00'
+plot_config:
+  target: leefbaarometer
+  year: 2022
+  resolution: 9
+  mode: continuous_prediction
+  model: ridge_inline
+  alpha: 1.0
+  embedding_source: data\study_areas\netherlands\stage2_multimodal\ring_agg\embeddings\netherlands_res9_20mix.parquet
+  r2_in_sample: 0.3059626817703247
+  cmap: RdYlGn
+  pixel_m: 250.0
+  max_dist_m: 300.0
+plot_config_hash: 713809476c697f05
+source_artifacts:
+- data\study_areas\netherlands\stage2_multimodal\ring_agg\embeddings\netherlands_res9_20mix.parquet
+- data\study_areas\netherlands\target\leefbaarometer\leefbaarometer_h3res9_2022.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: Inline Ridge prediction of LBM (in-sample R^2=0.306)
+schema_version: '1.0'

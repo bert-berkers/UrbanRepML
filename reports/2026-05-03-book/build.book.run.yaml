@@ -1,0 +1,39 @@
+run_id: stage3-build_the_book_2026_05_03-20260503T085704-cdbb772e
+git_commit: ed2d1bfd1d3812a9b9412a2a7180f3ce58d80e4c
+git_dirty: true
+config_hash: cdbb772e5b830181
+config_path: null
+input_paths: []
+output_paths:
+- reports/2026-05-03-book
+seed: 42
+wall_time_seconds: 133.558
+started_at: '2026-05-03T08:57:04+00:00'
+ended_at: '2026-05-03T08:59:17+00:00'
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+study_area: netherlands
+stage: stage3
+schema_version: '1.0'
+extra:
+  counts:
+    ch1: 3
+    ch2: 5
+    ch3: 4
+    ch4: 4
+    ch6: 3
+    ch7: 3
+    ch8: 1
+  total_pngs: 23
+  status: success
+  fix_wave_2026_05_03_T11_22:
+    figures_regenerated:
+      - reports/2026-05-03-book/ch1_frontispiece/hex_grid_teaser_res9_amsterdam.png
+      - reports/2026-05-03-book/ch1_frontispiece/tessellation_density_multires.png
+      - reports/2026-05-03-book/ch2_modalities/roads_density_res9.png
+    note: |
+      Fixed three QAQC PARTIAL-FAIL figures: hex teaser (was uniform grey
+      rectangle), multires tessellation (was 5 ghost-panel outlines),
+      roads density (was washed-out cividis). ch8 count corrected from 2
+      to 1 (8a best_of_high_res.png is the only true PNG; 8b is the
+      book_provenance.yaml aggregator, not a PNG). total_pngs now 23.
+    fix_script: scripts/one_off/fix_book_figures_2026_05_03.py

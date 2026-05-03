@@ -1,0 +1,18 @@
+figure_path: poi_kmeans_res9.png
+created_at: '2026-05-03T08:57:42+00:00'
+plot_config:
+  modality: poi_hex2vec
+  resolution: 9
+  year: latest
+  mode: categorical_kmeans
+  k: 10
+  random_state: 42
+  cmap: tab10
+  pixel_m: 250.0
+  max_dist_m: 300.0
+plot_config_hash: 59956d1cee2e79d5
+source_artifacts:
+- data\study_areas\netherlands\stage1_unimodal\poi\hex2vec\netherlands_res9_latest.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: POI hex2vec embeddings -> kmeans k=10 categorical
+schema_version: '1.0'

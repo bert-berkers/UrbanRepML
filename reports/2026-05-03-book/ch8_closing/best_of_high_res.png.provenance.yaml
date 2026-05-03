@@ -1,0 +1,16 @@
+figure_path: best_of_high_res.png
+created_at: '2026-05-03T08:59:17+00:00'
+plot_config:
+  source: alphaearth_2022_res9
+  mode: rgb_pca3_high_res
+  pixel_m: 150.0
+  max_dist_m: 220.0
+  raster_px:
+  - 4000
+  - 4800
+plot_config_hash: ee16d38303e293c4
+source_artifacts:
+- data\study_areas\netherlands\stage1_unimodal\alphaearth\netherlands_res9_2022.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: Poster-grade re-render of cover (4000x4800)
+schema_version: '1.0'

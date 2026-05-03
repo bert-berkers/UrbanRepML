@@ -1,0 +1,16 @@
+figure_path: mode_continuous.png
+created_at: '2026-05-03T08:58:01+00:00'
+plot_config:
+  resolution: 9
+  mode: continuous_pc1
+  cmap: viridis
+  pixel_m: 250.0
+  max_dist_m: 300.0
+  source: unet_20mix
+  demonstrates: rasterize_continuous_voronoi
+plot_config_hash: b568d77c5dec7567
+source_artifacts:
+- data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_20mix.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: "Continuous mode demo \u2014 UNet 20mix res9 PC1"
+schema_version: '1.0'

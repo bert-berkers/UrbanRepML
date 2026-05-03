@@ -1,0 +1,48 @@
+figure_path: tessellation_density_multires.png
+created_at: '2026-05-03T09:23:51+00:00'
+plot_config:
+  resolutions:
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  hex_counts:
+  - 408
+  - 2647
+  - 17969
+  - 124575
+  - 868239
+  mode: categorical_grey_voronoi_5panel
+  grey_levels:
+    '5':
+    - 0.62
+    - 0.62
+    - 0.62
+    '6':
+    - 0.52
+    - 0.52
+    - 0.52
+    '7':
+    - 0.42
+    - 0.42
+    - 0.42
+    '8':
+    - 0.32
+    - 0.32
+    - 0.32
+    '9':
+    - 0.22
+    - 0.22
+    - 0.22
+plot_config_hash: c8e2bff7b4bc6c78
+source_artifacts:
+- data\study_areas\netherlands\regions_gdf\netherlands_res5.parquet
+- data\study_areas\netherlands\regions_gdf\netherlands_res6.parquet
+- data\study_areas\netherlands\regions_gdf\netherlands_res7.parquet
+- data\study_areas\netherlands\regions_gdf\netherlands_res8.parquet
+- data\study_areas\netherlands\regions_gdf\netherlands_res9.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: "Resolution scaling \u2014 5 panels (res5-9), grey-fill voronoi at increasing\
+  \ darkness"
+schema_version: '1.0'

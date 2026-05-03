@@ -1,0 +1,18 @@
+figure_path: four_modalities_2x2.png
+created_at: '2026-05-03T08:57:52+00:00'
+plot_config:
+  mode: 2x2_collage
+  panels:
+  - alphaearth_pc1_res9.png
+  - poi_kmeans_res9.png
+  - roads_density_res9.png
+  - gtfs_accessibility_res9.png
+plot_config_hash: d5b661a7d20f4dde
+source_artifacts:
+- alphaearth_pc1_res9.png
+- poi_kmeans_res9.png
+- roads_density_res9.png
+- gtfs_accessibility_res9.png
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: 4-modality 2x2 collage at 4000x4800 px
+schema_version: '1.0'

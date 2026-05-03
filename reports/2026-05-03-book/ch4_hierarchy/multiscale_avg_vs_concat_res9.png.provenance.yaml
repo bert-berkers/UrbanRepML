@@ -1,0 +1,17 @@
+figure_path: multiscale_avg_vs_concat_res9.png
+created_at: '2026-05-03T08:58:37+00:00'
+plot_config:
+  model: unet_multiscale
+  year: 20mix
+  resolution: 9
+  panels:
+  - avg
+  - concat
+  mode: continuous_pc1_2panel
+plot_config_hash: ae0d5b29e431800a
+source_artifacts:
+- data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_multiscale_avg_20mix.parquet
+- data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_multiscale_concat_20mix.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: UNet multiscale_avg vs multiscale_concat side-by-side
+schema_version: '1.0'

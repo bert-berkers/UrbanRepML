@@ -1,0 +1,101 @@
+{
+  "n_hexes": 397757,
+  "k": 10,
+  "kmeans_seed": 42,
+  "pca_explained_variance_ratio": [
+    0.1794254332780838,
+    0.10581202805042267,
+    0.07637505978345871
+  ],
+  "pca_explained_variance_total": 0.3616125285625458,
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "n_hexes": 10825,
+      "fraction_of_total": 0.02721510872215951,
+      "centroid_rd_x": 177118.8408132783,
+      "centroid_rd_y": 499403.69961167447
+    },
+    {
+      "cluster_id": 1,
+      "n_hexes": 23153,
+      "fraction_of_total": 0.05820890644287844,
+      "centroid_rd_x": 158405.7466819502,
+      "centroid_rd_y": 471633.87871107896
+    },
+    {
+      "cluster_id": 2,
+      "n_hexes": 85707,
+      "fraction_of_total": 0.21547578043881063,
+      "centroid_rd_x": 194594.18434784352,
+      "centroid_rd_y": 448275.44392730016
+    },
+    {
+      "cluster_id": 3,
+      "n_hexes": 36687,
+      "fraction_of_total": 0.09223470611453727,
+      "centroid_rd_x": 168078.43571206002,
+      "centroid_rd_y": 484833.6259167072
+    },
+    {
+      "cluster_id": 4,
+      "n_hexes": 17467,
+      "fraction_of_total": 0.04391374633255983,
+      "centroid_rd_x": 144626.1233317419,
+      "centroid_rd_y": 486762.74296264333
+    },
+    {
+      "cluster_id": 5,
+      "n_hexes": 69126,
+      "fraction_of_total": 0.1737895247600922,
+      "centroid_rd_x": 166929.2899144786,
+      "centroid_rd_y": 486004.7545733798
+    },
+    {
+      "cluster_id": 6,
+      "n_hexes": 58006,
+      "fraction_of_total": 0.14583275718592004,
+      "centroid_rd_x": 177940.54487569918,
+      "centroid_rd_y": 526828.3129940381
+    },
+    {
+      "cluster_id": 7,
+      "n_hexes": 30150,
+      "fraction_of_total": 0.07580004877349739,
+      "centroid_rd_x": 183356.54621740084,
+      "centroid_rd_y": 451133.1799289573
+    },
+    {
+      "cluster_id": 8,
+      "n_hexes": 31150,
+      "fraction_of_total": 0.07831414657693013,
+      "centroid_rd_x": 117348.90221187683,
+      "centroid_rd_y": 436319.30713244615
+    },
+    {
+      "cluster_id": 9,
+      "n_hexes": 35486,
+      "fraction_of_total": 0.08921527465261454,
+      "centroid_rd_x": 153712.41967852355,
+      "centroid_rd_y": 455645.38502486265
+    }
+  ],
+  "_meta": {
+    "study_area": "netherlands",
+    "resolution": 9,
+    "year_label": "20mix",
+    "pixel_m": 150.0,
+    "max_dist_m": 300.0,
+    "raster_size_px": [
+      1789,
+      2098
+    ],
+    "extent_rd_xyxy": [
+      11793.600616541176,
+      306631.6769134762,
+      280039.25644343917,
+      621276.643208637
+    ],
+    "control_source": "gemeente 2024 (NL municipalities, 342 polygons)"
+  }
+}

@@ -1,0 +1,16 @@
+figure_path: gtfs_accessibility_res9.png
+created_at: '2026-05-03T08:57:51+00:00'
+plot_config:
+  resolution: 9
+  mode: continuous_pc1
+  cmap: magma
+  pixel_m: 250.0
+  max_dist_m: 300.0
+  modality: gtfs
+  year: latest
+plot_config_hash: ad496b03d8d6c8fd
+source_artifacts:
+- data\study_areas\netherlands\stage1_unimodal\gtfs\netherlands_res9_latest.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: "GTFS embeddings -> PC1 (sparse \u2014 fallback grey for non-stop hexes)"
+schema_version: '1.0'

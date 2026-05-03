@@ -1,0 +1,15 @@
+figure_path: mode_rgb.png
+created_at: '2026-05-03T08:58:13+00:00'
+plot_config:
+  source: concat_20mix
+  mode: rgb_pca3
+  demonstrates: rasterize_rgb_voronoi
+  rgb_norm: p2_p98
+  pixel_m: 250.0
+  max_dist_m: 300.0
+plot_config_hash: c4ff7b5db1a9cabc
+source_artifacts:
+- data\study_areas\netherlands\stage2_multimodal\concat\embeddings\netherlands_res9_20mix.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: "RGB mode demo \u2014 concat 20mix PCA top-3 -> RGB"
+schema_version: '1.0'

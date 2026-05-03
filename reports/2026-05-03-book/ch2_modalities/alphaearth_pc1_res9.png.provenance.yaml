@@ -1,0 +1,16 @@
+figure_path: alphaearth_pc1_res9.png
+created_at: '2026-05-03T08:57:36+00:00'
+plot_config:
+  resolution: 9
+  mode: continuous_pc1
+  cmap: viridis
+  pixel_m: 250.0
+  max_dist_m: 300.0
+  modality: alphaearth
+  year: 2022
+plot_config_hash: 93715b97580e7b1d
+source_artifacts:
+- data\study_areas\netherlands\stage1_unimodal\alphaearth\netherlands_res9_2022.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: AlphaEarth PC1 over Netherlands at res9
+schema_version: '1.0'

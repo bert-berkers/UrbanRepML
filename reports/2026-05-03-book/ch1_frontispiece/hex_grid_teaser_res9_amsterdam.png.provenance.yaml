@@ -1,0 +1,16 @@
+figure_path: hex_grid_teaser_res9_amsterdam.png
+created_at: '2026-05-03T09:23:41+00:00'
+plot_config:
+  subregion: amsterdam_metro_30km
+  resolution: 9
+  mode: hex_polygon_boundaries
+  edge_color: '#888888'
+  edge_linewidth: 0.35
+  n_hexes: 10402
+plot_config_hash: 105207d33db4c1a0
+source_artifacts:
+- data\study_areas\netherlands\regions_gdf\netherlands_res9.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: "H3 res9 hex tessellation around Amsterdam \u2014 faint grey hex boundaries\
+  \ on white"
+schema_version: '1.0'

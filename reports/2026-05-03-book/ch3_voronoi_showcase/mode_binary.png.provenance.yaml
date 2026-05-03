@@ -1,0 +1,15 @@
+figure_path: mode_binary.png
+created_at: '2026-05-03T08:58:08+00:00'
+plot_config:
+  source: lbm_2022
+  mode: binary_threshold
+  threshold: 4.203002669795925
+  demonstrates: rasterize_binary_voronoi (via categorical_voronoi)
+  pixel_m: 250.0
+  max_dist_m: 300.0
+plot_config_hash: 6924896daa5e2973
+source_artifacts:
+- data\study_areas\netherlands\target\leefbaarometer\leefbaarometer_h3res9_2022.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: "Binary mode demo \u2014 LBM >= median (4.2030)"
+schema_version: '1.0'

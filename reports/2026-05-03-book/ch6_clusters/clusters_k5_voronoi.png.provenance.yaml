@@ -1,0 +1,17 @@
+figure_path: clusters_k5_voronoi.png
+created_at: '2026-05-03T08:58:45+00:00'
+plot_config:
+  source: unet_20mix
+  resolution: 9
+  mode: categorical_kmeans
+  k: 5
+  random_state: 42
+  cmap: tab10
+  pixel_m: 250.0
+  max_dist_m: 300.0
+plot_config_hash: da9813ae3a7065ee
+source_artifacts:
+- data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_20mix.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: kmeans k=5 on UNet 20mix res9, Voronoi-rasterized
+schema_version: '1.0'

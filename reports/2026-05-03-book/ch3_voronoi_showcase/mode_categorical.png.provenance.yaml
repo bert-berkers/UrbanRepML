@@ -1,0 +1,17 @@
+figure_path: mode_categorical.png
+created_at: '2026-05-03T08:58:05+00:00'
+plot_config:
+  source: unet_20mix
+  mode: categorical_kmeans
+  k: 10
+  random_state: 42
+  demonstrates: rasterize_categorical_voronoi
+  cmap: tab10
+  pixel_m: 250.0
+  max_dist_m: 300.0
+plot_config_hash: 80bb8e2507727b1b
+source_artifacts:
+- data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_20mix.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: "Categorical mode demo \u2014 kmeans k=10 on UNet 20mix"
+schema_version: '1.0'

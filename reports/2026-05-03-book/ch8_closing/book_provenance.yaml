@@ -1,0 +1,178 @@
+book_title: The Book of Netherlands
+build_date: '2026-05-03'
+n_figures: 23
+figures:
+  reports\2026-05-03-book\ch1_frontispiece\cover_alphaearth_rgb_res9.provenance:
+    plot_config_hash: 0d3720d25ecebf8d
+    created_at: '2026-05-03T09:23:36+00:00'
+    parent_run_id: null
+    note: "THE COVER \u2014 AlphaEarth PC1/PC2/PC3 -> RGB"
+    source_artifacts:
+    - data\study_areas\netherlands\stage1_unimodal\alphaearth\netherlands_res9_2022.parquet
+  reports\2026-05-03-book\ch1_frontispiece\hex_grid_teaser_res9_amsterdam.provenance:
+    plot_config_hash: 105207d33db4c1a0
+    created_at: '2026-05-03T09:23:41+00:00'
+    parent_run_id: null
+    note: "H3 res9 hex tessellation around Amsterdam \u2014 faint grey hex boundaries\
+      \ on white"
+    source_artifacts:
+    - data\study_areas\netherlands\regions_gdf\netherlands_res9.parquet
+  reports\2026-05-03-book\ch1_frontispiece\tessellation_density_multires.provenance:
+    plot_config_hash: c8e2bff7b4bc6c78
+    created_at: '2026-05-03T09:23:51+00:00'
+    parent_run_id: null
+    note: "Resolution scaling \u2014 5 panels (res5-9), grey-fill voronoi at increasing\
+      \ darkness"
+    source_artifacts:
+    - data\study_areas\netherlands\regions_gdf\netherlands_res5.parquet
+    - data\study_areas\netherlands\regions_gdf\netherlands_res6.parquet
+    - data\study_areas\netherlands\regions_gdf\netherlands_res7.parquet
+    - data\study_areas\netherlands\regions_gdf\netherlands_res8.parquet
+    - data\study_areas\netherlands\regions_gdf\netherlands_res9.parquet
+  reports\2026-05-03-book\ch2_modalities\alphaearth_pc1_res9.provenance:
+    plot_config_hash: 93715b97580e7b1d
+    created_at: '2026-05-03T08:57:36+00:00'
+    parent_run_id: null
+    note: AlphaEarth PC1 over Netherlands at res9
+    source_artifacts:
+    - data\study_areas\netherlands\stage1_unimodal\alphaearth\netherlands_res9_2022.parquet
+  reports\2026-05-03-book\ch2_modalities\four_modalities_2x2.provenance:
+    plot_config_hash: d5b661a7d20f4dde
+    created_at: '2026-05-03T08:57:52+00:00'
+    parent_run_id: null
+    note: 4-modality 2x2 collage at 4000x4800 px
+    source_artifacts:
+    - alphaearth_pc1_res9.png
+    - poi_kmeans_res9.png
+    - roads_density_res9.png
+    - gtfs_accessibility_res9.png
+  reports\2026-05-03-book\ch2_modalities\gtfs_accessibility_res9.provenance:
+    plot_config_hash: ad496b03d8d6c8fd
+    created_at: '2026-05-03T08:57:51+00:00'
+    parent_run_id: null
+    note: "GTFS embeddings -> PC1 (sparse \u2014 fallback grey for non-stop hexes)"
+    source_artifacts:
+    - data\study_areas\netherlands\stage1_unimodal\gtfs\netherlands_res9_latest.parquet
+  reports\2026-05-03-book\ch2_modalities\poi_kmeans_res9.provenance:
+    plot_config_hash: 59956d1cee2e79d5
+    created_at: '2026-05-03T08:57:42+00:00'
+    parent_run_id: null
+    note: POI hex2vec embeddings -> kmeans k=10 categorical
+    source_artifacts:
+    - data\study_areas\netherlands\stage1_unimodal\poi\hex2vec\netherlands_res9_latest.parquet
+  reports\2026-05-03-book\ch2_modalities\roads_density_res9.provenance:
+    plot_config_hash: da3a7e8e21ef38e0
+    created_at: '2026-05-03T09:23:58+00:00'
+    parent_run_id: null
+    note: "Roads embeddings -> PC1, p5/p90 clipped on inferno over dark background\
+      \ \u2014 reveals A-network corridors"
+    source_artifacts:
+    - data\study_areas\netherlands\stage1_unimodal\roads\netherlands_res9_latest.parquet
+  reports\2026-05-03-book\ch3_voronoi_showcase\mode_binary.provenance:
+    plot_config_hash: 6924896daa5e2973
+    created_at: '2026-05-03T08:58:08+00:00'
+    parent_run_id: null
+    note: "Binary mode demo \u2014 LBM >= median (4.2030)"
+    source_artifacts:
+    - data\study_areas\netherlands\target\leefbaarometer\leefbaarometer_h3res9_2022.parquet
+  reports\2026-05-03-book\ch3_voronoi_showcase\mode_categorical.provenance:
+    plot_config_hash: 80bb8e2507727b1b
+    created_at: '2026-05-03T08:58:05+00:00'
+    parent_run_id: null
+    note: "Categorical mode demo \u2014 kmeans k=10 on UNet 20mix"
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_20mix.parquet
+  reports\2026-05-03-book\ch3_voronoi_showcase\mode_continuous.provenance:
+    plot_config_hash: b568d77c5dec7567
+    created_at: '2026-05-03T08:58:01+00:00'
+    parent_run_id: null
+    note: "Continuous mode demo \u2014 UNet 20mix res9 PC1"
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_20mix.parquet
+  reports\2026-05-03-book\ch3_voronoi_showcase\mode_rgb.provenance:
+    plot_config_hash: c4ff7b5db1a9cabc
+    created_at: '2026-05-03T08:58:13+00:00'
+    parent_run_id: null
+    note: "RGB mode demo \u2014 concat 20mix PCA top-3 -> RGB"
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\concat\embeddings\netherlands_res9_20mix.parquet
+  reports\2026-05-03-book\ch4_hierarchy\multiscale_avg_vs_concat_res9.provenance:
+    plot_config_hash: ae0d5b29e431800a
+    created_at: '2026-05-03T08:58:37+00:00'
+    parent_run_id: null
+    note: UNet multiscale_avg vs multiscale_concat side-by-side
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_multiscale_avg_20mix.parquet
+    - data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_multiscale_concat_20mix.parquet
+  reports\2026-05-03-book\ch4_hierarchy\unet_pc1_res7.provenance:
+    plot_config_hash: 104c2d0209a5b87e
+    created_at: '2026-05-03T08:58:14+00:00'
+    parent_run_id: null
+    note: UNet PC1 at res7 (auto-tuned Voronoi params)
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res7_20mix.parquet
+  reports\2026-05-03-book\ch4_hierarchy\unet_pc1_res8.provenance:
+    plot_config_hash: 94be061860888b19
+    created_at: '2026-05-03T08:58:15+00:00'
+    parent_run_id: null
+    note: UNet PC1 at res8 (auto-tuned Voronoi params)
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res8_20mix.parquet
+  reports\2026-05-03-book\ch4_hierarchy\unet_pc1_res9.provenance:
+    plot_config_hash: 19b7537c8146465d
+    created_at: '2026-05-03T08:58:23+00:00'
+    parent_run_id: null
+    note: UNet PC1 at res9 (auto-tuned Voronoi params)
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_20mix.parquet
+  reports\2026-05-03-book\ch6_clusters\clusters_k10_voronoi.provenance:
+    plot_config_hash: 221eab6903c9fa52
+    created_at: '2026-05-03T08:58:48+00:00'
+    parent_run_id: null
+    note: kmeans k=10 on UNet 20mix res9, Voronoi-rasterized
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_20mix.parquet
+  reports\2026-05-03-book\ch6_clusters\clusters_k20_voronoi.provenance:
+    plot_config_hash: 185869289c0936dd
+    created_at: '2026-05-03T08:58:51+00:00'
+    parent_run_id: null
+    note: kmeans k=20 on UNet 20mix res9, Voronoi-rasterized
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_20mix.parquet
+  reports\2026-05-03-book\ch6_clusters\clusters_k5_voronoi.provenance:
+    plot_config_hash: da9813ae3a7065ee
+    created_at: '2026-05-03T08:58:45+00:00'
+    parent_run_id: null
+    note: kmeans k=5 on UNet 20mix res9, Voronoi-rasterized
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\unet\embeddings\netherlands_res9_20mix.parquet
+  reports\2026-05-03-book\ch7_liveability\lbm_prediction_res9.provenance:
+    plot_config_hash: 713809476c697f05
+    created_at: '2026-05-03T08:59:01+00:00'
+    parent_run_id: null
+    note: Inline Ridge prediction of LBM (in-sample R^2=0.306)
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\ring_agg\embeddings\netherlands_res9_20mix.parquet
+    - data\study_areas\netherlands\target\leefbaarometer\leefbaarometer_h3res9_2022.parquet
+  reports\2026-05-03-book\ch7_liveability\lbm_residuals_res9.provenance:
+    plot_config_hash: 195aab8829ec4247
+    created_at: '2026-05-03T08:59:04+00:00'
+    parent_run_id: null
+    note: Ridge LBM residuals (prediction - target), diverging RdBu_r centred on 0
+    source_artifacts:
+    - data\study_areas\netherlands\stage2_multimodal\ring_agg\embeddings\netherlands_res9_20mix.parquet
+    - data\study_areas\netherlands\target\leefbaarometer\leefbaarometer_h3res9_2022.parquet
+  reports\2026-05-03-book\ch7_liveability\lbm_target_res9.provenance:
+    plot_config_hash: 60d3d41d91883f2b
+    created_at: '2026-05-03T08:58:58+00:00'
+    parent_run_id: null
+    note: Leefbaarometer 2022 raw target (RdYlGn diverging)
+    source_artifacts:
+    - data\study_areas\netherlands\target\leefbaarometer\leefbaarometer_h3res9_2022.parquet
+  reports\2026-05-03-book\ch8_closing\best_of_high_res.provenance:
+    plot_config_hash: ee16d38303e293c4
+    created_at: '2026-05-03T08:59:17+00:00'
+    parent_run_id: null
+    note: Poster-grade re-render of cover (4000x4800)
+    source_artifacts:
+    - data\study_areas\netherlands\stage1_unimodal\alphaearth\netherlands_res9_2022.parquet

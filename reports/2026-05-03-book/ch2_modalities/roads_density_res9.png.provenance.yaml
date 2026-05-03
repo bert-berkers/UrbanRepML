@@ -1,0 +1,26 @@
+figure_path: roads_density_res9.png
+created_at: '2026-05-03T09:23:58+00:00'
+plot_config:
+  modality: roads
+  year: latest
+  resolution: 9
+  mode: continuous_pc1_clipped
+  cmap: inferno
+  vmin: -6.701815605163574
+  vmax: 2.836010217666626
+  clip_percentiles:
+  - 5
+  - 90
+  bg_color:
+  - 0.1
+  - 0.1
+  - 0.1
+  pixel_m: 250.0
+  max_dist_m: 300.0
+plot_config_hash: da3a7e8e21ef38e0
+source_artifacts:
+- data\study_areas\netherlands\stage1_unimodal\roads\netherlands_res9_latest.parquet
+producer_script: scripts/one_off/build_the_book_2026_05_03.py
+note: "Roads embeddings -> PC1, p5/p90 clipped on inferno over dark background \u2014\
+  \ reveals A-network corridors"
+schema_version: '1.0'
