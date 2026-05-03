@@ -57,8 +57,8 @@ Every session follows: **Wave 0 → Work Waves (1..N) → Final Wave**. The book
 
    Kapstok plans are *seeds*, not contracts. The Wave-deviation policy in step 5 still applies — log rationale before deviating from a kapstok's wave structure.
 5. If a plan specifies waves: **follow them exactly**. Do not redesign the wave structure. The plan was written with full context that may have been lost to compaction.
-6. **Read session name** via `coordinator_registry.read_ppid_session()` (PPID-isolated). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
-7. **Check supra states**: Read supra session ID via `coordinator_registry.read_ppid_supra()`, then read from `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml`. Falls back to hardcoded neutral defaults (all dimensions = 3). If no session-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this session. Run `/valuate` to set your weights, or I'll use defaults." If the supra session has an `intent` field, this is the terminal's strategic mission set during `/valuate` — use it to frame your OODA waves. The user's `$ARGUMENTS` provide tactical steering within that intent. Also read `.claude/coordinators/terminals/{pid}.yaml` (via `coordinator_registry._read_terminal_file()`) for `active_plan` and `last_wave_completed_at` — these are the gyroscope fields (#23) indicating which plan is active and when the last wave completed.
+6. **Read terminal identity** via `coordinator_registry.read_ppid_identity()` (one identity per terminal, persists across `/clear`). Use this name in all OODA reports so the user can distinguish concurrent coordinators.
+7. **Check supra states**: Read terminal identity via `coordinator_registry.read_ppid_identity()`, then read from `.claude/supra/sessions/{identity_id}.yaml`. Falls back to hardcoded neutral defaults (all dimensions = 3). If no terminal-scoped file exists or `last_attuned` is null or >24 hours old, suggest: "No attunement for this terminal. Run `/valuate` to set your weights, or I'll use defaults." If the supra file has an `intent` field, this is the terminal's strategic mission set during `/valuate` — use it to frame your OODA waves. The user's `$ARGUMENTS` provide tactical steering within that intent. Also read `.claude/coordinators/terminals/{pid}.yaml` (via `coordinator_registry._read_terminal_file()`) for `active_plan` and `last_wave_completed_at` — these are the gyroscope fields indicating which plan is active and when the last wave completed.
 8. **Hello broadcast** -- write an `info` message to `"all"` via `coordinator_registry.write_message()`:
    ```
    HELLO {session_id}
@@ -103,7 +103,7 @@ Two formats depending on when in the session:
 **Wave 0 Report** (session start — printed once before first delegation plan):
 
 ```markdown
-## Session: [name from coordinator_registry.read_ppid_session()]
+## Session: [terminal identity from coordinator_registry.read_ppid_identity()]
 **Goal**: [restate user task in own words]
 **Git**: [clean/dirty, unpushed commit count]
 **Lateral**: [other active coordinators and claims, or "solo"]

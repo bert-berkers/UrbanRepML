@@ -60,45 +60,52 @@ def read_schema() -> dict:
 
 # -- Session-scoped states ---------------------------------------------------
 
-def _current_session_id() -> str | None:
-    """Read the current session ID via PPID-keyed file."""
+def _current_identity_id() -> str | None:
+    """Read this terminal's identity ID via the PID-keyed terminal file.
+
+    One terminal = one identity (see specs/session-identity-architecture.md).
+    """
     try:
         _hooks = str(Path(__file__).resolve().parent)
         if _hooks not in sys.path:
             sys.path.insert(0, _hooks)
         import coordinator_registry as cr
-        return cr.read_ppid_session(COORDINATORS_DIR)
+        return cr.read_ppid_identity(COORDINATORS_DIR)
     except Exception:
         return None
 
 
-def _session_states_path(session_id: str) -> Path:
-    return SESSIONS_DIR / f"{session_id}.yaml"
+# Legacy alias — some callers may still reach for the old name.
+_current_session_id = _current_identity_id
 
 
-def read_session_states(session_id: str | None = None) -> dict:
-    """Read session-scoped states, falling back to hardcoded neutral defaults."""
-    if session_id is None:
-        session_id = _current_session_id()
-    if session_id:
-        session_data = _read_yaml(_session_states_path(session_id))
+def _session_states_path(identity_id: str) -> Path:
+    return SESSIONS_DIR / f"{identity_id}.yaml"
+
+
+def read_session_states(identity_id: str | None = None) -> dict:
+    """Read identity-scoped states, falling back to hardcoded neutral defaults."""
+    if identity_id is None:
+        identity_id = _current_identity_id()
+    if identity_id:
+        session_data = _read_yaml(_session_states_path(identity_id))
         if session_data:
             return session_data
     return read_states()
 
 
-def write_session_states(states: dict, session_id: str | None = None) -> bool:
-    """Write states to session-scoped file. Returns True on success."""
+def write_session_states(states: dict, identity_id: str | None = None) -> bool:
+    """Write states to identity-scoped file. Returns True on success."""
     if yaml is None:
         return False
-    if session_id is None:
-        session_id = _current_session_id()
-    if not session_id:
-        print("supra_reader: no session ID, cannot write session states", file=sys.stderr)
+    if identity_id is None:
+        identity_id = _current_identity_id()
+    if not identity_id:
+        print("supra_reader: no terminal identity, cannot write session states", file=sys.stderr)
         return False
     try:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-        path = _session_states_path(session_id)
+        path = _session_states_path(identity_id)
         tmp = path.with_suffix(".yaml.tmp")
         tmp.write_text(
             yaml.dump(states, default_flow_style=False, allow_unicode=True, sort_keys=False),
@@ -107,7 +114,7 @@ def write_session_states(states: dict, session_id: str | None = None) -> bool:
         os.replace(str(tmp), str(path))
         return True
     except Exception as exc:
-        print(f"supra_reader: failed to write session states for {session_id}: {exc}", file=sys.stderr)
+        print(f"supra_reader: failed to write session states for {identity_id}: {exc}", file=sys.stderr)
         try:
             tmp.unlink(missing_ok=True)  # type: ignore[possibly-undefined]
         except Exception:
@@ -397,88 +404,61 @@ def _temporal_segment_key() -> str:
     return f"{day}-{bucket}"
 
 
-def _supra_session_id() -> str:
-    """Return supra session ID like 'hushed-spinning-glen-2026-03-14'.
+# Legacy alias — `supra session` is no longer a separate concept. Identity IS
+# the supra layer. Some callers may still reach for the old name.
+_current_supra_session_id = _current_identity_id
 
-    The supra session = this terminal. The first coordinator to start names it.
-    Subsequent /clear cycles within the same terminal join it via
-    _current_supra_session_id(). Format: {coordinator_poetic_name}-{date}.
+
+def _supra_session_path(identity_id: str) -> Path:
+    """Resolve the supra valuation file path for a given identity.
+
+    Canonical path is `.claude/supra/sessions/{identity_id}.yaml`. Legacy
+    files used a date suffix (`{name}-{date}.yaml`) or a PID suffix
+    (`{name}.{pid}.yaml`) — those forms are still recognized on read so
+    existing live state survives the transition.
     """
-    coordinator_id = _current_session_id()
-    if not coordinator_id:
-        coordinator_id = "unnamed"
-    return f"{coordinator_id}-{date.today().isoformat()}"
-
-
-def _current_supra_session_id() -> str | None:
-    """Read the current supra session ID via PPID-keyed file."""
+    canonical = SESSIONS_DIR / f"{identity_id}.yaml"
+    if canonical.is_file():
+        return canonical
+    # Legacy: name-date.yaml form (still used by live files written before
+    # 2026-05-03 collapse — terminal carries `pale-listening-dew-2026-05-03`
+    # as its identity, with the date already baked into the name).
+    dated = SESSIONS_DIR / f"{identity_id}-{date.today().isoformat()}.yaml"
+    if dated.is_file():
+        return dated
+    # Legacy: PID-suffixed form
     try:
         _hooks = str(Path(__file__).resolve().parent)
         if _hooks not in sys.path:
             sys.path.insert(0, _hooks)
         import coordinator_registry as cr
-        return cr.read_ppid_supra(COORDINATORS_DIR)
-    except Exception:
-        return None
-
-
-def _supra_session_path(sid: str) -> Path:
-    """Return terminal-PID-keyed path for a supra session file.
-
-    Format: .claude/supra/sessions/{sid}.{terminal_pid}.yaml
-    The key is the terminal shell PID (stable across /clear), not the direct
-    parent PID. Falls back to non-PPID path if the keyed file doesn't exist (migration).
-    """
-    _hooks = str(Path(__file__).resolve().parent)
-    if _hooks not in sys.path:
-        sys.path.insert(0, _hooks)
-    try:
-        import coordinator_registry as cr
         ppid = cr.get_terminal_pid()
     except Exception:
         ppid = os.getppid()
-    ppid_path = SESSIONS_DIR / f"{sid}.{ppid}.yaml"
-    if ppid_path.is_file():
-        return ppid_path
-    # Fallback: try legacy non-PPID path
-    legacy_path = SESSIONS_DIR / f"{sid}.yaml"
-    if legacy_path.is_file():
-        return legacy_path
-    # New file: use PPID-keyed path
-    return ppid_path
+    pid_path = SESSIONS_DIR / f"{identity_id}.{ppid}.yaml"
+    if pid_path.is_file():
+        return pid_path
+    return canonical
 
 
-def read_supra_session_states(supra_session_id: str | None = None) -> dict:
-    """Read supra session file, falling back to coordinator session then global.
-
-    Priority: supra_session_id param -> _current_supra_session_id() ->
-    _current_session_id() -> hardcoded neutral defaults.
-    """
-    # Try the provided or detected supra session ID first
-    sid = supra_session_id or _current_supra_session_id()
+def read_supra_session_states(identity_id: str | None = None) -> dict:
+    """Read this terminal's supra valuation state, falling back to defaults."""
+    sid = identity_id or _current_identity_id()
     if sid:
         data = _read_yaml(_supra_session_path(sid))
         if data:
             return data
-    # Fall back to coordinator session ID
-    coordinator_id = _current_session_id()
-    if coordinator_id:
-        data = _read_yaml(_session_states_path(coordinator_id))
-        if data:
-            return data
-    # Final fallback: global states
     return read_states()
 
 
-def write_supra_session_states(states: dict, supra_session_id: str | None = None) -> bool:
-    """Write states to the supra session file. Returns True on success.
-
-    If no supra_session_id is provided, computes it from _supra_session_id().
-    Creates the sessions directory if needed.
-    """
+def write_supra_session_states(states: dict, identity_id: str | None = None) -> bool:
+    """Write states to this terminal's supra valuation file. Returns True on success."""
     if yaml is None:
         return False
-    sid = supra_session_id or _current_supra_session_id() or _supra_session_id()
+    sid = identity_id or _current_identity_id()
+    if not sid:
+        print("supra_reader: no terminal identity, cannot write supra session states", file=sys.stderr)
+        return False
     try:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         path = _supra_session_path(sid)
@@ -510,9 +490,9 @@ def get_active_graph() -> str:
     Defaults to 'dynamic' if no supra session exists.
     """
     try:
-        supra_sid = _current_supra_session_id()
-        if supra_sid:
-            data = _read_yaml(SESSIONS_DIR / f"{supra_sid}.yaml")
+        identity = _current_identity_id()
+        if identity:
+            data = _read_yaml(_supra_session_path(identity))
             val = data.get("active_graph", "dynamic")
             if val in ("static", "dynamic"):
                 return val
@@ -522,18 +502,18 @@ def get_active_graph() -> str:
 
 
 def set_active_graph(graph: str) -> None:
-    """Write 'static' or 'dynamic' into the supra session file (PPID-isolated)."""
+    """Write 'static' or 'dynamic' into this terminal's supra valuation file."""
     if graph not in ("static", "dynamic"):
         raise ValueError(f"graph must be 'static' or 'dynamic', got {graph!r}")
     try:
-        supra_sid = _current_supra_session_id()
-        if not supra_sid:
-            print("supra_reader: no supra session, cannot set active graph", file=sys.stderr)
+        identity = _current_identity_id()
+        if not identity:
+            print("supra_reader: no terminal identity, cannot set active graph", file=sys.stderr)
             return
-        path = SESSIONS_DIR / f"{supra_sid}.yaml"
+        path = _supra_session_path(identity)
         data = _read_yaml(path)
         if not data:
-            data = {"supra_session_id": supra_sid}
+            data = {"identity_id": identity, "supra_session_id": identity}
         data["active_graph"] = graph
         tmp = path.with_suffix(".yaml.tmp")
         tmp.write_text(

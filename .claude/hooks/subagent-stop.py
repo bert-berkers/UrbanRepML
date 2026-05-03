@@ -83,12 +83,12 @@ def touch_heartbeat() -> None:
         _sys.path.insert(0, str(Path(__file__).resolve().parent))
         import coordinator_registry as cr
 
-        session_id = cr.read_ppid_session(COORDINATORS_DIR)
-        if not session_id:
+        identity_id = cr.read_ppid_identity(COORDINATORS_DIR)
+        if not identity_id:
             return
 
-        cr.update_heartbeat(COORDINATORS_DIR, session_id)
-        print(f"SubagentStop: heartbeat updated for {session_id}", file=sys.stderr)
+        cr.update_heartbeat(COORDINATORS_DIR, identity_id)
+        print(f"SubagentStop: heartbeat updated for {identity_id}", file=sys.stderr)
     except Exception as exc:
         print(f"SubagentStop: heartbeat update failed: {exc}", file=sys.stderr)
 

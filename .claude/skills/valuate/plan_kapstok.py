@@ -70,14 +70,14 @@ def _is_multithread(supra: dict) -> bool:
 _CARRY_KEYWORDS = ("carry item", "carry-item", "forward-look", "[open|", "[stale|", "p0", "p1")
 
 
-def _carry_items_from_scratchpad(scratchpad: Path, supra_session_id: str) -> list[str]:
+def _carry_items_from_scratchpad(scratchpad: Path, identity_id: str) -> list[str]:
     """Pull short carry-item clauses from this terminal's valuate entry.
 
-    The valuate scratchpad uses one section per terminal: `## {supra_session_id} — HH:MM`.
+    The valuate scratchpad uses one section per terminal: `## {identity_id} — HH:MM`.
     Carry-items are referenced in prose; we extract sentence-level clauses containing
     any of _CARRY_KEYWORDS.
     """
-    if not scratchpad.exists() or not supra_session_id:
+    if not scratchpad.exists() or not identity_id:
         return []
     try:
         text = scratchpad.read_text(encoding="utf-8")
@@ -85,7 +85,7 @@ def _carry_items_from_scratchpad(scratchpad: Path, supra_session_id: str) -> lis
         return []
 
     pattern = re.compile(
-        rf"^## {re.escape(supra_session_id)} — \d{{1,2}}:\d{{2}}\s*\n(.*?)(?=\n## |\Z)",
+        rf"^## {re.escape(identity_id)} — \d{{1,2}}:\d{{2}}\s*\n(.*?)(?=\n## |\Z)",
         flags=re.DOTALL | re.MULTILINE,
     )
     m = pattern.search(text)
@@ -135,7 +135,7 @@ def _intent_to_title(intent: str, date: str) -> str:
 # Peer-terminal pointer
 # ---------------------------------------------------------------------------
 
-def _peer_pointer(supra_session_yaml: Path, supra_session_id: str) -> str:
+def _peer_pointer(supra_session_yaml: Path, identity_id: str) -> str:
     """Read peer terminals (live + recently-baked supra YAMLs) and list them."""
     sessions_dir = supra_session_yaml.parent
     coordinators_dir = supra_session_yaml.parent.parent.parent / "coordinators" / "terminals"
@@ -163,9 +163,14 @@ def _peer_pointer(supra_session_yaml: Path, supra_session_id: str) -> str:
                     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
                 except (yaml.YAMLError, OSError):
                     continue
-                ssid = data.get("supra_session_id", "")
-                if ssid and ssid != supra_session_id:
-                    live_terminals.append(f"{ssid} (PID {path.stem})")
+                # New: identity_id; legacy: supra_session_id; pre-legacy: session_id
+                peer_id = (
+                    data.get("identity_id")
+                    or data.get("supra_session_id")
+                    or data.get("session_id", "")
+                )
+                if peer_id and peer_id != identity_id:
+                    live_terminals.append(f"{peer_id} (PID {path.stem})")
     except OSError:
         pass
 
@@ -218,8 +223,8 @@ def _ref_frame_block(supra: dict) -> str:
     )
 
 
-def _status_table(supra_session_id: str, intent: str, multithread: bool) -> str:
-    shard = supra_session_id.rsplit("-", 3)[0] if supra_session_id else "unknown"
+def _status_table(identity_id: str, intent: str, multithread: bool) -> str:
+    shard = identity_id.rsplit("-", 3)[0] if identity_id else "unknown"
     mode_label = "multi-thread (W0 picks)" if multithread else "single-thread"
     return (
         "| Field | Value |\n"
@@ -420,9 +425,14 @@ def write_kapstok(
             if existing:
                 return None
 
-        supra_session_id = (supra.get("supra_session_id") or "").strip()
+        # Identity carries through identity_id (canonical) with legacy fallbacks.
+        identity_id = (
+            supra.get("identity_id")
+            or supra.get("supra_session_id")
+            or ""
+        ).strip()
         multithread = _is_multithread(supra)
-        carry_items = _carry_items_from_scratchpad(valuate_scratchpad, supra_session_id)
+        carry_items = _carry_items_from_scratchpad(valuate_scratchpad, identity_id)
 
         try:
             explore_int = int((supra.get("dimensions") or {}).get("exploration_vs_exploitation", 3))
@@ -435,7 +445,7 @@ def write_kapstok(
 
         sections: list[str] = [
             f"# {title}\n\n",
-            _status_table(supra_session_id, intent, multithread),
+            _status_table(identity_id, intent, multithread),
             "\n## Reference frame (echoed from supra session for cold-start resume)\n\n",
             _ref_frame_block(supra),
             f"\nIf `/clear` lands you here cold: the supra yaml is `{supra_session_yaml}`. "
@@ -458,7 +468,7 @@ def write_kapstok(
             "\n",
             _carry_items_section(carry_items),
             "\n" if carry_items else "",
-            _peer_pointer(supra_session_yaml, supra_session_id),
+            _peer_pointer(supra_session_yaml, identity_id),
             "\n",
             _gist(intent, multithread, n_threads=n_threads),
         ])

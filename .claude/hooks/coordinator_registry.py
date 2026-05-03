@@ -2,7 +2,7 @@
 """Shared library for coordinator-to-coordinator claim file I/O.
 
 Functions:
-  generate_session_id   -- Poetic word-combination session IDs
+  generate_identity_id  -- Poetic word-combination identity IDs
   read_all_claims       -- Read all session-*.yaml claim files
   write_claim           -- Atomically write a claim file
   delete_claim          -- Delete a claim file
@@ -13,23 +13,26 @@ Functions:
   cleanup_stale         -- Remove stale claim files and old messages
   update_heartbeat      -- Update heartbeat_at in claim file
 
-Terminal-shell-keyed session identity (stable across /clear):
+Terminal-shell-keyed identity (one identity per terminal, stable across /clear):
   get_terminal_pid      -- Get the terminal shell PID (stable per tab, survives /clear)
-  write_ppid_session    -- Write terminal-PID-keyed session file
-  write_ppid_supra      -- Write terminal-PID-keyed supra file
-  read_ppid_session     -- Read session_id for this terminal's PID
-  read_ppid_supra       -- Read supra_session_id for this terminal's PID
-  set_active_plan       -- Set active_plan field in terminal file (item #23)
-  mark_wave_complete    -- Set last_wave_completed_at in terminal file (item #23)
-  cleanup_stale_ppid_files -- Remove session/supra files for dead processes
+  write_ppid_identity   -- Write terminal-PID-keyed identity file
+  read_ppid_identity    -- Read identity_id for this terminal's PID
+  set_active_plan       -- Set active_plan field in terminal file
+  mark_wave_complete    -- Set last_wave_completed_at in terminal file
+  cleanup_stale_ppid_files -- Archive terminal files for dead processes
   archive_old_messages  -- Move messages into per-day subdirs
 
 Terminal identity schema (terminals/{pid}.yaml):
-  session_id              str       -- coordinator session ID (rotates on /clear)
-  supra_session_id        str       -- supra session ID (persists across /clear)
+  identity_id             str       -- the one identity for this terminal (the poetic name)
   started_at              iso8601   -- when this terminal was first registered
   active_plan             str|null  -- path to plan file coordinator is following
   last_wave_completed_at  iso8601|null -- timestamp of most recent wave completion
+
+Backward compat: `read_ppid_identity` falls back to `supra_session_id` then
+`session_id` if `identity_id` is absent. This protects live terminal files
+written before the 2026-05-03 collapse to one identity field.
+
+See `specs/session-identity-architecture.md`.
 """
 import fnmatch
 import os
@@ -85,8 +88,13 @@ NOUNS = [
 # Session ID
 # ---------------------------------------------------------------------------
 
-def generate_session_id(coordinators_dir: Path) -> str:
-    """Generate a unique poetic session ID (adjective-participle-noun).
+def generate_identity_id(coordinators_dir: Path) -> str:
+    """Generate a unique poetic identity ID (adjective-participle-noun).
+
+    This identity is the single name carried by a terminal for its entire
+    lifetime — used as both coordinator session ID and supra session ID
+    (which are no longer distinct concepts after 2026-05-03; see
+    `specs/session-identity-architecture.md`).
 
     Checks for collision against existing session-*.yaml files and regenerates
     up to 20 times before giving up with a timestamp fallback.
@@ -412,21 +420,16 @@ def write_lateral_message(
     coordinators_dir: Path,
     message_data: dict,
 ) -> None:
-    """Write a lateral message using the supra session ID as sender identity.
+    """Write a lateral message using the terminal's identity as sender.
 
-    If supra session ID is available, overrides the 'from' field with it.
-    Falls back to coordinator session ID, then 'unknown'.
-    This ensures narrative coherence (homo narrans) across percept deaths.
+    Overrides the 'from' field with the terminal's `identity_id`. This ensures
+    narrative coherence (homo narrans) across context window refreshes — the
+    name is stable for the lifetime of the terminal.
     """
     try:
-        supra_sid = read_ppid_supra(coordinators_dir)
-        if supra_sid:
-            message_data = dict(message_data, **{"from": supra_sid})
-        else:
-            # Fall back to coordinator session ID
-            coord_sid = read_ppid_session(coordinators_dir)
-            if coord_sid:
-                message_data = dict(message_data, **{"from": coord_sid})
+        identity = read_ppid_identity(coordinators_dir)
+        if identity:
+            message_data = dict(message_data, **{"from": identity})
     except Exception:
         pass  # Fall through with whatever 'from' was already set
 
@@ -594,32 +597,40 @@ def _write_terminal_file(coordinators_dir: Path, data: dict, pid: int | None = N
             pass
 
 
-def write_ppid_session(coordinators_dir: Path, session_id: str) -> None:
-    """Set session_id in this terminal's identity file."""
+def write_ppid_identity(coordinators_dir: Path, identity_id: str) -> None:
+    """Set identity_id in this terminal's identity file.
+
+    One terminal = one identity for the lifetime of the terminal. Writes the
+    canonical `identity_id` field; for one transition cycle also keeps
+    `supra_session_id` in sync so legacy readers and existing live terminal
+    files that referenced it do not break mid-session.
+    """
     data = _read_terminal_file(coordinators_dir) or {}
-    data["session_id"] = session_id
+    data["identity_id"] = identity_id
+    # Transition compat: keep supra_session_id mirrored for one cycle so that
+    # any external tools or in-flight reads that still query it resolve.
+    data["supra_session_id"] = identity_id
     if "started_at" not in data:
         data["started_at"] = datetime.now().isoformat(timespec="seconds")
     _write_terminal_file(coordinators_dir, data)
 
 
-def write_ppid_supra(coordinators_dir: Path, supra_session_id: str) -> None:
-    """Set supra_session_id in this terminal's identity file."""
-    data = _read_terminal_file(coordinators_dir) or {}
-    data["supra_session_id"] = supra_session_id
-    _write_terminal_file(coordinators_dir, data)
+def read_ppid_identity(coordinators_dir: Path) -> str | None:
+    """Read identity_id for this terminal's PID.
 
-
-def read_ppid_session(coordinators_dir: Path) -> str | None:
-    """Read session_id for this terminal's PID."""
+    Backward-compat fallback chain: identity_id -> supra_session_id -> session_id.
+    The fallback protects live terminal files written before the 2026-05-03
+    collapse to one identity field — at hook-write time they still carry
+    `supra_session_id` (the persistent name) without an `identity_id` field.
+    """
     data = _read_terminal_file(coordinators_dir)
-    return data.get("session_id") if data else None
-
-
-def read_ppid_supra(coordinators_dir: Path) -> str | None:
-    """Read supra_session_id for this terminal's PID."""
-    data = _read_terminal_file(coordinators_dir)
-    return data.get("supra_session_id") if data else None
+    if not data:
+        return None
+    return (
+        data.get("identity_id")
+        or data.get("supra_session_id")
+        or data.get("session_id")
+    )
 
 
 def cleanup_stale_ppid_files(coordinators_dir: Path) -> None:

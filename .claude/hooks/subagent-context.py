@@ -128,15 +128,15 @@ def get_coordinator_messages() -> list[str]:
         _sys.path.insert(0, str(Path(__file__).resolve().parent))
         import coordinator_registry as cr
 
-        my_session_id = cr.read_ppid_session(COORDINATORS_DIR) or ""
-        if not my_session_id:
+        my_identity = cr.read_ppid_identity(COORDINATORS_DIR) or ""
+        if not my_identity:
             return []
 
         # Read messages from last 2 hours addressed to us or "all"
         from datetime import datetime
         since = datetime.now() - timedelta(hours=2)
         messages = cr.read_messages(
-            COORDINATORS_DIR, since=since, to_session=my_session_id
+            COORDINATORS_DIR, since=since, to_session=my_identity
         )
 
         if not messages:
@@ -164,12 +164,12 @@ def get_other_coordinator_note() -> list[str]:
         _sys.path.insert(0, str(Path(__file__).resolve().parent))
         import coordinator_registry as cr
 
-        my_session_id = cr.read_ppid_session(COORDINATORS_DIR) or ""
+        my_identity = cr.read_ppid_identity(COORDINATORS_DIR) or ""
 
         all_claims = cr.read_all_claims(COORDINATORS_DIR)
         other_active = [
             c for c in all_claims
-            if c.get("session_id") != my_session_id and not cr.is_stale(c)
+            if c.get("session_id") != my_identity and not cr.is_stale(c)
         ]
 
         if not other_active:
@@ -198,15 +198,18 @@ def main() -> None:
     agent_type = hook_input.get("agent_type", "unknown")
     today = date.today().isoformat()
 
-    # Resolve session ID for scratchpad isolation
-    session_id = "unknown"
+    # Resolve terminal identity for scratchpad isolation
+    identity_id = "unknown"
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import coordinator_registry as cr
-        session_id = cr.read_ppid_session(SCRATCHPAD_ROOT.parent / "coordinators") or "unknown"
+        identity_id = cr.read_ppid_identity(SCRATCHPAD_ROOT.parent / "coordinators") or "unknown"
     except Exception:
         pass
 
+    # Keep the variable name `session_id` in the injected prose for now —
+    # specialists keyed off it. The value is the terminal identity.
+    session_id = identity_id
     scratchpad_path = f".claude/scratchpad/{agent_type}/{today}-{session_id}.md"
 
     # Build context injection
@@ -304,13 +307,13 @@ def main() -> None:
     except Exception as exc:
         print(f"subagent-context: supra state read failed: {exc}", file=sys.stderr)
 
-    # Inject supra session identity (deterministic narrator ID across percept deaths)
+    # Inject terminal identity (deterministic narrator ID across context refreshes)
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import coordinator_registry as cr
-        supra_sid = cr.read_ppid_supra(COORDINATORS_DIR)
-        if supra_sid:
-            parts.append(f"**Supra session**: `{supra_sid}` (narrator identity for /sync)")
+        identity = cr.read_ppid_identity(COORDINATORS_DIR)
+        if identity:
+            parts.append(f"**Terminal identity**: `{identity}` (narrator identity for /sync)")
     except Exception:
         pass
 

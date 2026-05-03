@@ -33,10 +33,13 @@ if not supra_reader.is_lateral_coupling_active():
     print('Sync skipped -- static graph active (no lateral coupling during /valuate)')
     sys.exit(0)
 
-# --- 1. Identity (PPID-keyed) ---
-supra_sid = cr.read_ppid_supra(coord_dir) or ''
-session_id = cr.read_ppid_session(coord_dir) or ''
-display_id = supra_sid or session_id or 'unknown'
+# --- 1. Identity (terminal-PID-keyed, one identity per terminal) ---
+identity_id = cr.read_ppid_identity(coord_dir) or ''
+# Legacy locals — sync_run.py has historically named these supra_sid / session_id;
+# both now resolve to the same terminal identity.
+supra_sid = identity_id
+session_id = identity_id
+display_id = identity_id or 'unknown'
 
 # --- 2. Task description (arg > claim file) ---
 task_description = task_arg

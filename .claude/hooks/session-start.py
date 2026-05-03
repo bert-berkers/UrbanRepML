@@ -163,22 +163,19 @@ def register_coordinator() -> tuple[str, list[dict]]:
         existing_claims = cr.read_all_claims(COORDINATORS_DIR)
         active_claims = [c for c in existing_claims if not cr.is_stale(c)]
 
-        # Check if this terminal already has a session (survives /clear)
-        existing_session = cr.read_ppid_session(COORDINATORS_DIR)
+        # One terminal = one identity. Read it (or generate it on fresh terminal).
+        # /clear is a context flush, not a lifecycle event — same terminal,
+        # same identity, fresh context. See specs/session-identity-architecture.md.
+        identity_id = cr.read_ppid_identity(COORDINATORS_DIR)
         now = datetime.now().isoformat(timespec="seconds")
+        is_fresh_terminal = identity_id is None
 
-        if existing_session:
-            # Same terminal after /clear — reuse session identity
-            session_id = existing_session
-            # Update heartbeat on existing claim (if claim file exists)
-            cr.update_heartbeat(COORDINATORS_DIR, session_id)
-        else:
-            # Fresh terminal — generate new session ID
-            session_id = cr.generate_session_id(COORDINATORS_DIR)
+        if is_fresh_terminal:
+            identity_id = cr.generate_identity_id(COORDINATORS_DIR)
 
             # Write initial claim (broad -- coordinator will narrow after user states task)
             claim_data = {
-                "session_id": session_id,
+                "session_id": identity_id,  # claim files key on session_id for filename compat
                 "started_at": now,
                 "heartbeat_at": now,
                 "task_summary": "Starting up -- task not yet specified",
@@ -192,8 +189,11 @@ def register_coordinator() -> tuple[str, list[dict]]:
             }
             cr.write_claim(COORDINATORS_DIR, claim_data)
 
-            # Persist session_id as PPID-keyed file
-            cr.write_ppid_session(COORDINATORS_DIR, session_id)
+            # Persist identity in terminal file
+            cr.write_ppid_identity(COORDINATORS_DIR, identity_id)
+        else:
+            # Existing terminal (after /clear or hook re-fire) — heartbeat the claim.
+            cr.update_heartbeat(COORDINATORS_DIR, identity_id)
 
         # Cleanup obviously stale sessions (2h+ old) from prior crashes
         cr.cleanup_stale(COORDINATORS_DIR, threshold_hours=2)
@@ -202,10 +202,9 @@ def register_coordinator() -> tuple[str, list[dict]]:
         print(f"session-start: coordinator registration failed: {exc}", file=sys.stderr)
         return "", []
 
-    # Compute and register supra session identity
-    # Supra = this terminal. Persists across /clear cycles.
-    # If a PPID-keyed supra file exists, this is a /clear cycle — join the existing supra.
-    # If not, this is a fresh terminal — create a new supra named after this coordinator.
+    # Bootstrap supra valuation file at .claude/supra/sessions/{identity_id}.yaml
+    # if absent. Identity IS the supra layer now — no separate concept.
+    # On /clear (existing terminal), the file already exists; do nothing.
     try:
         import supra_reader
         import yaml
@@ -214,29 +213,14 @@ def register_coordinator() -> tuple[str, list[dict]]:
         sessions_dir = Path(__file__).resolve().parents[1] / "supra" / "sessions"
         sessions_dir.mkdir(parents=True, exist_ok=True)
 
-        existing_supra_sid = cr.read_ppid_supra(COORDINATORS_DIR)
+        # Direct path keyed by identity (no date suffix on a fresh terminal —
+        # identity already includes any required uniqueness from the poetic name).
+        # Note: legacy files use {identity_id}-{date}.yaml form; supra_reader's
+        # path resolver handles both. New writes use {identity_id}.yaml.
+        supra_session_path = sessions_dir / f"{identity_id}.yaml"
 
-        if existing_supra_sid:
-            # Join existing supra session (same terminal, after /clear)
-            supra_session_id = existing_supra_sid
-            supra_session_path = sessions_dir / f"{supra_session_id}.yaml"
-            if supra_session_path.exists():
-                existing = yaml.safe_load(supra_session_path.read_text(encoding="utf-8")) or {}
-                coordinators_list = existing.get("coordinators", [])
-                if session_id not in coordinators_list:
-                    coordinators_list.append(session_id)
-                    existing["coordinators"] = coordinators_list
-                    tmp = supra_session_path.with_suffix(".yaml.tmp")
-                    tmp.write_text(
-                        yaml.dump(existing, default_flow_style=False, allow_unicode=True, sort_keys=False),
-                        encoding="utf-8",
-                    )
-                    _os.replace(str(tmp), str(supra_session_path))
-        else:
-            # Fresh terminal — create new supra named {poetic_name}-{date}
-            supra_session_id = f"{session_id}-{date.today().isoformat()}"
-
-            # Bootstrap from temporal prior or global states
+        if is_fresh_terminal and not supra_session_path.exists():
+            # Fresh terminal — bootstrap valuation from temporal prior or defaults
             temporal_prior = supra_reader.get_temporal_prior()
             if temporal_prior:
                 default_states = supra_reader.temporal_prior_to_states(temporal_prior)
@@ -245,18 +229,17 @@ def register_coordinator() -> tuple[str, list[dict]]:
 
             segment_key = supra_reader._temporal_segment_key()
             supra_data = {
-                "supra_session_id": supra_session_id,
+                "identity_id": identity_id,
+                "supra_session_id": identity_id,  # transition compat
                 "temporal_segment": segment_key,
                 "date": date.today().isoformat(),
                 "created_at": now,
                 "last_attuned": None,
-                "coordinators": [session_id],
                 "mode": default_states.get("mode", "exploratory"),
                 "dimensions": dict(default_states.get("dimensions", {})),
                 "focus": list(default_states.get("focus", [])),
                 "suppress": list(default_states.get("suppress", [])),
             }
-            supra_session_path = sessions_dir / f"{supra_session_id}.yaml"
             tmp = supra_session_path.with_suffix(".yaml.tmp")
             tmp.write_text(
                 yaml.dump(supra_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
@@ -264,13 +247,10 @@ def register_coordinator() -> tuple[str, list[dict]]:
             )
             _os.replace(str(tmp), str(supra_session_path))
 
-        # Write PPID-keyed supra file
-        cr.write_ppid_supra(COORDINATORS_DIR, supra_session_id)
-
     except Exception as exc:
-        print(f"session-start: supra session registration failed: {exc}", file=sys.stderr)
+        print(f"session-start: supra session bootstrap failed: {exc}", file=sys.stderr)
 
-    return session_id, active_claims
+    return identity_id, active_claims
 
 
 def format_active_coordinators(active_claims: list[dict]) -> list[str]:
@@ -303,7 +283,7 @@ def main() -> None:
     source = hook_input.get("source", "")
 
     # Register coordinator regardless of source (handles resume/compact too)
-    session_id, active_claims = register_coordinator()
+    identity_id, active_claims = register_coordinator()
 
     # Daily archive sweep — gated by .last_archive_sweep, fail-open
     try:
@@ -326,18 +306,9 @@ def main() -> None:
     light_cone = cognitive_light_cone_summary()
     parts.append(f"\n**{light_cone}**")
 
-    # Active coordinators (injected first -- most urgent info)
-    if session_id:
-        parts.append(f"\n**Your coordinator session ID**: `{session_id}`")
-        try:
-            import sys as _sys
-            _sys.path.insert(0, str(Path(__file__).resolve().parent))
-            import coordinator_registry as cr
-            supra_sid = cr.read_ppid_supra(COORDINATORS_DIR)
-            if supra_sid:
-                parts.append(f"**Supra session**: `{supra_sid}` (this terminal's supra identity, persists across /clear)")
-        except Exception:
-            pass
+    # Identity (injected first -- most urgent info)
+    if identity_id:
+        parts.append(f"\n**Your terminal identity**: `{identity_id}` (one identity per terminal, persists across /clear)")
         parts.append(
             "Narrow your `claimed_paths` in `.claude/coordinators/` after the user states the task."
         )

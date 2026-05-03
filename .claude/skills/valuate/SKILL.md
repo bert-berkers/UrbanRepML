@@ -47,8 +47,8 @@ Set the active graph to "static" using `supra_reader.set_active_graph("static")`
 
 ### Step 1: Read Current State
 
-Read the supra session ID via `coordinator_registry.read_ppid_supra()` (PPID-isolated, multi-terminal safe). Then read states:
-1. Try `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml` (supra-scoped, takes priority)
+Read this terminal's identity via `coordinator_registry.read_ppid_identity()` (terminal-PID-keyed, multi-terminal safe; one identity per terminal, persists across `/clear`). Then read states:
+1. Try `.claude/supra/sessions/{identity_id}.yaml` (terminal-scoped, takes priority)
 2. Fall back to hardcoded neutral defaults (all dimensions = 3)
 3. Read `.claude/supra/schema.yaml` for dimension definitions, groups, mode biases, agent relevance
 4. Determine current temporal segment from local time (e.g., `friday-evening`) using `supra_reader._temporal_segment_key()`
@@ -136,7 +136,7 @@ If all of these are true: (a) no shorthand was provided, (b) `last_attuned` is f
 
 **Build the reading list** by scanning for the most informative files from the previous session(s):
 
-1. **Valuate scratchpads from other shards** (highest priority for multi-terminal): `.claude/scratchpad/valuate/YYYY-MM-DD.md` — each entry is keyed by supra session ID (PPID-isolated), showing what other shards valued today and what intent they set. This is how you avoid duplicating work or setting conflicting intents.
+1. **Valuate scratchpads from other shards** (highest priority for multi-terminal): `.claude/scratchpad/valuate/YYYY-MM-DD.md` — each entry is keyed by terminal identity (one identity per terminal), showing what other shards valued today and what intent they set. This is how you avoid duplicating work or setting conflicting intents.
 2. **Coordinator forward-look**: `.claude/scratchpad/coordinator/YYYY-MM-DD-forward-look.md` from the most recent date. This is written specifically to seed the next session.
 3. **Ego assessment**: `.claude/scratchpad/ego/YYYY-MM-DD.md` from the most recent date. Process health, attention needed, metrics table.
 4. **Recent git log**: `git log --oneline -10` — what actually shipped.
@@ -246,10 +246,10 @@ Based on user answers (from questionnaire or shorthand):
    - supra session file: add to `dimensions:` with value 3 (or 4 if the user selected it for amplification)
 5. **Intent**: Store the user's strategic intent as `intent` in the supra session file. This is what `/niche` reads to understand the terminal's mission.
 6. **Focus/suppress**: Replace the lists with the user's selections. If user said "skip", leave unchanged.
-7. **Metadata**: Set `last_attuned` to current ISO timestamp, `last_attuned_by` to the session name (read via `coordinator_registry.read_ppid_session()`, otherwise use "manual")
+7. **Metadata**: Set `last_attuned` to current ISO timestamp, `last_attuned_by` to the terminal identity (read via `coordinator_registry.read_ppid_identity()`, otherwise use "manual")
 8. **Record temporal observation**: Call `supra_reader.record_temporal_observation(states)` to update the EMA prior for the current temporal segment. This fires regardless of how the values were set (shorthand, questionnaire, or `use prior`). Every valuation is an observation.
 
-Write states to the **supra session file** at `.claude/supra/sessions/{supra_session_id}.{ppid}.yaml` using `supra_reader.write_supra_session_states()`. The supra session ID is `{poetic_name}-{date}` (e.g., `hushed-spinning-glen-2026-03-14`) — named by the first coordinator in this terminal, persisting across `/clear` cycles. If no supra session ID is available, fall back to `supra_reader.write_session_states()`. There is no global `characteristic_states.yaml` — defaults are hardcoded neutral 3s in `supra_reader._DEFAULT_STATES`. The file format is:
+Write states to the **terminal-scoped supra valuation file** at `.claude/supra/sessions/{identity_id}.yaml` using `supra_reader.write_supra_session_states()`. The identity is the poetic name minted by the first SessionStart in this terminal (e.g., `pale-listening-dew`) and persists for the lifetime of the terminal across `/clear` cycles. If no identity is available, fall back to `supra_reader.write_session_states()`. There is no global `characteristic_states.yaml` — defaults are hardcoded neutral 3s in `supra_reader._DEFAULT_STATES`. The file format is:
 ```yaml
 mode: {mode}
 intent: "{strategic intent — what this terminal is for}"
@@ -274,7 +274,7 @@ Write (or update) `.claude/scratchpad/valuate/YYYY-MM-DD.md`. This is the cross-
 Format — append an entry per terminal valuation:
 
 ```markdown
-## {supra_session_id} — {HH:MM}
+## {identity_id} — {HH:MM}
 
 - **Intent**: "{strategic intent for this terminal}"
 - **Mode**: {mode} | Key dims: {only dims that differ from default, e.g. "speed=5, tests=1"}
@@ -306,7 +306,7 @@ from plan_kapstok import write_kapstok
 
 today = _date.today().isoformat()
 kapstok_path = write_kapstok(
-    supra_session_yaml=Path(f".claude/supra/sessions/{supra_session_id}.yaml"),
+    supra_session_yaml=Path(f".claude/supra/sessions/{identity_id}.yaml"),
     valuate_scratchpad=Path(f".claude/scratchpad/valuate/{today}.md"),
     plans_dir=Path(".claude/plans"),
     date=today,

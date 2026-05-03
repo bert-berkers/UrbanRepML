@@ -29,15 +29,16 @@ Coordinator-to-coordinator messages are "bioelectric signals" between cells. The
 - **Actionable**: include what changed and what the recipient should do about it
 - **Gradient-like**: signal strength (info < warning < request) indicates priority
 
-## Identity: SessionStart Is Canonical
+## Identity: One Per Terminal (since 2026-05-03)
 
-Three components compose a coordinator's identity. Priority order (highest wins on mismatch):
+A terminal has one identity for its lifetime. `/clear` is a context flush, not a lifecycle event — same terminal, same identity, fresh context. Two components compose it:
 
-1. **SessionStart session_id** — the cognitive identity issued when the hook first fires. Source of truth.
-2. **`coordinators/terminals/{pid}.yaml`** — PID-keyed file linking the shell to `session_id` + `supra_session_id`. Session rotates on `/clear`; supra persists.
-3. **`supra/sessions/{supra_session_id}.yaml`** — valuation state; its lifecycle is the *supra session*, which outlives `/clear` within a terminal.
+1. **SessionStart-minted poetic name** — the identity (e.g. `pale-listening-dew`) issued when the hook first fires for a fresh terminal. Source of truth.
+2. **`coordinators/terminals/{pid}.yaml`** — PID-keyed record carrying the canonical field `identity_id`. SessionStart re-injects the same identity on every fire (after `/clear`, after compact, etc.); `stop.py` does NOT clear it.
 
-If any two disagree (e.g. terminals.yaml points at a `session_id` that SessionStart never issued), SessionStart wins — rewrite the terminals file, don't rewrite SessionStart. See `scratchpad/coordinator/notes.md` §"2026-04-19 — Failure Mode: Identity Tagging Drift" and the fix at commit `d077c25` (skills run inline, not as forked subagent context).
+Legacy fields `session_id` and `supra_session_id` are accepted on read for backward compat (live terminal files written before the collapse may carry one or both). Writers always emit `identity_id`. The supra valuation file lives at `.claude/supra/sessions/{identity_id}.yaml` — identity IS the supra layer, no separate concept.
+
+If `terminals.yaml` and SessionStart-injected name disagree, SessionStart wins — rewrite the terminals file, don't rewrite SessionStart. See `scratchpad/coordinator/notes.md` §"2026-04-19 — Failure Mode: Identity Tagging Drift" and `specs/session-identity-architecture.md`.
 
 ## Protocol Obligations
 
@@ -126,10 +127,10 @@ Implemented in `.claude/hooks/archive_sweep.py` (`maybe_run_sweep()`). Key prope
 | Path | Purpose |
 |------|---------|
 | `.claude/coordinators/session-{id}.yaml` | Claim per session (active or `status: ended`) |
-| `.claude/coordinators/terminals/{pid}.yaml` | Terminal-PID-keyed identity linking the shell to its `session_id` + `supra_session_id` (written by `coordinator_registry.write_ppid_session()` / `write_ppid_supra()`; archived to `terminals/archive/` when the terminal is reaped) |
+| `.claude/coordinators/terminals/{pid}.yaml` | Terminal-PID-keyed identity carrying the canonical `identity_id` (written by `coordinator_registry.write_ppid_identity()`; archived to `terminals/archive/` when the terminal is reaped). One identity per terminal for the terminal's lifetime — `/clear` does not rotate it. Legacy fields `session_id` / `supra_session_id` are accepted on read. |
 | `.claude/coordinators/messages/{date}/{ts}-{id}.yaml` | Per-day message files |
 | `.claude/hooks/coordinator_registry.py` | Shared library (I/O, PID helpers) |
 
 The `.claude/coordinators/` directory is gitignored -- ephemeral runtime state only.
 
-> **Note on the terminal-PID scheme**: earlier drafts of this protocol referenced `.claude/coordinators/sessions/{id}.{ppid}` and `.claude/coordinators/supra/{id}.{ppid}`. Both were consolidated into the single `terminals/{pid}.yaml` file in March 2026 (see auto-memory `project_desktop_app_quirks.md`). One shell PID → one terminal file that carries both `session_id` (rotates on `/clear`) and `supra_session_id` (persists across `/clear`).
+> **Note on the terminal-PID scheme**: earlier drafts of this protocol referenced `.claude/coordinators/sessions/{id}.{ppid}` and `.claude/coordinators/supra/{id}.{ppid}`. Both were consolidated into the single `terminals/{pid}.yaml` file in March 2026 (see auto-memory `project_desktop_app_quirks.md`). On 2026-05-03 the file was further simplified to a single `identity_id` field — the prior session/supra split is gone because `/clear` no longer rotates anything (see `specs/session-identity-architecture.md`).

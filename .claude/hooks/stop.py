@@ -37,13 +37,13 @@ def update_temporal_prior() -> None:
         import coordinator_registry as cr
         import supra_reader
 
-        # Read the current supra session ID via PPID
-        supra_sid = cr.read_ppid_supra(COORDINATORS_DIR)
-        if not supra_sid:
+        # Read this terminal's identity
+        identity_id = cr.read_ppid_identity(COORDINATORS_DIR)
+        if not identity_id:
             return
 
         # Read supra session states
-        states = supra_reader.read_supra_session_states(supra_sid)
+        states = supra_reader.read_supra_session_states(identity_id)
         if not states:
             return
 
@@ -66,35 +66,13 @@ def update_temporal_prior() -> None:
         print(f"stop: temporal prior update failed: {exc}", file=sys.stderr)
 
 
-def note_percept_death() -> None:
-    """Note in the supra session file that this coordinator (percept) has exited.
-
-    This is the "percept death trace" — how the supra session knows which
-    coordinators have come and gone. It does NOT remove the coordinator
-    from the supra session's coordinators list (that's append-only history).
-
-    Silently no-ops on any error (fail open).
-    """
-    try:
-        import sys as _sys
-        _sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import coordinator_registry as cr
-
-        supra_sid = cr.read_ppid_supra(COORDINATORS_DIR)
-        if not supra_sid:
-            return
-
-        # The supra session file persists (shared across /clear cycles).
-        # PPID-keyed files are cleaned up in deregister_coordinator.
-
-    except Exception as exc:
-        print(f"stop: percept death note failed: {exc}", file=sys.stderr)
-
-
 def deregister_coordinator() -> None:
-    """Delete this session's claim file and clean up stale claims.
+    """Mark this session's claim as ended and clean up stale claims.
 
-    Reads the session_id from the file written by session-start.py.
+    /clear is a context flush, not a lifecycle event — the terminal identity
+    file is left intact so the next SessionStart re-injects the same name.
+    The terminal file is only archived when its PID dies (cleanup_stale_ppid_files).
+
     Silently no-ops on any error (fail open).
     """
     try:
@@ -102,39 +80,35 @@ def deregister_coordinator() -> None:
         _sys.path.insert(0, str(Path(__file__).resolve().parent))
         import coordinator_registry as cr
 
-        # Read session_id from PPID-keyed file
-        session_id = cr.read_ppid_session(COORDINATORS_DIR)
-        if not session_id:
-            print("stop: no PPID session file found, skipping coordinator deregistration", file=sys.stderr)
+        # Read identity from terminal file
+        identity_id = cr.read_ppid_identity(COORDINATORS_DIR)
+        if not identity_id:
+            print("stop: no terminal identity found, skipping coordinator deregistration", file=sys.stderr)
             return
 
         # Optionally write a farewell message (only if other claim files exist)
         other_claims = [
             c for c in cr.read_all_claims(COORDINATORS_DIR)
-            if c.get("session_id") != session_id and not cr.is_stale(c)
+            if c.get("session_id") != identity_id and not cr.is_stale(c)
         ]
         if other_claims:
             cr.write_message(COORDINATORS_DIR, {
-                "from": session_id,
+                "from": identity_id,
                 "to": "all",
                 "at": datetime.now().isoformat(timespec="seconds"),
                 "type": "done",
-                "text": f"Session {session_id} ended. Check git log for changes made this session.",
+                "text": f"Session {identity_id} ended. Check git log for changes made this session.",
             })
 
-        # Delete this session's claim file
-        cr.delete_claim(COORDINATORS_DIR, session_id)
-
-        # Clear session_id from terminal file — supra persists (same terminal)
-        data = cr._read_terminal_file(COORDINATORS_DIR)
-        if data and "session_id" in data:
-            del data["session_id"]
-            cr._write_terminal_file(COORDINATORS_DIR, data)
+        # Mark this session's claim as ended (does not delete the file).
+        # Terminal identity file is preserved — /clear is a context flush, not
+        # a lifecycle event. cleanup_stale_ppid_files archives it when PID dies.
+        cr.delete_claim(COORDINATORS_DIR, identity_id)
 
         # Clean up crashed sessions (2h+ old)
         cr.cleanup_stale(COORDINATORS_DIR, threshold_hours=2)
 
-        print(f"stop: coordinator deregistered (session_id={session_id})", file=sys.stderr)
+        print(f"stop: coordinator deregistered (identity={identity_id})", file=sys.stderr)
 
     except Exception as exc:
         print(f"stop: coordinator deregistration failed: {exc}", file=sys.stderr)
@@ -147,9 +121,6 @@ def main() -> None:
 
         # Fire temporal prior update before deregistering
         update_temporal_prior()
-
-        # Note percept death in supra session
-        note_percept_death()
 
         # Deregister coordinator claim -- do this regardless of scratchpad check outcome
         deregister_coordinator()
