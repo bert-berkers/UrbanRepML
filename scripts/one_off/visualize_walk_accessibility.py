@@ -4,11 +4,14 @@ Lifetime: temporary (one-off visualization redo)
 Stage: 3 (post-training analysis / visualization)
 
 Produces:
-  - walk_res9_degree.png: degree per hex, viridis, stamp=2, grey background
-  - walk_res9_gravity.png: gravity sum per hex, magma, stamp=2, grey background
+  - walk_res9_degree.png: degree per hex, viridis, voronoi, grey background
+  - walk_res9_gravity.png: gravity sum per hex, magma, voronoi, grey background
   - walk_res9_isochrones.png: 2x2 Dijkstra isochrones (10min walk), plasma
   - isochrone_amsterdam.png, isochrone_rotterdam.png: individual zoomed isochrones
   - walk_res9_vs_lattice.png: degree deviation from lattice (degree - 6), RdBu_r
+
+Migrated 2026-05-02 (W3b) from deprecated centroid-splat (stamp=...) to KDTree-Voronoi
+(pixel_m=..., max_dist_m=...) per specs/rasterize_voronoi.md.
 """
 
 import sys
@@ -28,16 +31,17 @@ from utils.spatial_db import SpatialDB
 from utils.visualization import (
     _add_colorbar,
     load_boundary,
-    plot_spatial_map,
-    rasterize_binary,
-    rasterize_continuous,
+    rasterize_binary_voronoi,
+    rasterize_continuous_voronoi,
+    voronoi_params_for_resolution,
 )
 
 STUDY_AREA = "netherlands"
 RESOLUTION = 9
-STAMP = 2
 DPI = 150
 BG_COLOR = (0.85, 0.85, 0.85)
+# Voronoi defaults at res9 (250 m/px, 300 m cutoff per spec table).
+PIXEL_M, MAX_DIST_M = voronoi_params_for_resolution(RESOLUTION)
 
 paths = StudyAreaPaths(STUDY_AREA)
 db = SpatialDB.for_study_area(STUDY_AREA)
@@ -79,7 +83,10 @@ print(f"Extent: {minx:.0f}, {miny:.0f} to {maxx:.0f}, {maxy:.0f}")
 
 # Background image (all hexes in grey)
 print("Rasterizing background...")
-bg_img = rasterize_binary(all_cx, all_cy, extent, color=BG_COLOR, stamp=STAMP)
+bg_img, _ = rasterize_binary_voronoi(
+    all_cx, all_cy, extent, color=BG_COLOR,
+    pixel_m=PIXEL_M, max_dist_m=MAX_DIST_M,
+)
 
 # Get connected hex centroids
 conn_cx, conn_cy = db.centroids(list(degree.index), RESOLUTION, crs=28992)
@@ -94,8 +101,11 @@ def make_overview_map(values, hex_ids, cmap, title, label, out_path,
     cx, cy = db.centroids(list(hex_ids), RESOLUTION, crs=28992)
     vals = np.array([values[h] for h in hex_ids])
 
-    fg_img = rasterize_continuous(cx, cy, vals, extent, cmap=cmap, stamp=STAMP,
-                                  vmin=vmin, vmax=vmax)
+    fg_img, _ = rasterize_continuous_voronoi(
+        cx, cy, vals, extent, cmap=cmap,
+        vmin=vmin, vmax=vmax,
+        pixel_m=PIXEL_M, max_dist_m=MAX_DIST_M,
+    )
 
     fig, ax = plt.subplots(figsize=(12, 14))
     # Background: all hexes in grey
@@ -189,9 +199,11 @@ for name, (ox, oy) in ORIGINS.items():
 
 CUTOFF = 600  # 10 minutes
 ZOOM_RADIUS = 8000  # +/- 8km
-# Res9 hex edge ~174m. At 16km window on 2000px canvas, that's ~22px between
-# hex centers. Stamp=8 gives 15px diameter dots with slight overlap -- good fill.
-ISOCHRONE_STAMP = 8
+# 16km window on a ~1500px canvas -> derive pixel_m so the raster is sharp at zoom.
+# max_dist_m stays at the res9 baseline (300m) so each hex paints a Voronoi cell
+# of the same geographic radius regardless of zoom.
+ISOCHRONE_PIXEL_M = max(2.0, (2 * ZOOM_RADIUS) / 1500.0)
+ISOCHRONE_MAX_DIST_M = MAX_DIST_M  # res9 baseline (300m)
 
 
 def make_isochrone_ax(ax, name, origin_hex, show_title=True):
@@ -212,19 +224,23 @@ def make_isochrone_ax(ax, name, origin_hex, show_title=True):
                    ox + ZOOM_RADIUS, oy + ZOOM_RADIUS)
     zminx, zminy, zmaxx, zmaxy = zoom_extent
 
-    # Background: all res9 hexes in zoom window (lighter grey, smaller stamp)
+    # Background: all res9 hexes in zoom window (lighter grey, slightly tighter cutoff)
     zoom_mask = ((all_cx >= zminx) & (all_cx <= zmaxx) &
                  (all_cy >= zminy) & (all_cy <= zmaxy))
-    zoom_bg = rasterize_binary(
+    zoom_bg, _ = rasterize_binary_voronoi(
         all_cx[zoom_mask], all_cy[zoom_mask], zoom_extent,
-        color=(0.80, 0.80, 0.80), stamp=ISOCHRONE_STAMP - 2,
+        color=(0.80, 0.80, 0.80),
+        pixel_m=ISOCHRONE_PIXEL_M,
+        max_dist_m=max(120.0, ISOCHRONE_MAX_DIST_M - 60.0),
     )
 
     # Foreground: reachable hexes colored by travel time
     r_cx, r_cy = db.centroids(reachable, RESOLUTION, crs=28992)
-    fg_img = rasterize_continuous(
-        r_cx, r_cy, times, zoom_extent, cmap="plasma", stamp=ISOCHRONE_STAMP,
+    fg_img, _ = rasterize_continuous_voronoi(
+        r_cx, r_cy, times, zoom_extent, cmap="plasma",
         vmin=0, vmax=CUTOFF,
+        pixel_m=ISOCHRONE_PIXEL_M,
+        max_dist_m=ISOCHRONE_MAX_DIST_M,
     )
 
     # Draw
