@@ -70,7 +70,22 @@ def forward_look_path(d: _date | str, *, scratchpad_root: Path | None = None) ->
     return root / "coordinator" / f"{_coerce_date(d)}{FORWARD_LOOK_SUFFIX}.md"
 
 
-_FORWARD_LOOK_CONTENT_MARKERS = ("forward-look", "forward look", "recommended focus")
+import re as _re
+
+# A forward-look file's FIRST top-level heading (H1/H2/H3) names itself as such.
+# Examples in the wild:
+#   "## Ego Forward-Look — 2026-05-04 (for coordinator)"
+#   "## Ego Forward-Look -- 2026-03-14 (for coordinator)"
+#   "## Forward-Look — 2026-03-14 (for next session's /valuate inread)"
+# The pattern matches a markdown heading line whose text contains the word
+# "forward-look" (case-insensitive, hyphen or space tolerated). We require it
+# as a *heading* not a passing mention, because daily-log files routinely
+# discuss prior forward-looks in their bodies — that's not drift, that's
+# normal cross-reference.
+_FORWARD_LOOK_HEADING_RE = _re.compile(
+    r"^#{1,3}\s+[^\n]*forward[\s-]?look",
+    _re.IGNORECASE | _re.MULTILINE,
+)
 
 
 def is_drifted_forward_look(path: Path) -> bool:
@@ -78,17 +93,22 @@ def is_drifted_forward_look(path: Path) -> bool:
 
     Two-stage check:
     1. Filename match: `coordinator/YYYY-MM-DD.md` with no suffix.
-    2. Content marker: file contains "forward-look", "forward look", or
-       "recommended focus" (case-insensitive) in its first 1024 bytes.
+    2. Content marker: an H1/H2/H3 heading near the top of the file (first
+       1024 bytes) names itself as a forward-look. Body-text mentions of
+       "forward-look" do NOT trigger — daily-log files often cross-reference
+       prior forward-looks and that is normal, not drift.
 
     The content check is REQUIRED because pre-session-keyed-era coordinator
     scratchpads (Feb–Mar 2026) used `coordinator/YYYY-MM-DD.md` as a legitimate
-    multi-session daily log. Filename alone cannot distinguish the two; only
-    content can. Without this check, the sweep would mis-rename historical
-    daily entries (a bug caught live during the W3.7 sweep-hardening 2026-05-03).
+    multi-session daily log. Filename alone cannot distinguish drift from old
+    convention; only content can. The HEADING-not-mention check is also
+    required because a too-greedy marker (e.g. "any occurrence of the string")
+    causes false positives on daily logs that discuss prior forward-looks
+    (a false positive was caught live during the W3.7 manual reconciliation
+    of 2026-03-14, prompting this tightening).
 
-    Files that don't exist or can't be read are treated as not-drifted (fail-open
-    — better to miss a rename than corrupt unreadable files).
+    Files that don't exist or can't be read are treated as not-drifted
+    (fail-open — better to miss a rename than corrupt unreadable files).
     """
     if path.parent.name != "coordinator":
         return False
@@ -104,12 +124,10 @@ def is_drifted_forward_look(path: Path) -> bool:
     if not path.exists() or not path.is_file():
         return False
     try:
-        # Read only enough to find a marker; forward-look files put their
-        # SUMMARY comment + heading in the first few hundred bytes.
-        head = path.read_text(encoding="utf-8", errors="replace")[:1024].lower()
+        head = path.read_text(encoding="utf-8", errors="replace")[:1024]
     except OSError:
         return False
-    return any(marker in head for marker in _FORWARD_LOOK_CONTENT_MARKERS)
+    return bool(_FORWARD_LOOK_HEADING_RE.search(head))
 
 
 def session_keyed_path(
