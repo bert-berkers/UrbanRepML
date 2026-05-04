@@ -155,11 +155,15 @@ def main() -> None:
                     subagent_scratchpads.append(agent_dir.name)
 
         if not found_scratchpad:
-            # Only block if /valuate (static graph) or /niche (dynamic graph)
-            # actually set state on this terminal's supra session. If neither
-            # has run, this is a single-shot session and no coordinator
-            # scratchpad is expected.
-            in_loop = False
+            # Gate the scratchpad requirement on the supra session's loop state.
+            # /valuate sets last_attuned; /valuate or /niche sets active_graph.
+            # If neither is present, this is a single-shot session — no scratchpad
+            # required. If supra read is ambiguous (identity unresolvable, supra
+            # file unreadable), fail-CLOSED so the user notices the breakage
+            # rather than silently skipping legitimate close-outs.
+            identity_id = None
+            states = None
+            probe_error = None
             try:
                 import sys as _sys
                 _sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -168,24 +172,45 @@ def main() -> None:
 
                 identity_id = cr.read_ppid_identity(COORDINATORS_DIR)
                 if identity_id:
-                    states = supra_reader.read_supra_session_states(identity_id) or {}
-                    # /valuate sets last_attuned; /valuate or /niche sets active_graph
-                    in_loop = bool(states.get("last_attuned")) or bool(states.get("active_graph"))
+                    states = supra_reader.read_supra_session_states(identity_id)
             except Exception as exc:
-                print(f"stop: loop-state probe failed (fail-open): {exc}", file=sys.stderr)
+                probe_error = str(exc)
 
-            if not in_loop:
-                agents_note = (
-                    f" (subagents ran: {', '.join(subagent_scratchpads)})"
-                    if subagent_scratchpads else ""
-                )
+            if probe_error or identity_id is None:
+                # Supra layer can't be trusted — log loudly and fall through to
+                # the original block path so the user sees something is wrong.
                 print(
-                    f"stop: no /valuate or /niche state on supra session{agents_note} — "
-                    "allowing (single-shot session, gating premise not met)",
+                    f"stop: supra-state probe FAILED (identity={identity_id!r}, "
+                    f"error={probe_error!r}) — falling back to scratchpad-required block. "
+                    f"Fix: ensure SessionStart wrote .claude/coordinators/terminals/<pid>.yaml "
+                    f"and that this terminal's supra session yaml exists.",
                     file=sys.stderr,
                 )
-                json.dump({}, sys.stdout)
-                return
+            else:
+                # Supra read succeeded. states may legitimately be empty (terminal
+                # never ran /valuate or /niche → single-shot session).
+                states = states or {}
+                in_loop = bool(states.get("last_attuned")) or bool(states.get("active_graph"))
+                if not in_loop:
+                    agents_note = (
+                        f" (subagents ran: {', '.join(subagent_scratchpads)})"
+                        if subagent_scratchpads else ""
+                    )
+                    print(
+                        f"stop: supra clean for identity={identity_id} "
+                        f"(no last_attuned, no active_graph){agents_note} — "
+                        "allowing (single-shot session)",
+                        file=sys.stderr,
+                    )
+                    json.dump({}, sys.stdout)
+                    return
+                print(
+                    f"stop: supra in loop for identity={identity_id} "
+                    f"(last_attuned={states.get('last_attuned')!r}, "
+                    f"active_graph={states.get('active_graph')!r}) — "
+                    "scratchpad required",
+                    file=sys.stderr,
+                )
 
             agents_note = (
                 f" (agents active: {', '.join(subagent_scratchpads)})"
