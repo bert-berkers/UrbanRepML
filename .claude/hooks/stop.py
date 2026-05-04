@@ -155,7 +155,20 @@ def main() -> None:
                     subagent_scratchpads.append(agent_dir.name)
 
         if not found_scratchpad:
-            agents_note = f" (agents active: {', '.join(subagent_scratchpads)})" if subagent_scratchpads else ""
+            # Only block if multi-agent work actually occurred this session.
+            # Quick single-shot fixes outside /valuate or /niche loops do not
+            # need a coordinator scratchpad — the docstring's gating premise
+            # ("if multi-agent work occurred") is enforced here.
+            if not subagent_scratchpads:
+                print(
+                    "stop: no coordinator/valuate scratchpad and no subagent activity — "
+                    "allowing (single-shot session, gating premise not met)",
+                    file=sys.stderr,
+                )
+                json.dump({}, sys.stdout)
+                return
+
+            agents_note = f" (agents active: {', '.join(subagent_scratchpads)})"
             json.dump({
                 "decision": "block",
                 "reason": (
