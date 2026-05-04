@@ -155,20 +155,42 @@ def main() -> None:
                     subagent_scratchpads.append(agent_dir.name)
 
         if not found_scratchpad:
-            # Only block if multi-agent work actually occurred this session.
-            # Quick single-shot fixes outside /valuate or /niche loops do not
-            # need a coordinator scratchpad — the docstring's gating premise
-            # ("if multi-agent work occurred") is enforced here.
-            if not subagent_scratchpads:
+            # Only block if /valuate (static graph) or /niche (dynamic graph)
+            # actually set state on this terminal's supra session. If neither
+            # has run, this is a single-shot session and no coordinator
+            # scratchpad is expected.
+            in_loop = False
+            try:
+                import sys as _sys
+                _sys.path.insert(0, str(Path(__file__).resolve().parent))
+                import coordinator_registry as cr
+                import supra_reader
+
+                identity_id = cr.read_ppid_identity(COORDINATORS_DIR)
+                if identity_id:
+                    states = supra_reader.read_supra_session_states(identity_id) or {}
+                    # /valuate sets last_attuned; /valuate or /niche sets active_graph
+                    in_loop = bool(states.get("last_attuned")) or bool(states.get("active_graph"))
+            except Exception as exc:
+                print(f"stop: loop-state probe failed (fail-open): {exc}", file=sys.stderr)
+
+            if not in_loop:
+                agents_note = (
+                    f" (subagents ran: {', '.join(subagent_scratchpads)})"
+                    if subagent_scratchpads else ""
+                )
                 print(
-                    "stop: no coordinator/valuate scratchpad and no subagent activity — "
+                    f"stop: no /valuate or /niche state on supra session{agents_note} — "
                     "allowing (single-shot session, gating premise not met)",
                     file=sys.stderr,
                 )
                 json.dump({}, sys.stdout)
                 return
 
-            agents_note = f" (agents active: {', '.join(subagent_scratchpads)})"
+            agents_note = (
+                f" (agents active: {', '.join(subagent_scratchpads)})"
+                if subagent_scratchpads else ""
+            )
             json.dump({
                 "decision": "block",
                 "reason": (
